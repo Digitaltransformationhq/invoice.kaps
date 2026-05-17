@@ -1,0 +1,120 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+@media print {
+  @page {
+    size: A4;
+    margin: 6mm;
+  }
+
+  html,
+  body {
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .invoice-print-area,
+  .invoice-print-area * {
+    visibility: visible;
+  }
+
+  .invoice-preview-modal {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    display: block !important;
+    width: 100% !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .invoice-preview-shell {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  .invoice-preview-actions {
+    display: none !important;
+  }
+
+  .invoice-print-area {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .invoice-print-page {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+    break-after: page;
+    break-inside: avoid;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .invoice-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .invoice-print-page table {
+    border-collapse: collapse !important;
+  }
+
+  .invoice-print-page tr,
+  .invoice-print-page td,
+  .invoice-print-page th {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .invoice-print-page .p-4 {
+    padding: 3mm !important;
+  }
+
+  .invoice-print-page .p-3 {
+    padding: 2.4mm !important;
+  }
+
+  .invoice-print-page .p-2 {
+    padding: 1.6mm 2mm !important;
+  }
+
+  .invoice-print-page .px-4 {
+    padding-left: 2mm !important;
+    padding-right: 2mm !important;
+  }
+
+  .invoice-print-page .py-2 {
+    padding-top: 1.8mm !important;
+    padding-bottom: 1.8mm !important;
+  }
+
+  .invoice-print-page .pt-2 {
+    padding-top: 1mm !important;
+  }
+
+  .invoice-print-page .py-1 {
+    padding-top: 0.8mm !important;
+    padding-bottom: 0.8mm !important;
+  }
+}
