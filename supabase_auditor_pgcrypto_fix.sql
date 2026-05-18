@@ -5,6 +5,8 @@ create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
 
 alter table public.companies add column if not exists company_logo text;
+alter table public.companies add column if not exists pan text;
+alter table public.customers add column if not exists pan text;
 
 -- Ensure existing databases have the app_users columns used by owner signup
 -- and auditor login/management.
@@ -443,11 +445,13 @@ begin
 
   elsif p_action = 'insert' and p_resource = 'customers' then
     insert into public.customers (
-      company_id, name, gstin, contact_name, email, phone, city, address
+      company_id, name, customer_type, gstin, pan, contact_name, email, phone, city, address
     ) values (
       v_auditor.company_id,
       v_record->>'name',
+      coalesce(v_record->>'customer_type', 'B2B'),
       v_record->>'gstin',
+      coalesce(nullif(v_record->>'pan', ''), case when length(coalesce(v_record->>'gstin', '')) >= 12 then substring(v_record->>'gstin' from 3 for 10) else null end),
       v_record->>'contact_name',
       v_record->>'email',
       v_record->>'phone',
@@ -462,7 +466,9 @@ begin
     update public.customers
     set
       name = coalesce(v_values->>'name', name),
+      customer_type = coalesce(v_values->>'customer_type', customer_type),
       gstin = coalesce(v_values->>'gstin', gstin),
+      pan = coalesce(v_values->>'pan', pan),
       contact_name = coalesce(v_values->>'contact_name', contact_name),
       email = coalesce(v_values->>'email', email),
       phone = coalesce(v_values->>'phone', phone),
@@ -672,6 +678,7 @@ begin
       'id', v_company.id,
       'company_name', v_company.company_name,
       'gstin', v_company.gstin,
+      'pan', v_company.pan,
       'phone', v_company.phone,
       'address', v_company.address,
       'city', v_company.city,

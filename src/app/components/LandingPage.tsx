@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast, Toaster } from 'sonner';
 import { supabase } from '../../lib/supabase';
+import { extractPanFromGstin, normalizeGstin } from '../../lib/gstin';
 
 export function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -23,6 +24,7 @@ export function LandingPage() {
     phone: '',
     companyName: '',
     gstin: '',
+    pan: '',
     address: '',
     city: '',
     state: '',
@@ -126,6 +128,7 @@ export function LandingPage() {
             phone: signupData.phone,
             company_name: signupData.companyName,
             gstin: signupData.gstin,
+            pan: signupData.pan,
             address: signupData.address,
             city: signupData.city,
             state: signupData.state,
@@ -162,6 +165,7 @@ export function LandingPage() {
         phone: '',
         companyName: '',
         gstin: '',
+        pan: '',
         address: '',
         city: '',
         state: '',
@@ -676,6 +680,7 @@ export function LandingPage() {
                     phone: '',
                     companyName: '',
                     gstin: '',
+                    pan: '',
                     address: '',
                     city: '',
                     state: '',
@@ -820,13 +825,29 @@ export function LandingPage() {
                       <input
                         type="text"
                         value={signupData.gstin}
-                        onChange={(e) => setSignupData({ ...signupData, gstin: e.target.value.toUpperCase() })}
+                        onChange={(e) => {
+                          const gstin = normalizeGstin(e.target.value);
+                          setSignupData({ ...signupData, gstin, pan: extractPanFromGstin(gstin) });
+                        }}
                         maxLength={15}
                         className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent font-mono"
                         placeholder="22AAAAA0000A1Z5"
                         required
                       />
                       <p className="text-xs text-muted-foreground mt-1">15 characters GST Identification Number</p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        PAN Number
+                      </label>
+                      <input
+                        type="text"
+                        value={signupData.pan}
+                        onChange={(e) => setSignupData({ ...signupData, pan: e.target.value.toUpperCase().slice(0, 10) })}
+                        maxLength={10}
+                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+                        placeholder="AAAAA0000A"
+                      />
                     </div>
                   </div>
                 </div>

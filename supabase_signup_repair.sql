@@ -5,6 +5,7 @@
 create extension if not exists pgcrypto;
 
 alter table public.companies add column if not exists company_logo text;
+alter table public.companies add column if not exists pan text;
 
 -- Ensure existing databases have the app_users columns used by owner signup
 -- and auditor login/management.
@@ -81,6 +82,7 @@ begin
     owner_auth_user_id,
     company_name,
     gstin,
+    pan,
     phone,
     email,
     address,
@@ -92,6 +94,7 @@ begin
     new.id,
     coalesce(nullif(new.raw_user_meta_data->>'company_name', ''), 'My Company'),
     nullif(new.raw_user_meta_data->>'gstin', ''),
+    coalesce(nullif(new.raw_user_meta_data->>'pan', ''), case when length(coalesce(new.raw_user_meta_data->>'gstin', '')) >= 12 then substring(new.raw_user_meta_data->>'gstin' from 3 for 10) else null end),
     nullif(new.raw_user_meta_data->>'phone', ''),
     coalesce(nullif(new.email, ''), new.id::text || '@no-email.local'),
     nullif(new.raw_user_meta_data->>'address', ''),
@@ -104,6 +107,7 @@ begin
   set
     company_name = excluded.company_name,
     gstin = excluded.gstin,
+    pan = excluded.pan,
     phone = excluded.phone,
     email = excluded.email,
     address = excluded.address,

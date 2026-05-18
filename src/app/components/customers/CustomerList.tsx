@@ -4,11 +4,14 @@ import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { deleteForUser, insertForUser, selectForUser, updateForUser } from '../../../lib/auditorData';
+import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
 
 interface Customer {
   id: string;
   name: string;
+  customerType: string;
   gstin: string;
+  pan: string;
   contact: string;
   email: string;
   phone: string;
@@ -51,7 +54,9 @@ export function CustomerList() {
       return {
         id: customer.id,
         name: customer.name || '',
+        customerType: customer.customer_type || 'B2B',
         gstin: customer.gstin || '',
+        pan: customer.pan || '',
         contact: customer.contact_name || '',
         email: customer.email || '',
         phone: customer.phone || '',
@@ -77,7 +82,7 @@ export function CustomerList() {
       selectForUser<any[]>(user, 'customers', 'customers', () =>
         supabase
           .from('customers')
-          .select('id, name, gstin, contact_name, email, phone, city, address')
+          .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, address')
           .eq('company_id', user.company_id)
           .eq('is_active', true)
           .order('name', { ascending: true })
@@ -111,6 +116,7 @@ export function CustomerList() {
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     customer.gstin.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.pan.toLowerCase().includes(searchQuery.toLowerCase()) ||
     customer.contact.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -127,7 +133,9 @@ export function CustomerList() {
     const record = {
         company_id: user.company_id,
         name: newCustomer.name.trim(),
+        customer_type: newCustomer.customerType,
         gstin: newCustomer.gstin.trim().toUpperCase(),
+        pan: newCustomer.pan.trim().toUpperCase() || extractPanFromGstin(newCustomer.gstin),
         contact_name: newCustomer.contact.trim(),
         email: newCustomer.email.trim(),
         phone: newCustomer.phone.trim(),
@@ -156,7 +164,9 @@ export function CustomerList() {
   const handleUpdateCustomer = async (updatedCustomer: any) => {
     const values = {
         name: updatedCustomer.name.trim(),
+        customer_type: updatedCustomer.customerType,
         gstin: updatedCustomer.gstin.trim().toUpperCase(),
+        pan: updatedCustomer.pan.trim().toUpperCase() || extractPanFromGstin(updatedCustomer.gstin),
         contact_name: updatedCustomer.contact.trim(),
         email: updatedCustomer.email.trim(),
         phone: updatedCustomer.phone.trim(),
@@ -286,6 +296,7 @@ export function CustomerList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Customer</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Contact</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">GSTIN</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Location</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Revenue</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Outstanding</th>
@@ -296,14 +307,14 @@ export function CustomerList() {
             <tbody className="divide-y divide-border">
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     Loading customers...
                   </td>
                 </tr>
               )}
               {!isLoading && filteredCustomers.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     No customers found.
                   </td>
                 </tr>
@@ -335,6 +346,14 @@ export function CustomerList() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm font-mono text-muted-foreground">{customer.gstin}</div>
+                    {customer.pan && (
+                      <div className="text-xs font-mono text-muted-foreground mt-1">PAN {customer.pan}</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-muted text-foreground">
+                      {customer.customerType}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -418,7 +437,9 @@ export function CustomerList() {
 function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (customer: any) => void }) {
   const [formData, setFormData] = useState({
     name: '',
+    customerType: 'B2B',
     gstin: '',
+    pan: '',
     contact: '',
     email: '',
     phone: '',
@@ -432,7 +453,13 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
   };
 
   const handleChange = (field: string, value: string) => {
-    setFormData({ ...formData, [field]: value });
+    if (field === 'gstin') {
+      const gstin = normalizeGstin(value);
+      setFormData({ ...formData, gstin, pan: extractPanFromGstin(gstin) });
+      return;
+    }
+
+    setFormData({ ...formData, [field]: field === 'pan' ? value.toUpperCase().slice(0, 10) : value });
   };
 
   return (
@@ -481,6 +508,38 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
                   maxLength={15}
                   className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  PAN Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.pan}
+                  onChange={(e) => handleChange('pan', e.target.value)}
+                  placeholder="Auto from GSTIN"
+                  maxLength={10}
+                  className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Customer Type <span className="text-destructive">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.customerType}
+                  onChange={(e) => handleChange('customerType', e.target.value)}
+                  className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="B2B">B2B</option>
+                  <option value="B2C">B2C</option>
+                  <option value="SEZ">SEZ</option>
+                  <option value="Export">Export</option>
+                  <option value="Composition">Composition</option>
+                  <option value="Nil Rated">Nil Rated</option>
+                  <option value="Exempt Supply">Exempt Supply</option>
+                </select>
               </div>
             </div>
           </div>
@@ -585,7 +644,9 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
   const [formData, setFormData] = useState({
     id: customer.id,
     name: customer.name,
+    customerType: customer.customerType || 'B2B',
     gstin: customer.gstin,
+    pan: customer.pan || '',
     contact: customer.contact,
     email: customer.email,
     phone: customer.phone,
@@ -602,7 +663,13 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
   };
 
   const handleChange = (field: string, value: string) => {
-    setFormData({ ...formData, [field]: value });
+    if (field === 'gstin') {
+      const gstin = normalizeGstin(value);
+      setFormData({ ...formData, gstin, pan: extractPanFromGstin(gstin) });
+      return;
+    }
+
+    setFormData({ ...formData, [field]: field === 'pan' ? value.toUpperCase().slice(0, 10) : value });
   };
 
   return (
@@ -651,6 +718,38 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
                   maxLength={15}
                   className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  PAN Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.pan}
+                  onChange={(e) => handleChange('pan', e.target.value)}
+                  placeholder="Auto from GSTIN"
+                  maxLength={10}
+                  className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Customer Type <span className="text-destructive">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.customerType}
+                  onChange={(e) => handleChange('customerType', e.target.value)}
+                  className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="B2B">B2B</option>
+                  <option value="B2C">B2C</option>
+                  <option value="SEZ">SEZ</option>
+                  <option value="Export">Export</option>
+                  <option value="Composition">Composition</option>
+                  <option value="Nil Rated">Nil Rated</option>
+                  <option value="Exempt Supply">Exempt Supply</option>
+                </select>
               </div>
             </div>
           </div>

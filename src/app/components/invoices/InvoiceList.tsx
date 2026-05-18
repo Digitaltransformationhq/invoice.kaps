@@ -56,6 +56,33 @@ export function InvoiceList() {
   const mapInvoiceFromDatabase = (invoice: any): InvoiceRow => {
     const customer = Array.isArray(invoice.customers) ? invoice.customers[0] : invoice.customers;
 
+    const lineItems = (invoice.invoice_items || []).map((item: any) => {
+      const catalogItem = Array.isArray(item.items) ? item.items[0] : item.items;
+
+      return {
+        id: item.id,
+        type: catalogItem?.type,
+        item: item.item_name || '',
+        description: item.description || '',
+        hsn: item.hsn || '',
+        qty: Number(item.quantity || 0),
+        unit: item.unit || 'Nos',
+        rate: Number(item.rate || 0),
+        discount: Number(item.discount_percent || 0),
+        gst: Number(item.gst_rate || 0),
+        amount: Number(item.total_amount || 0),
+      };
+    });
+    const hasProductItems = lineItems.some((item: any) => item.type === 'product');
+    const hasServiceItems = lineItems.some((item: any) => item.type === 'service');
+    const derivedBillType = hasProductItems && hasServiceItems
+      ? 'goods+service'
+      : hasProductItems
+        ? 'only goods'
+        : hasServiceItems
+          ? 'only service'
+          : invoice.bill_type || '';
+
     return {
       dbId: invoice.id,
       id: invoice.invoice_number,
@@ -75,8 +102,8 @@ export function InvoiceList() {
       dueDate: formatDate(invoice.due_date),
       amount: Number(invoice.total_amount || 0),
       status: invoice.status || 'draft',
-      customerType: invoice.customer_type || '',
-      billType: invoice.bill_type || '',
+      customerType: invoice.customer_type || customer?.customer_type || '',
+      billType: derivedBillType,
       placeOfSupply: invoice.place_of_supply || '',
       reverseCharge: Boolean(invoice.reverse_charge),
       poNumber: invoice.po_number || '',
@@ -84,18 +111,7 @@ export function InvoiceList() {
       vehicleNo: invoice.vehicle_number || '',
       transportMode: invoice.transport_mode || '',
       remarks: invoice.remarks || '',
-      lineItems: (invoice.invoice_items || []).map((item: any) => ({
-        id: item.id,
-        item: item.item_name || '',
-        description: item.description || '',
-        hsn: item.hsn || '',
-        qty: Number(item.quantity || 0),
-        unit: item.unit || 'Nos',
-        rate: Number(item.rate || 0),
-        discount: Number(item.discount_percent || 0),
-        gst: Number(item.gst_rate || 0),
-        amount: Number(item.total_amount || 0),
-      })),
+      lineItems,
     };
   };
 
@@ -127,8 +143,8 @@ export function InvoiceList() {
         vehicle_number,
         transport_mode,
         remarks,
-        customers(id, name, gstin, contact_name, email, phone, city, address),
-        invoice_items(id, item_name, description, hsn, quantity, unit, rate, discount_percent, gst_rate, total_amount, sort_order)
+        customers(id, name, customer_type, gstin, contact_name, email, phone, city, address),
+        invoice_items(id, item_name, description, hsn, quantity, unit, rate, discount_percent, gst_rate, total_amount, sort_order, items(type))
       `)
         .eq('company_id', user.company_id)
         .order('invoice_date', { ascending: false })

@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase';
 
 interface LineItem {
   id: string;
+  type?: 'product' | 'service';
   item: string;
   description: string;
   hsn: string;
@@ -95,10 +96,20 @@ export function InvoicePreview({
 
   if (!isOpen) return null;
 
-  const getInvoiceCopies = (type?: string) => {
-    const normalizedType = (type || '').trim().toLowerCase();
+  const getBillTypeFromItems = () => {
+    const hasProductItems = lineItems.some((item) => item.type === 'product');
+    const hasServiceItems = lineItems.some((item) => item.type === 'service');
 
-    if (normalizedType === 'only service') {
+    if (hasProductItems && hasServiceItems) return 'goods+service';
+    if (hasProductItems) return 'only goods';
+    if (hasServiceItems) return 'only service';
+    return billType || '';
+  };
+
+  const getInvoiceCopies = () => {
+    const effectiveBillType = getBillTypeFromItems().trim().toLowerCase();
+
+    if (effectiveBillType === 'only service') {
       return [
         'ORIGINAL FOR BUYER',
         'DUPLICATE FOR SUPPLIER',
@@ -136,7 +147,8 @@ export function InvoicePreview({
   const buyerContact = customer?.contactName || '';
   const buyerPhone = customer?.phone || '';
   const buyerEmail = customer?.email || '';
-  const invoiceCopies = getInvoiceCopies(billType);
+  const effectiveBillType = getBillTypeFromItems();
+  const invoiceCopies = getInvoiceCopies();
 
   // Calculate totals
   const subtotal = lineItems.reduce((sum, item) => {
@@ -269,7 +281,7 @@ export function InvoicePreview({
                     </tr>
                     <tr>
                       <td className="py-1 font-semibold">BILL TYPE</td>
-                      <td className="py-1">{billType || '-'}</td>
+                      <td className="py-1">{effectiveBillType || '-'}</td>
                     </tr>
                     <tr>
                       <td className="py-1 font-semibold">PO NO. / DATE</td>

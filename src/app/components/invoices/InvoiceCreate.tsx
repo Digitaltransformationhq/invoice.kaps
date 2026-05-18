@@ -6,10 +6,12 @@ import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { insertForUser, selectForUser } from '../../../lib/auditorData';
+import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
 
 interface LineItem {
   id: string;
   itemId?: string;
+  type?: 'product' | 'service';
   item: string;
   description: string;
   hsn: string;
@@ -24,7 +26,9 @@ interface LineItem {
 interface Customer {
   id: string;
   companyName: string;
+  customerType: string;
   gstin: string;
+  pan: string;
   contactName: string;
   email: string;
   phone: string;
@@ -63,8 +67,6 @@ export function InvoiceCreate() {
   const [invoiceDate, setInvoiceDate] = useState('2026-05-12');
   const [placeOfSupply, setPlaceOfSupply] = useState('Auto from customer');
   const [reverseCharge, setReverseCharge] = useState(false);
-  const [customerType, setCustomerType] = useState('B2B');
-  const [billType, setBillType] = useState('goods+service');
   const [poNumber, setPoNumber] = useState('');
   const [poDate, setPoDate] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
@@ -75,7 +77,9 @@ export function InvoiceCreate() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [newCustomer, setNewCustomer] = useState({
     companyName: '',
+    customerType: 'B2B',
     gstin: '',
+    pan: '',
     contactName: '',
     email: '',
     phone: '',
@@ -102,7 +106,9 @@ export function InvoiceCreate() {
   const mapCustomerFromDatabase = (customer: any): Customer => ({
     id: customer.id,
     companyName: customer.name || '',
+    customerType: customer.customer_type || 'B2B',
     gstin: customer.gstin || '',
+    pan: customer.pan || '',
     contactName: customer.contact_name || '',
     email: customer.email || '',
     phone: customer.phone || '',
@@ -134,7 +140,7 @@ export function InvoiceCreate() {
     const { data, error } = await selectForUser<any[]>(user, 'customers', 'customers', () =>
       supabase
         .from('customers')
-        .select('id, name, gstin, contact_name, email, phone, city, address')
+        .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, address')
         .eq('company_id', user.company_id)
         .eq('is_active', true)
         .order('name', { ascending: true })
@@ -233,6 +239,7 @@ export function InvoiceCreate() {
       const updated = {
         ...lineItem,
         itemId: catalogItem.id,
+        type: catalogItem.type,
         item: catalogItem.name,
         description: catalogItem.description,
         hsn: catalogItem.hsn,
@@ -258,7 +265,7 @@ export function InvoiceCreate() {
     if (!value) {
       setLineItems(lineItems.map((lineItem) => (
         lineItem.id === lineItemId
-          ? { ...lineItem, itemId: '', item: '' }
+          ? { ...lineItem, itemId: '', type: undefined, item: '' }
           : lineItem
       )));
       return;
@@ -282,6 +289,16 @@ export function InvoiceCreate() {
 
   const totalAmount = subtotal + totalGST;
   const selectedCustomerDetails = customers.find((customer) => customer.id === selectedCustomer) || null;
+  const selectedCustomerType = selectedCustomerDetails?.customerType || 'B2B';
+  const hasProductItems = lineItems.some((item) => item.type === 'product');
+  const hasServiceItems = lineItems.some((item) => item.type === 'service');
+  const derivedBillType = hasProductItems && hasServiceItems
+    ? 'goods+service'
+    : hasProductItems
+      ? 'only goods'
+      : hasServiceItems
+        ? 'only service'
+        : 'goods+service';
 
   const getFinancialYear = () => {
     const date = new Date(invoiceDate || new Date());
@@ -328,6 +345,11 @@ export function InvoiceCreate() {
       return null;
     }
 
+    if (lineItems.some((item) => !item.itemId || !item.type)) {
+      toast.error('Select a product or service item for every invoice line.');
+      return null;
+    }
+
     setIsSavingInvoice(true);
 
     try {
@@ -340,8 +362,8 @@ export function InvoiceCreate() {
           customer_id: selectedCustomer || null,
           invoice_number: nextInvoiceNumber,
           invoice_date: invoiceDate,
-          customer_type: customerType,
-          bill_type: billType,
+          customer_type: selectedCustomerType,
+          bill_type: derivedBillType,
           place_of_supply: placeOfSupply === 'Auto from customer' ? selectedCustomerDetails?.city || null : placeOfSupply,
           reverse_charge: reverseCharge,
           po_number: poNumber.trim() || null,
@@ -453,7 +475,9 @@ export function InvoiceCreate() {
     const record = {
         company_id: user.company_id,
         name: newCustomer.companyName.trim(),
+        customer_type: newCustomer.customerType,
         gstin: newCustomer.gstin.trim().toUpperCase(),
+        pan: newCustomer.pan.trim().toUpperCase() || extractPanFromGstin(newCustomer.gstin),
         contact_name: newCustomer.contactName.trim(),
         email: newCustomer.email.trim(),
         phone: newCustomer.phone.trim(),
@@ -465,7 +489,7 @@ export function InvoiceCreate() {
       supabase
         .from('customers')
         .insert(record)
-        .select('id, name, gstin, contact_name, email, phone, city, address')
+        .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, address')
         .single(),
       record,
       record.name
@@ -484,7 +508,9 @@ export function InvoiceCreate() {
     setShowAddCustomerModal(false);
     setNewCustomer({
       companyName: '',
+      customerType: 'B2B',
       gstin: '',
+      pan: '',
       contactName: '',
       email: '',
       phone: '',
@@ -594,41 +620,6 @@ export function InvoiceCreate() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Bill To Section with Dropdowns Above */}
           <div className="space-y-4">
-            {/* Customer Type and Bill Type Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Customer Type
-                </label>
-                <select
-                  value={customerType}
-                  onChange={(e) => setCustomerType(e.target.value)}
-                  className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                >
-                  <option value="B2B">B2B</option>
-                  <option value="B2C Registered">B2C Registered</option>
-                  <option value="B2C Unregistered">B2C Unregistered</option>
-                  <option value="SEZ">SEZ</option>
-                  <option value="Export">Export</option>
-                  <option value="Composition">Composition</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Bill Type
-                </label>
-                <select
-                  value={billType}
-                  onChange={(e) => setBillType(e.target.value)}
-                  className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                >
-                  <option value="goods+service">Goods + Service</option>
-                  <option value="only goods">Only Goods</option>
-                  <option value="only service">Only Service</option>
-                </select>
-              </div>
-            </div>
-
             {/* Bill To Section */}
             <div>
             <h3 className="text-xs font-semibold text-muted-foreground mb-4 uppercase tracking-wide">BILL TO</h3>
@@ -875,6 +866,7 @@ export function InvoiceCreate() {
                         <option>Kgs</option>
                         <option>Mtr</option>
                         <option>Bags</option>
+                        <option>Others</option>
                       </select>
                     </td>
                     <td className="px-3 py-5 align-top">
@@ -1054,6 +1046,7 @@ export function InvoiceCreate() {
                             <option>Kgs</option>
                             <option>Mtr</option>
                             <option>Bags</option>
+                            <option>Others</option>
                           </select>
                         </div>
                       </div>
@@ -1183,8 +1176,8 @@ export function InvoiceCreate() {
         invoiceNumber={invoiceNumber}
         invoiceDate={invoiceDate}
         customer={selectedCustomerDetails}
-        customerType={customerType}
-        billType={billType}
+        customerType={selectedCustomerType}
+        billType={derivedBillType}
         placeOfSupply={placeOfSupply}
         reverseCharge={reverseCharge}
         poNumber={poNumber}
@@ -1283,7 +1276,9 @@ export function InvoiceCreate() {
                   setSelectedCustomer('');
                   setNewCustomer({
                     companyName: '',
+                    customerType: 'B2B',
                     gstin: '',
+                    pan: '',
                     contactName: '',
                     email: '',
                     phone: '',
@@ -1321,10 +1316,45 @@ export function InvoiceCreate() {
                     <input
                       type="text"
                       value={newCustomer.gstin}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value })}
+                      onChange={(e) => {
+                        const gstin = normalizeGstin(e.target.value);
+                        setNewCustomer({ ...newCustomer, gstin, pan: extractPanFromGstin(gstin) });
+                      }}
                       placeholder="e.g., 27AAAAA0000A1Z5"
+                      maxLength={15}
                       className="w-full px-4 py-2.5 border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm font-mono"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      PAN Number
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.pan}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, pan: e.target.value.toUpperCase().slice(0, 10) })}
+                      placeholder="Auto from GSTIN"
+                      maxLength={10}
+                      className="w-full px-4 py-2.5 border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Customer Type <span className="text-destructive">*</span>
+                    </label>
+                    <select
+                      value={newCustomer.customerType}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, customerType: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
+                    >
+                      <option value="B2B">B2B</option>
+                      <option value="B2C">B2C</option>
+                      <option value="SEZ">SEZ</option>
+                      <option value="Export">Export</option>
+                      <option value="Composition">Composition</option>
+                      <option value="Nil Rated">Nil Rated</option>
+                      <option value="Exempt Supply">Exempt Supply</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1408,7 +1438,9 @@ export function InvoiceCreate() {
                   setSelectedCustomer('');
                   setNewCustomer({
                     companyName: '',
+                    customerType: 'B2B',
                     gstin: '',
+                    pan: '',
                     contactName: '',
                     email: '',
                     phone: '',
@@ -1566,63 +1598,12 @@ function InvoiceItemModal({
                   <option>BAG</option>
                   <option>BOX</option>
                   <option>Pcs</option>
+                  <option>Others</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Selling Price *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.sellingPrice}
-                    onChange={(e) => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full pl-8 pr-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Purchase Price
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.purchasePrice}
-                    onChange={(e) => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full pl-8 pr-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  GST Rate *
-                </label>
-                <select
-                  value={formData.gst}
-                  onChange={(e) => setFormData({ ...formData, gst: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="0">0%</option>
-                  <option value="5">5%</option>
-                  <option value="12">12%</option>
-                  <option value="18">18%</option>
-                  <option value="28">28%</option>
-                </select>
-              </div>
               {formData.type === 'product' && (
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">

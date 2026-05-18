@@ -3,6 +3,7 @@ import { Building2, Lock, FileText, IndianRupee, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
 
 interface CompanyForm {
   company_name: string;
@@ -222,7 +223,7 @@ export function Settings() {
     const nextCompany = {
       company_name: company.company_name.trim(),
       gstin: company.gstin.trim().toUpperCase() || null,
-      pan: company.pan.trim().toUpperCase() || null,
+      pan: company.pan.trim().toUpperCase() || extractPanFromGstin(company.gstin) || null,
       phone: company.phone.trim() || null,
       email: company.email.trim().toLowerCase() || null,
       address: company.address.trim() || null,
@@ -463,8 +464,17 @@ function CompanySettings({
             <p className="text-xs text-muted-foreground mt-1">PNG, JPG, or SVG under 1 MB. This logo appears in the sidebar and invoices.</p>
           </div>
           <SettingsInput label="Company Name" value={company.company_name} disabled={!canEdit} className="md:col-span-2" onChange={(company_name) => setCompany({ ...company, company_name })} />
-          <SettingsInput label="GSTIN" value={company.gstin} disabled={!canEdit} inputClassName="font-mono" onChange={(gstin) => setCompany({ ...company, gstin })} />
-          <SettingsInput label="PAN Number" value={company.pan} disabled={!canEdit} inputClassName="font-mono" onChange={(pan) => setCompany({ ...company, pan })} />
+          <SettingsInput
+            label="GSTIN"
+            value={company.gstin}
+            disabled={!canEdit}
+            inputClassName="font-mono"
+            onChange={(value) => {
+              const gstin = normalizeGstin(value);
+              setCompany({ ...company, gstin, pan: extractPanFromGstin(gstin) });
+            }}
+          />
+          <SettingsInput label="PAN Number" value={company.pan} disabled={!canEdit} inputClassName="font-mono" onChange={(pan) => setCompany({ ...company, pan: pan.toUpperCase().slice(0, 10) })} />
           <SettingsTextarea label="Registered Address" value={company.address} disabled={!canEdit} className="md:col-span-2" onChange={(address) => setCompany({ ...company, address })} />
           <SettingsInput label="City" value={company.city} disabled={!canEdit} onChange={(city) => setCompany({ ...company, city })} />
           <SettingsInput label="State" value={company.state} disabled={!canEdit} onChange={(state) => setCompany({ ...company, state })} />
