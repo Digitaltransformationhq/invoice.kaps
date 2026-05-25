@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ArrowLeft, Plus, Trash2, Save, Send, Eye, Calculator, CheckCircle, ChevronDown, ChevronUp, X, Package } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Eye, Calculator, CheckCircle, ChevronDown, ChevronUp, X, Package, Mail, MessageCircle } from 'lucide-react';
 import { InvoicePreview } from './InvoicePreview';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { insertForUser, selectForUser } from '../../../lib/auditorData';
-import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
+import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
 
 interface LineItem {
   id: string;
@@ -33,6 +33,7 @@ interface Customer {
   email: string;
   phone: string;
   city: string;
+  state: string;
   address: string;
 }
 
@@ -62,6 +63,8 @@ export function InvoiceCreate() {
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
   const [isSavingCatalogItem, setIsSavingCatalogItem] = useState(false);
   const [isSavingInvoice, setIsSavingInvoice] = useState(false);
+  const [invoiceCreated, setInvoiceCreated] = useState(false);
+  const [sellerState, setSellerState] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('INV-2026-157');
   const [isManualInvoiceNumber, setIsManualInvoiceNumber] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState('2026-05-12');
@@ -84,6 +87,7 @@ export function InvoiceCreate() {
     email: '',
     phone: '',
     city: '',
+    state: '',
     address: ''
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -113,6 +117,7 @@ export function InvoiceCreate() {
     email: customer.email || '',
     phone: customer.phone || '',
     city: customer.city || '',
+    state: customer.state || getGstinStateName(customer.gstin) || '',
     address: customer.address || '',
   });
 
@@ -140,7 +145,7 @@ export function InvoiceCreate() {
     const { data, error } = await selectForUser<any[]>(user, 'customers', 'customers', () =>
       supabase
         .from('customers')
-        .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, address')
+        .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, state, address')
         .eq('company_id', user.company_id)
         .eq('is_active', true)
         .order('name', { ascending: true })
@@ -186,6 +191,27 @@ export function InvoiceCreate() {
     loadCustomers();
     loadCatalogItems();
   }, [user?.company_id]);
+
+  useEffect(() => {
+    const loadSellerState = async () => {
+      if (!user?.company_id) {
+        setSellerState(getGstinStateName(user?.company_gstin) || '');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('companies')
+        .select('state, gstin')
+        .eq('id', user.company_id)
+        .single();
+
+      if (!error) {
+        setSellerState(data?.state || getGstinStateName(data?.gstin) || getGstinStateName(user?.company_gstin) || '');
+      }
+    };
+
+    loadSellerState();
+  }, [user?.company_id, user?.company_gstin]);
 
   const addLineItem = () => {
     const newId = Date.now().toString();
@@ -290,6 +316,17 @@ export function InvoiceCreate() {
   const totalAmount = subtotal + totalGST;
   const selectedCustomerDetails = customers.find((customer) => customer.id === selectedCustomer) || null;
   const selectedCustomerType = selectedCustomerDetails?.customerType || 'B2B';
+  const supplyState = placeOfSupply === 'Auto from customer'
+    ? selectedCustomerDetails?.state || getGstinStateName(selectedCustomerDetails?.gstin) || ''
+    : placeOfSupply;
+  const isInterStateSupply = Boolean(
+    sellerState &&
+    supplyState &&
+    normalizeIndianState(sellerState) !== normalizeIndianState(supplyState)
+  );
+  const cgst = isInterStateSupply ? 0 : totalGST / 2;
+  const sgst = isInterStateSupply ? 0 : totalGST / 2;
+  const igst = isInterStateSupply ? totalGST : 0;
   const hasProductItems = lineItems.some((item) => item.type === 'product');
   const hasServiceItems = lineItems.some((item) => item.type === 'service');
   const derivedBillType = hasProductItems && hasServiceItems
@@ -299,6 +336,31 @@ export function InvoiceCreate() {
       : hasServiceItems
         ? 'only service'
         : 'goods+service';
+
+  const getInvoiceShareMessage = () => (
+    `Invoice ${invoiceNumber} for ${selectedCustomerDetails?.companyName || 'your company'} has been created. Total amount: Rs. ${totalAmount.toFixed(2)}.`
+  );
+
+  const handleWhatsAppInvoice = () => {
+    const phone = selectedCustomerDetails?.phone.replace(/\D/g, '') || '';
+    const message = encodeURIComponent(getInvoiceShareMessage());
+    const whatsappUrl = phone
+      ? `https://wa.me/${phone}?text=${message}`
+      : `https://wa.me/?text=${message}`;
+
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleMailInvoice = () => {
+    if (!selectedCustomerDetails?.email) {
+      toast.error('Customer email is not available');
+      return;
+    }
+
+    const subject = encodeURIComponent(`Invoice ${invoiceNumber}`);
+    const body = encodeURIComponent(getInvoiceShareMessage());
+    window.location.href = `mailto:${selectedCustomerDetails.email}?subject=${subject}&body=${body}`;
+  };
 
   const getFinancialYear = () => {
     const date = new Date(invoiceDate || new Date());
@@ -354,8 +416,6 @@ export function InvoiceCreate() {
 
     try {
       const nextInvoiceNumber = await getNextInvoiceNumber();
-      const cgst = totalGST / 2;
-      const sgst = totalGST / 2;
 
       const invoiceRecord = {
           company_id: user.company_id,
@@ -364,7 +424,7 @@ export function InvoiceCreate() {
           invoice_date: invoiceDate,
           customer_type: selectedCustomerType,
           bill_type: derivedBillType,
-          place_of_supply: placeOfSupply === 'Auto from customer' ? selectedCustomerDetails?.city || null : placeOfSupply,
+          place_of_supply: supplyState || null,
           reverse_charge: reverseCharge,
           po_number: poNumber.trim() || null,
           po_date: poDate || null,
@@ -374,7 +434,7 @@ export function InvoiceCreate() {
           subtotal,
           cgst,
           sgst,
-          igst: 0,
+          igst,
           total_tax: totalGST,
           total_amount: totalAmount,
           paid_amount: 0,
@@ -452,6 +512,7 @@ export function InvoiceCreate() {
   const handleCreateInvoice = async () => {
     const invoice = await saveInvoice('pending');
     if (invoice) {
+      setInvoiceCreated(true);
       setShowSuccessModal(true);
     }
   };
@@ -482,6 +543,7 @@ export function InvoiceCreate() {
         email: newCustomer.email.trim(),
         phone: newCustomer.phone.trim(),
         city: newCustomer.city.trim(),
+        state: newCustomer.state.trim() || getGstinStateName(newCustomer.gstin) || null,
         address: newCustomer.address.trim(),
       };
 
@@ -489,7 +551,7 @@ export function InvoiceCreate() {
       supabase
         .from('customers')
         .insert(record)
-        .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, address')
+        .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, state, address')
         .single(),
       record,
       record.name
@@ -515,6 +577,7 @@ export function InvoiceCreate() {
       email: '',
       phone: '',
       city: '',
+      state: '',
       address: ''
     });
     toast.success('Customer saved');
@@ -574,7 +637,7 @@ export function InvoiceCreate() {
     <div className="pb-8 bg-muted/30 min-h-screen">
       {/* Header */}
       <div className="bg-white border-b border-border px-4 md:px-8 py-4 md:py-6 sticky top-0 z-10">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex items-center">
           <div className="flex items-center gap-4">
             <Link
               to="/app/invoices"
@@ -584,33 +647,10 @@ export function InvoiceCreate() {
             </Link>
             <div>
               <h1 className="text-xl md:text-2xl font-semibold text-foreground">New Tax Invoice</h1>
-              <p className="text-xs md:text-sm text-muted-foreground mt-1">FY 2026-27 - Intra-state (CGST + SGST)</p>
+              <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                FY 2026-27 - {isInterStateSupply ? 'Inter-state (IGST)' : 'Intra-state (CGST + SGST)'}
+              </p>
             </div>
-          </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <button
-              onClick={handleSaveDraft}
-              disabled={isSavingInvoice}
-              className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
-            >
-              <Save className="w-4 h-4" />
-              {isSavingInvoice ? 'Saving...' : 'Save as Draft'}
-            </button>
-            <button
-              onClick={() => setShowPreview(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
-            >
-              <Eye className="w-4 h-4" />
-              Preview
-            </button>
-            <button
-              onClick={handleCreateInvoice}
-              disabled={isSavingInvoice}
-              className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            >
-              <Send className="w-4 h-4" />
-              {isSavingInvoice ? 'Saving...' : 'Create Invoice'}
-            </button>
           </div>
         </div>
       </div>
@@ -1144,17 +1184,19 @@ export function InvoiceCreate() {
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm py-2">
-                <span className="text-muted-foreground">CGST @ 9%</span>
+                <span className="text-muted-foreground">{isInterStateSupply ? 'IGST @ 18%' : 'CGST @ 9%'}</span>
                 <span className="font-medium text-foreground">
-                  ₹{(totalGST / 2).toFixed(2)}
+                  ₹{(isInterStateSupply ? igst : cgst).toFixed(2)}
                 </span>
               </div>
+              {!isInterStateSupply && (
               <div className="flex items-center justify-between text-sm py-2">
                 <span className="text-muted-foreground">SGST @ 9%</span>
                 <span className="font-medium text-foreground">
-                  ₹{(totalGST / 2).toFixed(2)}
+                  ₹{sgst.toFixed(2)}
                 </span>
               </div>
+              )}
               <div className="pt-4 border-t-2 border-border">
                 <div className="flex items-center justify-between py-2">
                   <span className="font-semibold text-foreground text-lg">Total</span>
@@ -1165,6 +1207,33 @@ export function InvoiceCreate() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 pt-2">
+          <button
+            onClick={handleSaveDraft}
+            disabled={isSavingInvoice}
+            className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
+          >
+            <Save className="w-4 h-4" />
+            {isSavingInvoice ? 'Saving...' : 'Save as Draft'}
+          </button>
+          {!invoiceCreated && (
+            <button
+              onClick={() => setShowPreview(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
+            >
+              <Eye className="w-4 h-4" />
+              Preview
+            </button>
+          )}
+          <button
+            onClick={invoiceCreated ? () => setShowPreview(true) : handleCreateInvoice}
+            disabled={isSavingInvoice}
+            className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {isSavingInvoice ? 'Saving...' : invoiceCreated ? 'View Invoice' : 'Create Invoice'}
+          </button>
         </div>
       </div>
 
@@ -1179,6 +1248,7 @@ export function InvoiceCreate() {
         customerType={selectedCustomerType}
         billType={derivedBillType}
         placeOfSupply={placeOfSupply}
+        sellerState={sellerState}
         reverseCharge={reverseCharge}
         poNumber={poNumber}
         poDate={poDate}
@@ -1190,7 +1260,14 @@ export function InvoiceCreate() {
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="absolute right-3 top-3 p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <div className="p-4 md:p-6 text-center">
               <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-success" />
@@ -1202,49 +1279,33 @@ export function InvoiceCreate() {
               <div className="space-y-3">
                 <button
                   onClick={() => {
-                    setShowSuccessModal(false);
-                    navigate('/app/invoices');
+                    setShowPreview(true);
                   }}
                   className="w-full px-4 py-2.5 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
                 >
-                  View Invoice List
+                  View and Download
                 </button>
                 <button
                   onClick={() => {
-                    setShowSuccessModal(false);
-                    setShowPreview(true);
+                    handleWhatsAppInvoice();
                   }}
                   className="w-full px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
                 >
-                  Preview & Download
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <MessageCircle className="w-4 h-4" />
+                    WhatsApp the Invoice
+                  </span>
                 </button>
                 <button
                   onClick={() => {
-                    setShowSuccessModal(false);
-                    // Reset form for new invoice
-                    setLineItems([{
-                      id: Date.now().toString(),
-                      itemId: '',
-                      item: '',
-                      description: '',
-                      hsn: '',
-                      qty: 1,
-                      unit: 'JOB',
-                      rate: 0,
-                      discount: 0,
-                      gst: 18,
-                      amount: 0
-                    }]);
-                    setSelectedCustomer('');
-                    setPoNumber('');
-                    setPoDate('');
-                    setVehicleNo('');
-                    setTransportMode('');
-                    setRemarks('');
+                    handleMailInvoice();
                   }}
                   className="w-full px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
                 >
-                  Create Another Invoice
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    Mail Invoice
+                  </span>
                 </button>
               </div>
             </div>
@@ -1283,6 +1344,7 @@ export function InvoiceCreate() {
                     email: '',
                     phone: '',
                     city: '',
+                    state: '',
                     address: ''
                   });
                 }}
@@ -1318,7 +1380,7 @@ export function InvoiceCreate() {
                       value={newCustomer.gstin}
                       onChange={(e) => {
                         const gstin = normalizeGstin(e.target.value);
-                        setNewCustomer({ ...newCustomer, gstin, pan: extractPanFromGstin(gstin) });
+                        setNewCustomer({ ...newCustomer, gstin, pan: extractPanFromGstin(gstin), state: getGstinStateName(gstin) });
                       }}
                       placeholder="e.g., 27AAAAA0000A1Z5"
                       maxLength={15}
@@ -1402,15 +1464,27 @@ export function InvoiceCreate() {
                         className="w-full px-4 py-2.5 border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        City <span className="text-destructive">*</span>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      City <span className="text-destructive">*</span>
                       </label>
                       <input
                         type="text"
                         value={newCustomer.city}
                         onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })}
                         placeholder="e.g., Mumbai"
+                        className="w-full px-4 py-2.5 border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        State <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newCustomer.state}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, state: e.target.value })}
+                        placeholder="e.g., Maharashtra"
                         className="w-full px-4 py-2.5 border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
                       />
                     </div>
@@ -1445,6 +1519,7 @@ export function InvoiceCreate() {
                     email: '',
                     phone: '',
                     city: '',
+                    state: '',
                     address: ''
                   });
                 }}
@@ -1454,7 +1529,7 @@ export function InvoiceCreate() {
               </button>
               <button
                 onClick={handleAddCustomer}
-                disabled={isSavingCustomer || !newCustomer.companyName || !newCustomer.gstin || !newCustomer.contactName || !newCustomer.email || !newCustomer.phone || !newCustomer.city || !newCustomer.address}
+                disabled={isSavingCustomer || !newCustomer.companyName || !newCustomer.gstin || !newCustomer.contactName || !newCustomer.email || !newCustomer.phone || !newCustomer.city || !newCustomer.state || !newCustomer.address}
                 className="px-6 py-2.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
               >
                 {isSavingCustomer ? 'Saving...' : 'Add Customer'}

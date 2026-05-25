@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router';
-import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { InvoicePreview } from './InvoicePreview';
 import { toast } from 'sonner';
@@ -95,6 +95,7 @@ export function InvoiceList() {
         email: customer.email || '',
         phone: customer.phone || '',
         city: customer.city || '',
+        state: customer.state || '',
         address: customer.address || '',
       } : null,
       date: formatDate(invoice.invoice_date),
@@ -143,7 +144,7 @@ export function InvoiceList() {
         vehicle_number,
         transport_mode,
         remarks,
-        customers(id, name, customer_type, gstin, contact_name, email, phone, city, address),
+        customers(id, name, customer_type, gstin, contact_name, email, phone, city, state, address),
         invoice_items(id, item_name, description, hsn, quantity, unit, rate, discount_percent, gst_rate, total_amount, sort_order, items(type))
       `)
         .eq('company_id', user.company_id)
@@ -204,6 +205,36 @@ export function InvoiceList() {
     setSelectedInvoice(invoice);
     setShowSendModal(true);
     setOpenMenuId(null);
+  };
+
+  const getInvoiceShareMessage = (invoice: InvoiceRow) => (
+    `Invoice ${invoice.id} for ${invoice.customer} is ready. Total amount: Rs. ${invoice.amount.toFixed(2)}.`
+  );
+
+  const handleWhatsAppInvoice = (invoice: InvoiceRow) => {
+    const phone = invoice.customerDetails?.phone?.replace(/\D/g, '') || '';
+    const message = encodeURIComponent(getInvoiceShareMessage(invoice));
+    const whatsappUrl = phone
+      ? `https://wa.me/${phone}?text=${message}`
+      : `https://wa.me/?text=${message}`;
+
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    setShowSendModal(false);
+    setSelectedInvoice(null);
+  };
+
+  const handleMailInvoice = (invoice: InvoiceRow) => {
+    const email = invoice.customerDetails?.email || '';
+    if (!email) {
+      toast.error('Customer email is not available');
+      return;
+    }
+
+    const subject = encodeURIComponent(`Invoice ${invoice.id}`);
+    const body = encodeURIComponent(getInvoiceShareMessage(invoice));
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+    setShowSendModal(false);
+    setSelectedInvoice(null);
   };
 
   const handleDownload = (invoice: any) => {
@@ -758,33 +789,21 @@ export function InvoiceList() {
                 Send {selectedInvoice.id} to {selectedInvoice.customer}
               </p>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  defaultValue="customer@example.com"
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Message (Optional)
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Add a personal message..."
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="attach-pdf" defaultChecked className="w-4 h-4" />
-                <label htmlFor="attach-pdf" className="text-sm text-foreground">
-                  Attach PDF copy
-                </label>
-              </div>
+            <div className="p-6 space-y-3">
+              <button
+                onClick={() => handleWhatsAppInvoice(selectedInvoice)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp the Invoice
+              </button>
+              <button
+                onClick={() => handleMailInvoice(selectedInvoice)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                Mail Invoice
+              </button>
             </div>
             <div className="p-6 border-t border-border flex items-center justify-end gap-3">
               <button
@@ -795,16 +814,6 @@ export function InvoiceList() {
                 className="px-4 py-2 border border-border rounded hover:bg-muted transition-colors"
               >
                 Cancel
-              </button>
-              <button
-                onClick={() => {
-                  alert(`Invoice sent to customer!`);
-                  setShowSendModal(false);
-                  setSelectedInvoice(null);
-                }}
-                className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
-              >
-                Send Invoice
               </button>
             </div>
           </div>

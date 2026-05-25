@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { deleteForUser, insertForUser, selectForUser, updateForUser } from '../../../lib/auditorData';
-import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
+import { extractPanFromGstin, getGstinStateName, normalizeGstin } from '../../../lib/gstin';
 
 interface Customer {
   id: string;
@@ -19,6 +19,7 @@ interface Customer {
   invoices: number;
   outstanding: number;
   city: string;
+  state: string;
   address: string;
 }
 
@@ -61,6 +62,7 @@ export function CustomerList() {
         email: customer.email || '',
         phone: customer.phone || '',
         city: customer.city || '',
+        state: customer.state || getGstinStateName(customer.gstin) || '',
         address: customer.address || '',
         revenue: stats.revenue,
         invoices: stats.invoices,
@@ -82,7 +84,7 @@ export function CustomerList() {
       selectForUser<any[]>(user, 'customers', 'customers', () =>
         supabase
           .from('customers')
-          .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, address')
+          .select('id, name, customer_type, gstin, pan, contact_name, email, phone, city, state, address')
           .eq('company_id', user.company_id)
           .eq('is_active', true)
           .order('name', { ascending: true })
@@ -140,6 +142,7 @@ export function CustomerList() {
         email: newCustomer.email.trim(),
         phone: newCustomer.phone.trim(),
         city: newCustomer.city.trim(),
+        state: newCustomer.state.trim() || getGstinStateName(newCustomer.gstin) || null,
         address: newCustomer.address.trim(),
       };
 
@@ -171,6 +174,7 @@ export function CustomerList() {
         email: updatedCustomer.email.trim(),
         phone: updatedCustomer.phone.trim(),
         city: updatedCustomer.city.trim(),
+        state: updatedCustomer.state.trim() || getGstinStateName(updatedCustomer.gstin) || null,
         address: updatedCustomer.address.trim(),
       };
 
@@ -444,6 +448,7 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
     email: '',
     phone: '',
     city: '',
+    state: '',
     address: '',
   });
 
@@ -455,7 +460,7 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
   const handleChange = (field: string, value: string) => {
     if (field === 'gstin') {
       const gstin = normalizeGstin(value);
-      setFormData({ ...formData, gstin, pan: extractPanFromGstin(gstin) });
+      setFormData({ ...formData, gstin, pan: extractPanFromGstin(gstin), state: getGstinStateName(gstin) });
       return;
     }
 
@@ -600,6 +605,19 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
                   className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  State <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.state}
+                  onChange={(e) => handleChange('state', e.target.value)}
+                  placeholder="Enter state"
+                  className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
             </div>
           </div>
 
@@ -651,6 +669,7 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
     email: customer.email,
     phone: customer.phone,
     city: customer.city,
+    state: customer.state || getGstinStateName(customer.gstin) || '',
     address: customer.address,
     revenue: customer.revenue,
     invoices: customer.invoices,
@@ -665,7 +684,7 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
   const handleChange = (field: string, value: string) => {
     if (field === 'gstin') {
       const gstin = normalizeGstin(value);
-      setFormData({ ...formData, gstin, pan: extractPanFromGstin(gstin) });
+      setFormData({ ...formData, gstin, pan: extractPanFromGstin(gstin), state: getGstinStateName(gstin) });
       return;
     }
 
@@ -807,6 +826,19 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
                   value={formData.city}
                   onChange={(e) => handleChange('city', e.target.value)}
                   placeholder="Enter city"
+                  className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  State <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.state}
+                  onChange={(e) => handleChange('state', e.target.value)}
+                  placeholder="Enter state"
                   className="w-full px-3 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>

@@ -27,6 +27,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { selectForUser } from '../../../lib/auditorData';
 
+const PAYMENT_VOUCHERS_ENABLED = false;
+
 interface SearchInvoiceResult {
   id: string;
   invoiceNumber: string;
@@ -123,13 +125,16 @@ export function DashboardLayout() {
     { name: 'Credit / Debit Notes', href: '/app/credit-notes', icon: FileEdit, permission: 'credit-notes' },
     { name: 'Receipts', href: '/app/receipts', icon: Receipt, permission: 'receipts' },
     { name: 'Outstanding', href: '/app/outstanding', icon: TrendingUp, permission: 'outstanding' },
-    { name: 'Payment Vouchers', href: '/app/payment-vouchers', icon: Wallet, permission: 'payment-vouchers' },
+    { name: 'Payment Vouchers', href: '/app/payment-vouchers', icon: Wallet, permission: 'payment-vouchers', enabled: PAYMENT_VOUCHERS_ENABLED },
     { name: 'Reports & GSTR-1', href: '/app/reports', icon: BarChart3, permission: 'reports' },
     { name: 'Auditor Management', href: '/app/auditor-management', icon: UserCog, permission: 'auditor-management', ownerOnly: true },
   ];
 
   // Filter navigation based on user permissions
   const navigation = allNavigation.filter(item => {
+    if ('enabled' in item && item.enabled === false) {
+      return false;
+    }
     // Owner-only items
     if (item.ownerOnly && user?.role !== 'owner') {
       return false;

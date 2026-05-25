@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LandingPage } from './components/LandingPage';
@@ -13,8 +13,6 @@ import { CreditNoteCreate } from './components/credit-notes/CreditNoteCreate';
 import { ReceiptsList } from './components/receipts/ReceiptsList';
 import { ReceiptCreate } from './components/receipts/ReceiptCreate';
 import { OutstandingList } from './components/outstanding/OutstandingList';
-import { PaymentVouchersList } from './components/payment-vouchers/PaymentVouchersList';
-import { PaymentVoucherCreate } from './components/payment-vouchers/PaymentVoucherCreate';
 import { ReportsDashboard } from './components/reports/ReportsDashboard';
 import { MyProfile } from './components/profile/MyProfile';
 import { Settings } from './components/settings/Settings';
@@ -42,8 +40,7 @@ export default function App() {
               <Route path="receipts" element={<ProtectedRoute permission="receipts"><ReceiptsList /></ProtectedRoute>} />
               <Route path="receipts/new" element={<ProtectedRoute permission="receipts"><ReceiptCreate /></ProtectedRoute>} />
               <Route path="outstanding" element={<ProtectedRoute permission="outstanding"><OutstandingList /></ProtectedRoute>} />
-              <Route path="payment-vouchers" element={<ProtectedRoute permission="payment-vouchers"><PaymentVouchersList /></ProtectedRoute>} />
-              <Route path="payment-vouchers/new" element={<ProtectedRoute permission="payment-vouchers"><PaymentVoucherCreate /></ProtectedRoute>} />
+              <Route path="payment-vouchers/*" element={<Navigate to="/app" replace />} />
               <Route path="reports" element={<ProtectedRoute permission="reports"><ReportsDashboard /></ProtectedRoute>} />
               <Route path="auditor-management" element={<ProtectedRoute ownerOnly><AuditorManagement /></ProtectedRoute>} />
               <Route path="profile" element={<MyProfile />} />

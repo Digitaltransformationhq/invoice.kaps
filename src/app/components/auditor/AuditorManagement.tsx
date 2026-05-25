@@ -13,6 +13,8 @@ interface Auditor {
   permissions: string[];
 }
 
+const PAYMENT_VOUCHERS_ENABLED = false;
+
 const AVAILABLE_PERMISSIONS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'customers', label: 'Customers' },
@@ -21,9 +23,9 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'credit-notes', label: 'Credit / Debit Notes' },
   { id: 'receipts', label: 'Receipts' },
   { id: 'outstanding', label: 'Outstanding' },
-  { id: 'payment-vouchers', label: 'Payment Vouchers' },
+  { id: 'payment-vouchers', label: 'Payment Vouchers', enabled: PAYMENT_VOUCHERS_ENABLED },
   { id: 'reports', label: 'Reports & GSTR-1' },
-];
+].filter((permission) => !('enabled' in permission) || permission.enabled !== false);
 
 export function AuditorManagement() {
   const { user } = useAuth();

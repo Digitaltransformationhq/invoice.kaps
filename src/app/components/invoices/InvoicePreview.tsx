@@ -1,7 +1,8 @@
-import { X, Download, Send, Printer } from 'lucide-react';
+import { X, Download, Send, Printer, Mail, MessageCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 
 interface LineItem {
   id: string;
@@ -25,6 +26,7 @@ interface Customer {
   email: string;
   phone: string;
   city: string;
+  state?: string;
   address: string;
 }
 
@@ -38,6 +40,7 @@ interface InvoicePreviewProps {
   customerType?: string;
   billType?: string;
   placeOfSupply?: string;
+  sellerState?: string;
   reverseCharge?: boolean;
   poNumber?: string;
   poDate?: string;
@@ -56,6 +59,7 @@ export function InvoicePreview({
   customerType,
   billType,
   placeOfSupply,
+  sellerState,
   reverseCharge = false,
   poNumber,
   poDate,
@@ -64,10 +68,21 @@ export function InvoicePreview({
   remarks,
 }: InvoicePreviewProps) {
   const { user } = useAuth();
+  const [showSendOptions, setShowSendOptions] = useState(false);
   const [companyDetails, setCompanyDetails] = useState({
     name: user?.company_name || 'Your Company',
     gstin: user?.company_gstin || '-',
+    state: sellerState || getGstinStateName(user?.company_gstin) || '',
     email: user?.email || '',
+    phone: '',
+    address: '',
+    city: '',
+    pinCode: '',
+    pan: '',
+    bankName: '',
+    bankAccountNumber: '',
+    bankIfsc: '',
+    bankBranch: '',
     logo: user?.company_logo || '',
   });
 
@@ -77,7 +92,7 @@ export function InvoicePreview({
     const loadCompanyDetails = async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('company_name, gstin, email, company_logo')
+        .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo')
         .eq('id', user.company_id)
         .single();
 
@@ -85,14 +100,24 @@ export function InvoicePreview({
         setCompanyDetails({
           name: data?.company_name || user.company_name || 'Your Company',
           gstin: data?.gstin || user.company_gstin || '-',
+          state: data?.state || sellerState || getGstinStateName(data?.gstin) || getGstinStateName(user.company_gstin) || '',
           email: data?.email || user.email || '',
+          phone: data?.phone || '',
+          address: data?.address || '',
+          city: data?.city || '',
+          pinCode: data?.pin_code || '',
+          pan: data?.pan || '',
+          bankName: data?.bank_name || '',
+          bankAccountNumber: data?.bank_account_number || '',
+          bankIfsc: data?.bank_ifsc || '',
+          bankBranch: data?.bank_branch || '',
           logo: data?.company_logo || user.company_logo || '',
         });
       }
     };
 
     loadCompanyDetails();
-  }, [isOpen, user?.company_id, user?.company_name, user?.company_gstin, user?.company_logo, user?.email]);
+  }, [isOpen, sellerState, user?.company_id, user?.company_name, user?.company_gstin, user?.company_logo, user?.email]);
 
   if (!isOpen) return null;
 
@@ -124,9 +149,6 @@ export function InvoicePreview({
   };
 
   const displayInvoiceNumber = invoiceNumber || 'Auto-generated on save';
-  const effectivePlaceOfSupply = placeOfSupply === 'Auto from customer'
-    ? customer?.city || 'Auto from customer'
-    : placeOfSupply || customer?.city || '-';
   const formatDate = (value?: string) => {
     if (!value) return '-';
     const parsedDate = new Date(value);
@@ -138,31 +160,79 @@ export function InvoicePreview({
   const formatCurrency = (value: number) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const companyName = companyDetails.name || user?.company_name || 'Your Company';
   const companyGstin = companyDetails.gstin || user?.company_gstin || '-';
+  const companyState = companyDetails.state || sellerState || getGstinStateName(companyGstin) || '';
   const companyEmail = companyDetails.email || user?.email || '';
+  const companyPhone = companyDetails.phone || '';
+  const companyAddress = [
+    companyDetails.address,
+    [companyDetails.city, companyState, companyDetails.pinCode].filter(Boolean).join(', '),
+  ].filter(Boolean);
+  const companyPan = companyDetails.pan || (companyGstin.length >= 12 ? companyGstin.slice(2, 12) : '');
   const companyLogo = companyDetails.logo || user?.company_logo || '';
   const buyerName = customer?.companyName || 'Customer not selected';
   const buyerAddress = customer?.address || '-';
   const buyerCity = customer?.city || '-';
+  const buyerState = customer?.state || getGstinStateName(customer?.gstin) || '';
+  const effectivePlaceOfSupply = placeOfSupply === 'Auto from customer'
+    ? buyerState || buyerCity || 'Auto from customer'
+    : placeOfSupply || buyerState || buyerCity || '-';
   const buyerGstin = customer?.gstin || '-';
   const buyerContact = customer?.contactName || '';
   const buyerPhone = customer?.phone || '';
   const buyerEmail = customer?.email || '';
   const effectiveBillType = getBillTypeFromItems();
   const invoiceCopies = getInvoiceCopies();
+  const supplyState = placeOfSupply === 'Auto from customer'
+    ? buyerState
+    : placeOfSupply || buyerState;
+  const isInterStateSupply = Boolean(
+    companyState &&
+    supplyState &&
+    normalizeIndianState(companyState) !== normalizeIndianState(supplyState)
+  );
 
   // Calculate totals
   const subtotal = lineItems.reduce((sum, item) => {
     return sum + (item.qty * item.rate) - ((item.qty * item.rate) * item.discount / 100);
   }, 0);
 
-  const cgstTotal = lineItems.reduce((sum, item) => {
+  const totalTax = lineItems.reduce((sum, item) => {
     const baseAmount = item.qty * item.rate;
     const afterDiscount = baseAmount - (baseAmount * item.discount / 100);
-    return sum + (afterDiscount * item.gst / 100 / 2);
+    return sum + (afterDiscount * item.gst / 100);
   }, 0);
 
-  const sgstTotal = cgstTotal; // Same as CGST for intra-state
-  const grandTotal = subtotal + cgstTotal + sgstTotal;
+  const cgstTotal = isInterStateSupply ? 0 : totalTax / 2;
+  const sgstTotal = isInterStateSupply ? 0 : totalTax / 2;
+  const igstTotal = isInterStateSupply ? totalTax : 0;
+  const grandTotal = subtotal + totalTax;
+
+  const getInvoiceShareMessage = () => (
+    `Invoice ${displayInvoiceNumber} for ${buyerName} is ready. Total amount: Rs. ${grandTotal.toFixed(2)}.`
+  );
+
+  const handleWhatsAppInvoice = () => {
+    const phone = buyerPhone.replace(/\D/g, '');
+    const message = encodeURIComponent(getInvoiceShareMessage());
+    const whatsappUrl = phone
+      ? `https://wa.me/${phone}?text=${message}`
+      : `https://wa.me/?text=${message}`;
+
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    setShowSendOptions(false);
+  };
+
+  const handleMailInvoice = () => {
+    if (!buyerEmail) {
+      alert('Customer email is not available.');
+      return;
+    }
+
+    const subject = encodeURIComponent(`Invoice ${displayInvoiceNumber}`);
+    const body = encodeURIComponent(getInvoiceShareMessage());
+    window.location.href = `mailto:${buyerEmail}?subject=${subject}&body=${body}`;
+    setShowSendOptions(false);
+  };
 
   // Convert number to words (simplified version)
   const numberToWords = (num: number): string => {
@@ -207,7 +277,7 @@ export function InvoicePreview({
               <span className="text-sm">Print</span>
             </button>
             <button
-              onClick={() => alert(`Invoice ${displayInvoiceNumber} is ready to send${buyerEmail ? ` to ${buyerEmail}` : ''}.`)}
+              onClick={() => setShowSendOptions(true)}
               className="inline-flex items-center gap-2 px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
             >
               <Send className="w-4 h-4" />
@@ -219,12 +289,49 @@ export function InvoicePreview({
           </div>
         </div>
 
+        {showSendOptions && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-sm w-full">
+              <div className="p-5 border-b border-border">
+                <h3 className="text-lg font-semibold text-foreground">Send Invoice</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Send {displayInvoiceNumber} to {buyerName}
+                </p>
+              </div>
+              <div className="p-5 space-y-3">
+                <button
+                  onClick={handleWhatsAppInvoice}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp the Invoice
+                </button>
+                <button
+                  onClick={handleMailInvoice}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  Mail Invoice
+                </button>
+              </div>
+              <div className="p-5 border-t border-border flex justify-end">
+                <button
+                  onClick={() => setShowSendOptions(false)}
+                  className="px-4 py-2 border border-border rounded hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Invoice Content */}
         <div className="invoice-print-area flex-1 overflow-y-auto p-6">
           {invoiceCopies.map((copyLabel, copyIndex) => (
           <div
             key={copyLabel}
-            className={`invoice-print-page bg-white border-2 border-foreground mx-auto max-w-[210mm] ${copyIndex > 0 ? 'mt-8 print:mt-0' : ''}`}
+            className={`invoice-print-page bg-white border border-foreground mx-auto max-w-[210mm] ${copyIndex > 0 ? 'mt-8 print:mt-0' : ''}`}
             style={{ fontFamily: 'Arial, sans-serif' }}
           >
             {/* Header */}
@@ -232,13 +339,13 @@ export function InvoicePreview({
               <div className="font-semibold">{copyLabel}</div>
             </div>
 
-            <div className="text-center py-2 border-b-2 border-foreground">
+            <div className="text-center py-2 border-b border-foreground">
               <h1 className="text-xl font-bold">TAX INVOICE</h1>
             </div>
 
             {/* Company & Invoice Details */}
-            <div className="grid grid-cols-2 border-b-2 border-foreground">
-              <div className="p-4 border-r-2 border-foreground">
+            <div className="grid grid-cols-2 border-b border-foreground">
+              <div className="p-4 border-r border-foreground">
                 <div className="flex gap-3">
                   <div className="w-16 h-16 bg-primary/10 border border-border rounded flex items-center justify-center flex-shrink-0">
                     {companyLogo ? (
@@ -250,8 +357,16 @@ export function InvoicePreview({
                   <div>
                     <h2 className="font-bold text-sm mb-1">{companyName}</h2>
                     <div className="text-xs leading-relaxed">
-                      <div>{companyEmail || '-'}</div>
+                      {companyAddress.length > 0 ? (
+                        companyAddress.map((line) => <div key={line}>{line}</div>)
+                      ) : (
+                        <div>Registered address: -</div>
+                      )}
+                      {companyPhone && <div>Phone: {companyPhone}</div>}
+                      <div>Email: {companyEmail || '-'}</div>
                       <div className="font-semibold mt-1">GSTIN: {companyGstin}</div>
+                      {companyPan && <div>PAN: {companyPan}</div>}
+                      <div>State: {companyState || '-'}</div>
                     </div>
                   </div>
                 </div>
@@ -297,12 +412,12 @@ export function InvoicePreview({
             </div>
 
             {/* Bill To & Ship To */}
-            <div className="grid grid-cols-2 border-b-2 border-foreground">
-              <div className="p-4 border-r-2 border-foreground">
+            <div className="grid grid-cols-2 border-b border-foreground">
+              <div className="p-4 border-r border-foreground">
                 <div className="text-xs font-semibold mb-2">BILL TO</div>
                 <div className="text-xs leading-relaxed">
                   <div className="font-bold">{buyerName}</div>
-                  <div>{buyerAddress}</div>
+                  <div>Address:- {buyerAddress}</div>
                   <div>{buyerCity}</div>
                   {buyerContact && <div>Contact: {buyerContact}</div>}
                   {buyerPhone && <div>Phone: {buyerPhone}</div>}
@@ -315,7 +430,7 @@ export function InvoicePreview({
                 <div className="text-xs font-semibold mb-2">SHIP TO</div>
                 <div className="text-xs leading-relaxed">
                   <div className="font-bold">{buyerName}</div>
-                  <div>{buyerAddress}</div>
+                  <div>Address:- {buyerAddress}</div>
                   <div>{buyerCity}</div>
                   <div className="mt-1">Place of Supply: {effectivePlaceOfSupply}</div>
                 </div>
@@ -323,9 +438,9 @@ export function InvoicePreview({
             </div>
 
             {/* Line Items Table */}
-            <table className="w-full text-xs border-b-2 border-foreground">
+            <table className="w-full text-xs border-b border-foreground">
               <thead>
-                <tr className="border-b-2 border-foreground bg-muted/30">
+                <tr className="border-b border-foreground bg-muted/30">
                   <th className="p-2 text-left border-r border-foreground w-8">Sr.</th>
                   <th className="p-2 text-left border-r border-foreground">Description of Goods/Services</th>
                   <th className="p-2 text-left border-r border-foreground w-20">HSN/SAC</th>
@@ -333,8 +448,14 @@ export function InvoicePreview({
                   <th className="p-2 text-left border-r border-foreground w-12">Unit</th>
                   <th className="p-2 text-right border-r border-foreground w-20">Rate</th>
                   <th className="p-2 text-right border-r border-foreground w-24">Taxable</th>
-                  <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
-                  <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
+                  {isInterStateSupply ? (
+                    <th className="p-2 text-right border-r border-foreground w-20">IGST</th>
+                  ) : (
+                    <>
+                      <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
+                      <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
+                    </>
+                  )}
                   <th className="p-2 text-right w-24">Amount</th>
                 </tr>
               </thead>
@@ -342,8 +463,10 @@ export function InvoicePreview({
                 {lineItems.map((item, index) => {
                   const baseAmount = item.qty * item.rate;
                   const afterDiscount = baseAmount - (baseAmount * item.discount / 100);
-                  const cgst = afterDiscount * item.gst / 100 / 2;
-                  const sgst = cgst;
+                  const tax = afterDiscount * item.gst / 100;
+                  const cgst = isInterStateSupply ? 0 : tax / 2;
+                  const sgst = isInterStateSupply ? 0 : tax / 2;
+                  const igst = isInterStateSupply ? tax : 0;
 
                   return (
                     <tr key={item.id} className="border-b border-foreground">
@@ -358,9 +481,15 @@ export function InvoicePreview({
                       <td className="p-2 border-r border-foreground">{item.unit}</td>
                       <td className="p-2 text-right border-r border-foreground">{formatCurrency(item.rate)}</td>
                       <td className="p-2 text-right border-r border-foreground">{formatCurrency(afterDiscount)}</td>
-                      <td className="p-2 text-right border-r border-foreground">{formatCurrency(cgst)}</td>
-                      <td className="p-2 text-right border-r border-foreground">{formatCurrency(sgst)}</td>
-                      <td className="p-2 text-right">{formatCurrency(afterDiscount + cgst + sgst)}</td>
+                      {isInterStateSupply ? (
+                        <td className="p-2 text-right border-r border-foreground">{formatCurrency(igst)}</td>
+                      ) : (
+                        <>
+                          <td className="p-2 text-right border-r border-foreground">{formatCurrency(cgst)}</td>
+                          <td className="p-2 text-right border-r border-foreground">{formatCurrency(sgst)}</td>
+                        </>
+                      )}
+                      <td className="p-2 text-right">{formatCurrency(afterDiscount + tax)}</td>
                     </tr>
                   );
                 })}
@@ -368,22 +497,31 @@ export function InvoicePreview({
             </table>
 
             {/* Totals */}
-            <div className="border-b-2 border-foreground">
+            <div className="border-b border-foreground">
               <table className="w-full text-xs">
                 <tbody>
                   <tr className="border-b border-foreground">
                     <td className="p-2 font-semibold">Sub-Total (Taxable)</td>
                     <td className="p-2 text-right font-semibold">₹{formatCurrency(subtotal)}</td>
                   </tr>
-                  <tr className="border-b border-foreground">
-                    <td className="p-2">Add: CGST</td>
-                    <td className="p-2 text-right">₹{formatCurrency(cgstTotal)}</td>
-                  </tr>
-                  <tr className="border-b-2 border-foreground">
-                    <td className="p-2">Add: SGST</td>
-                    <td className="p-2 text-right">₹{formatCurrency(sgstTotal)}</td>
-                  </tr>
-                  <tr className="border-b-2 border-foreground bg-muted/20">
+                  {isInterStateSupply ? (
+                    <tr className="border-b border-foreground">
+                      <td className="p-2">Add: IGST</td>
+                      <td className="p-2 text-right">₹{formatCurrency(igstTotal)}</td>
+                    </tr>
+                  ) : (
+                    <>
+                      <tr className="border-b border-foreground">
+                        <td className="p-2">Add: CGST</td>
+                        <td className="p-2 text-right">₹{formatCurrency(cgstTotal)}</td>
+                      </tr>
+                      <tr className="border-b border-foreground">
+                        <td className="p-2">Add: SGST</td>
+                        <td className="p-2 text-right">₹{formatCurrency(sgstTotal)}</td>
+                      </tr>
+                    </>
+                  )}
+                  <tr className="border-b border-foreground bg-muted/20">
                     <td className="p-2 font-bold">GRAND TOTAL</td>
                     <td className="p-2 text-right font-bold">₹{formatCurrency(grandTotal)}</td>
                   </tr>
@@ -392,27 +530,26 @@ export function InvoicePreview({
             </div>
 
             {/* Amount in Words */}
-            <div className="border-b-2 border-foreground p-3 text-xs">
+            <div className="border-b border-foreground p-3 text-xs">
               <span className="font-semibold">Invoice Amount in Words:</span> {numberToWords(grandTotal)}
               <div className="text-right mt-2">E. & O.E.</div>
             </div>
 
             {remarks && (
-              <div className="border-b-2 border-foreground p-3 text-xs">
+              <div className="border-b border-foreground p-3 text-xs">
                 <span className="font-semibold">Remarks / Narration:</span> {remarks}
               </div>
             )}
 
             {/* Bank Details & Declaration */}
             <div className="grid grid-cols-2">
-              <div className="p-4 border-r-2 border-foreground text-xs">
+              <div className="p-4 border-r border-foreground text-xs">
                 <div className="font-semibold mb-2">BANK DETAILS</div>
                 <div className="leading-relaxed">
-                  <div>Bank: -</div>
-                  <div>A/c No.: -</div>
-                  <div>IFSC: -</div>
-                  <div className="mt-3 italic text-[10px]">Company GSTIN: {companyGstin}</div>
-                  <div className="italic text-[10px]">Buyer GSTIN: {buyerGstin}</div>
+                  <div>Bank: {companyDetails.bankName || '-'}</div>
+                  <div>A/c No.: {companyDetails.bankAccountNumber || '-'}</div>
+                  <div>IFSC: {companyDetails.bankIfsc || '-'}</div>
+                  {companyDetails.bankBranch && <div>Branch: {companyDetails.bankBranch}</div>}
                 </div>
               </div>
               <div className="p-4 text-xs">
