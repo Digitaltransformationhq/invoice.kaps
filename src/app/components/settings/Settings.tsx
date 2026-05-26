@@ -20,6 +20,8 @@ interface CompanyForm {
   bank_ifsc: string;
   bank_branch: string;
   company_logo: string;
+  esign_image: string;
+  stamp_image: string;
 }
 
 interface SettingsForm {
@@ -48,6 +50,8 @@ const emptyCompany: CompanyForm = {
   bank_ifsc: '',
   bank_branch: '',
   company_logo: '',
+  esign_image: '',
+  stamp_image: '',
 };
 
 const defaultSettings: SettingsForm = {
@@ -62,6 +66,7 @@ const defaultSettings: SettingsForm = {
 };
 
 const SETTINGS_REQUEST_TIMEOUT_MS = 12000;
+const SIGNATURE_IMAGE_MAX_SIZE = 900;
 
 function mapSettings(row: any): SettingsForm {
   return {
@@ -86,6 +91,131 @@ function withTimeout<T>(promise: PromiseLike<T>, label: string): Promise<T> {
       .then(resolve)
       .catch(reject)
       .finally(() => window.clearTimeout(timeoutId));
+  });
+}
+
+function colorDistance(r: number, g: number, b: number, color: [number, number, number]) {
+  return Math.sqrt(
+    ((r - color[0]) ** 2) +
+    ((g - color[1]) ** 2) +
+    ((b - color[2]) ** 2)
+  );
+}
+
+function getAverageColor(samples: number[][]): [number, number, number] {
+  const total = samples.reduce(
+    (sum, color) => [sum[0] + color[0], sum[1] + color[1], sum[2] + color[2]],
+    [0, 0, 0]
+  );
+
+  return [
+    Math.round(total[0] / samples.length),
+    Math.round(total[1] / samples.length),
+    Math.round(total[2] / samples.length),
+  ];
+}
+
+async function removeImageBackground(file: File): Promise<string> {
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Could not load image'));
+      img.src = imageUrl;
+    });
+
+    const scale = Math.min(1, SIGNATURE_IMAGE_MAX_SIZE / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not process image');
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const imageData = context.getImageData(0, 0, width, height);
+    const { data } = imageData;
+    const sampleCoordinates = [
+      [0, 0],
+      [width - 1, 0],
+      [0, height - 1],
+      [width - 1, height - 1],
+      [Math.floor(width / 2), 0],
+      [Math.floor(width / 2), height - 1],
+      [0, Math.floor(height / 2)],
+      [width - 1, Math.floor(height / 2)],
+    ];
+    const samples = sampleCoordinates.map(([x, y]) => {
+      const index = (y * width + x) * 4;
+      return [data[index], data[index + 1], data[index + 2]];
+    });
+    const backgroundColor = getAverageColor(samples);
+    const lightBackground = backgroundColor.every((channel) => channel > 210);
+    const transparentThreshold = lightBackground ? 74 : 48;
+    const fadeThreshold = transparentThreshold + 34;
+
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let index = 0; index < data.length; index += 4) {
+      const distance = colorDistance(data[index], data[index + 1], data[index + 2], backgroundColor);
+      const isNearWhite = lightBackground && data[index] > 225 && data[index + 1] > 225 && data[index + 2] > 225;
+
+      if (distance <= transparentThreshold || isNearWhite) {
+        data[index + 3] = 0;
+      } else if (distance <= fadeThreshold) {
+        data[index + 3] = Math.min(data[index + 3], Math.round(((distance - transparentThreshold) / (fadeThreshold - transparentThreshold)) * 255));
+      }
+
+      if (data[index + 3] > 18) {
+        const pixel = index / 4;
+        const x = pixel % width;
+        const y = Math.floor(pixel / width);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    context.putImageData(imageData, 0, 0);
+
+    if (maxX < minX || maxY < minY) {
+      return canvas.toDataURL('image/png');
+    }
+
+    const padding = 8;
+    const cropX = Math.max(0, minX - padding);
+    const cropY = Math.max(0, minY - padding);
+    const cropWidth = Math.min(width - cropX, maxX - cropX + padding + 1);
+    const cropHeight = Math.min(height - cropY, maxY - cropY + padding + 1);
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = cropWidth;
+    croppedCanvas.height = cropHeight;
+
+    const croppedContext = croppedCanvas.getContext('2d');
+    if (!croppedContext) throw new Error('Could not crop image');
+
+    croppedContext.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    return croppedCanvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
   });
 }
 
@@ -140,6 +270,8 @@ export function Settings() {
           state: profileResponse.data.company?.state || '',
           pin_code: profileResponse.data.company?.pin_code || '',
           company_logo: profileResponse.data.company?.company_logo || '',
+          esign_image: profileResponse.data.company?.esign_image || '',
+          stamp_image: profileResponse.data.company?.stamp_image || '',
         });
         setSettings(mapSettings(settingsResponse.data.settings));
         return;
@@ -148,7 +280,7 @@ export function Settings() {
       const [companyResponse, settingsResponse] = await Promise.all([
         supabase
           .from('companies')
-          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo')
+          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo, esign_image, stamp_image')
           .eq('id', user.company_id)
           .single(),
         supabase.rpc('get_company_settings', {
@@ -176,6 +308,8 @@ export function Settings() {
         bank_ifsc: companyResponse.data?.bank_ifsc || '',
         bank_branch: companyResponse.data?.bank_branch || '',
         company_logo: companyResponse.data?.company_logo || '',
+        esign_image: companyResponse.data?.esign_image || '',
+        stamp_image: companyResponse.data?.stamp_image || '',
       });
       setSettings(mapSettings(settingsResponse.data.settings));
     } catch (error) {
@@ -235,6 +369,8 @@ export function Settings() {
       bank_ifsc: company.bank_ifsc.trim().toUpperCase() || null,
       bank_branch: company.bank_branch.trim() || null,
       company_logo: company.company_logo || null,
+      esign_image: company.esign_image || null,
+      stamp_image: company.stamp_image || null,
     };
 
     setIsSaving(true);
@@ -245,7 +381,7 @@ export function Settings() {
           .from('companies')
           .update(nextCompany)
           .eq('id', user.company_id)
-          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo')
+          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo, esign_image, stamp_image')
           .single(),
         'Saving company settings'
       );
@@ -269,6 +405,8 @@ export function Settings() {
         bank_ifsc: data?.bank_ifsc || '',
         bank_branch: data?.bank_branch || '',
         company_logo: data?.company_logo || '',
+        esign_image: data?.esign_image || '',
+        stamp_image: data?.stamp_image || '',
       };
 
       setCompany(savedCompany);
@@ -409,21 +547,30 @@ function CompanySettings({
   isSaving: boolean;
   onSave: () => void;
 }) {
-  const handleLogoUpload = (file?: File) => {
+  const handleImageUpload = async (field: 'company_logo' | 'esign_image' | 'stamp_image', label: string, file?: File) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file for the company logo');
+      toast.error(`Please upload an image file for the ${label}`);
       return;
     }
     if (file.size > 1024 * 1024) {
-      toast.error('Company logo must be under 1 MB');
+      toast.error(`${label} must be under 1 MB`);
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => setCompany({ ...company, company_logo: String(reader.result || '') });
-    reader.onerror = () => toast.error('Could not read company logo');
-    reader.readAsDataURL(file);
+    try {
+      const imageData = field === 'company_logo'
+        ? await readFileAsDataUrl(file)
+        : await removeImageBackground(file);
+
+      setCompany({ ...company, [field]: imageData });
+
+      if (field !== 'company_logo') {
+        toast.success(`${label} background removed`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Could not process ${label}`);
+    }
   };
 
   return (
@@ -447,7 +594,7 @@ function CompanySettings({
                   <label className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded hover:bg-muted transition-colors cursor-pointer">
                     <Upload className="w-4 h-4" />
                     <span className="text-sm">Upload Logo</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleLogoUpload(event.target.files?.[0])} />
+                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageUpload('company_logo', 'company logo', event.target.files?.[0])} />
                   </label>
                   {company.company_logo && (
                     <button
@@ -496,6 +643,42 @@ function CompanySettings({
       </div>
 
       <div className="bg-white border border-border rounded-lg p-6">
+        <h3 className="font-semibold text-foreground mb-4">E-Sign & Stamp</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <ImageUploadField
+            title="Signature Image"
+            image={company.esign_image}
+            emptyLabel="SIGN"
+            canEdit={canEdit}
+            uploadLabel="Upload Signature"
+            onUpload={(file) => handleImageUpload('esign_image', 'signature image', file)}
+            onRemove={() => setCompany({ ...company, esign_image: '' })}
+          />
+          <ImageUploadField
+            title="Stamp Image"
+            image={company.stamp_image}
+            emptyLabel="STAMP"
+            canEdit={canEdit}
+            uploadLabel="Upload Stamp"
+            onUpload={(file) => handleImageUpload('stamp_image', 'stamp image', file)}
+            onRemove={() => setCompany({ ...company, stamp_image: '' })}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground mt-4">PNG, JPG, or SVG under 1 MB. These appear only inside the authorised signatory box on invoices.</p>
+        {canEdit && (
+          <div className="mt-6">
+            <button
+              onClick={onSave}
+              disabled={isSaving}
+              className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save E-Sign'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white border border-border rounded-lg p-6">
         <h3 className="font-semibold text-foreground mb-4">Bank Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SettingsInput label="Bank Name" value={company.bank_name} disabled={!canEdit} onChange={(bank_name) => setCompany({ ...company, bank_name })} />
@@ -512,6 +695,57 @@ function CompanySettings({
             >
               {isSaving ? 'Saving...' : 'Save Bank Details'}
             </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ImageUploadField({
+  title,
+  image,
+  emptyLabel,
+  canEdit,
+  uploadLabel,
+  onUpload,
+  onRemove,
+}: {
+  title: string;
+  image: string;
+  emptyLabel: string;
+  canEdit: boolean;
+  uploadLabel: string;
+  onUpload: (file?: File) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-foreground mb-2">{title}</label>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="w-32 h-20 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
+          {image ? (
+            <img src={image} alt={title} className="w-full h-full object-contain" />
+          ) : (
+            <span className="text-xs text-muted-foreground">{emptyLabel}</span>
+          )}
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-3">
+            <label className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded hover:bg-muted transition-colors cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span className="text-sm">{uploadLabel}</span>
+              <input type="file" accept="image/*" className="hidden" onChange={(event) => onUpload(event.target.files?.[0])} />
+            </label>
+            {image && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Remove
+              </button>
+            )}
           </div>
         )}
       </div>

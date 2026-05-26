@@ -63,6 +63,8 @@ create table public.companies (
   company_name text not null,
   gstin text,
   company_logo text,
+  esign_image text,
+  stamp_image text,
   pan text,
   phone text,
   email text,

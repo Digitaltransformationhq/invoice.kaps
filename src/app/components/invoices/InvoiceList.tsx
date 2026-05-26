@@ -41,6 +41,8 @@ export function InvoiceList() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -167,14 +169,23 @@ export function InvoiceList() {
   }, [user?.company_id]);
 
   const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = invoice.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         invoice.customer.toLowerCase().includes(searchQuery.toLowerCase());
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const matchesSearch = !normalizedSearch ||
+      invoice.id.toLowerCase().includes(normalizedSearch) ||
+      invoice.customer.toLowerCase().includes(normalizedSearch) ||
+      invoice.status.toLowerCase().includes(normalizedSearch) ||
+      invoice.customerDetails?.gstin?.toLowerCase().includes(normalizedSearch) ||
+      invoice.customerDetails?.phone?.toLowerCase().includes(normalizedSearch) ||
+      invoice.customerDetails?.email?.toLowerCase().includes(normalizedSearch);
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
+  const visibleSelectedInvoices = filteredInvoices.filter((invoice) => selectedInvoices.includes(invoice.id));
+
   const stats = {
     all: invoices.length,
+    draft: invoices.filter(i => i.status === 'draft').length,
     paid: invoices.filter(i => i.status === 'paid').length,
     pending: invoices.filter(i => i.status === 'pending').length,
     overdue: invoices.filter(i => i.status === 'overdue').length,
@@ -257,6 +268,7 @@ export function InvoiceList() {
     const invoice = invoices.find((item) => item.id === invoiceToDelete);
     if (!invoice) return;
 
+    setIsDeleting(true);
     const { error } = await deleteForUser(user, 'invoices', 'invoices', () =>
       supabase
         .from('invoices')
@@ -268,13 +280,59 @@ export function InvoiceList() {
 
     if (error) {
       toast.error(`Could not delete invoice: ${error.message}`);
+      setIsDeleting(false);
       return;
     }
 
     setInvoices((currentInvoices) => currentInvoices.filter((item) => item.id !== invoiceToDelete));
+    setSelectedInvoices((currentSelected) => currentSelected.filter((id) => id !== invoiceToDelete));
     toast.success('Invoice deleted');
     setShowDeleteConfirm(false);
     setInvoiceToDelete(null);
+    setIsDeleting(false);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedInvoices.length === 0) return;
+
+    const invoicesToDelete = invoices.filter((invoice) => selectedInvoices.includes(invoice.id));
+    if (invoicesToDelete.length === 0) return;
+
+    setIsDeleting(true);
+
+    try {
+      if (user?.role === 'auditor') {
+        for (const invoice of invoicesToDelete) {
+          const { error } = await deleteForUser(user, 'invoices', 'invoices', () =>
+            supabase
+              .from('invoices')
+              .delete()
+              .eq('id', invoice.dbId),
+            { id: invoice.dbId },
+            invoice.id
+          );
+
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabase
+          .from('invoices')
+          .delete()
+          .in('id', invoicesToDelete.map((invoice) => invoice.dbId));
+
+        if (error) throw error;
+      }
+
+      const deletedInvoiceIds = new Set(invoicesToDelete.map((invoice) => invoice.id));
+      setInvoices((currentInvoices) => currentInvoices.filter((invoice) => !deletedInvoiceIds.has(invoice.id)));
+      setSelectedInvoices([]);
+      setShowBulkDeleteConfirm(false);
+      toast.success(`${invoicesToDelete.length} invoice${invoicesToDelete.length > 1 ? 's' : ''} deleted`);
+    } catch (error) {
+      toast.error(error instanceof Error ? `Could not delete invoices: ${error.message}` : 'Could not delete invoices');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleMarkPaid = async (invoice: InvoiceRow) => {
@@ -302,12 +360,27 @@ export function InvoiceList() {
   };
 
   const handleExport = async () => {
-    logAuditorAction(user, 'invoices', 'invoices', 'export_invoices', { count: filteredInvoices.length });
+    if (selectedInvoices.length === 0) {
+      toast.error('Select the invoice records you want to export');
+      return;
+    }
+
+    const invoicesToExport = invoices.filter((invoice) => selectedInvoices.includes(invoice.id));
+
+    const exportStats = {
+      all: invoicesToExport.length,
+      draft: invoicesToExport.filter(i => i.status === 'draft').length,
+      paid: invoicesToExport.filter(i => i.status === 'paid').length,
+      pending: invoicesToExport.filter(i => i.status === 'pending').length,
+      overdue: invoicesToExport.filter(i => i.status === 'overdue').length,
+    };
+
+    logAuditorAction(user, 'invoices', 'invoices', 'export_invoices', { count: invoicesToExport.length });
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Invoices');
+    const worksheet = workbook.addWorksheet('Invoice Summary');
 
     // Add title
-    worksheet.mergeCells('A1:F1');
+    worksheet.mergeCells('A1:AH1');
     const titleCell = worksheet.getCell('A1');
     titleCell.value = 'Tax Invoices Report';
     titleCell.font = { size: 16, bold: true, color: { argb: 'FF1F4E78' } };
@@ -315,14 +388,14 @@ export function InvoiceList() {
     worksheet.getRow(1).height = 30;
 
     // Add summary stats
-    const totalAmount = filteredInvoices.reduce((sum, inv) => sum + inv.amount, 0);
-    const paidAmount = filteredInvoices.filter(i => i.status === 'paid').reduce((sum, inv) => sum + inv.amount, 0);
-    const pendingAmount = filteredInvoices.filter(i => i.status !== 'paid').reduce((sum, inv) => sum + inv.amount, 0);
+    const totalAmount = invoicesToExport.reduce((sum, inv) => sum + inv.amount, 0);
+    const paidAmount = invoicesToExport.filter(i => i.status === 'paid').reduce((sum, inv) => sum + inv.amount, 0);
+    const pendingAmount = invoicesToExport.filter(i => i.status !== 'paid').reduce((sum, inv) => sum + inv.amount, 0);
 
     worksheet.mergeCells('A2:B2');
     worksheet.getCell('A2').value = 'Total Invoices:';
     worksheet.getCell('A2').font = { bold: true };
-    worksheet.getCell('C2').value = stats.all;
+    worksheet.getCell('C2').value = exportStats.all;
 
     worksheet.getCell('D2').value = 'Total Amount:';
     worksheet.getCell('D2').font = { bold: true };
@@ -330,7 +403,42 @@ export function InvoiceList() {
     worksheet.getCell('E2').font = { bold: true, color: { argb: 'FF1F4E78' } };
 
     // Add headers with light green background
-    const headers = ['Invoice ID', 'Customer', 'Date', 'Due Date', 'Amount', 'Status'];
+    const headers = [
+      'Invoice ID',
+      'Status',
+      'Invoice Date',
+      'Due Date',
+      'Customer Name',
+      'Customer Type',
+      'Customer GSTIN',
+      'Customer Contact',
+      'Customer Email',
+      'Customer Phone',
+      'Customer City',
+      'Customer State',
+      'Customer Address',
+      'Bill Type',
+      'Place of Supply',
+      'Reverse Charge',
+      'PO Number',
+      'PO Date',
+      'Vehicle No.',
+      'Transport Mode',
+      'Remarks',
+      'Item Type',
+      'Item Name',
+      'Item Description',
+      'HSN/SAC',
+      'Quantity',
+      'Unit',
+      'Rate',
+      'Discount %',
+      'Taxable Amount',
+      'GST %',
+      'GST Amount',
+      'Line Total',
+      'Invoice Total',
+    ];
     const headerRow = worksheet.addRow(headers);
     headerRow.eachCell((cell) => {
       cell.fill = {
@@ -349,7 +457,7 @@ export function InvoiceList() {
     });
 
     // Add data rows
-    filteredInvoices.forEach((invoice) => {
+    invoicesToExport.forEach((invoice) => {
       const row = worksheet.addRow([
         invoice.id,
         invoice.customer,
@@ -389,6 +497,122 @@ export function InvoiceList() {
       column.width = Math.min(maxLength + 2, 30);
     });
 
+    const detailSheet = workbook.addWorksheet('Invoice Details');
+    detailSheet.columns = [
+      { header: 'Invoice ID', key: 'invoiceId', width: 18 },
+      { header: 'Status', key: 'status', width: 14 },
+      { header: 'Invoice Date', key: 'invoiceDate', width: 16 },
+      { header: 'Due Date', key: 'dueDate', width: 16 },
+      { header: 'Customer Name', key: 'customerName', width: 28 },
+      { header: 'Customer Type', key: 'customerType', width: 16 },
+      { header: 'Customer GSTIN', key: 'customerGstin', width: 20 },
+      { header: 'Contact Name', key: 'contactName', width: 22 },
+      { header: 'Email', key: 'email', width: 28 },
+      { header: 'Phone', key: 'phone', width: 16 },
+      { header: 'City', key: 'city', width: 16 },
+      { header: 'State', key: 'state', width: 18 },
+      { header: 'Address', key: 'address', width: 36 },
+      { header: 'Bill Type', key: 'billType', width: 18 },
+      { header: 'Place of Supply', key: 'placeOfSupply', width: 20 },
+      { header: 'Reverse Charge', key: 'reverseCharge', width: 16 },
+      { header: 'PO Number', key: 'poNumber', width: 16 },
+      { header: 'PO Date', key: 'poDate', width: 16 },
+      { header: 'Vehicle No.', key: 'vehicleNo', width: 16 },
+      { header: 'Transport Mode', key: 'transportMode', width: 18 },
+      { header: 'Remarks', key: 'remarks', width: 34 },
+      { header: 'Item Type', key: 'itemType', width: 14 },
+      { header: 'Item Name', key: 'itemName', width: 28 },
+      { header: 'Item Description', key: 'itemDescription', width: 36 },
+      { header: 'HSN/SAC', key: 'hsn', width: 14 },
+      { header: 'Quantity', key: 'quantity', width: 12 },
+      { header: 'Unit', key: 'unit', width: 10 },
+      { header: 'Rate', key: 'rate', width: 14 },
+      { header: 'Discount %', key: 'discount', width: 12 },
+      { header: 'Taxable Amount', key: 'taxableAmount', width: 18 },
+      { header: 'GST %', key: 'gst', width: 10 },
+      { header: 'GST Amount', key: 'gstAmount', width: 16 },
+      { header: 'Line Total', key: 'lineTotal', width: 16 },
+      { header: 'Invoice Total', key: 'invoiceTotal', width: 18 },
+    ];
+
+    detailSheet.getRow(1).eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF90EE90' } };
+      cell.font = { bold: true, color: { argb: 'FF000000' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    const getLineCalculations = (item: any) => {
+      const grossAmount = Number(item.qty || 0) * Number(item.rate || 0);
+      const discountAmount = grossAmount * (Number(item.discount || 0) / 100);
+      const taxableAmount = grossAmount - discountAmount;
+      const gstAmount = taxableAmount * (Number(item.gst || 0) / 100);
+      const lineTotal = Number(item.amount || taxableAmount + gstAmount);
+
+      return { taxableAmount, gstAmount, lineTotal };
+    };
+
+    invoicesToExport.forEach((invoice) => {
+      const items = invoice.lineItems.length > 0
+        ? invoice.lineItems
+        : [{ type: '', item: '', description: '', hsn: '', qty: '', unit: '', rate: '', discount: '', gst: '', amount: '' }];
+
+      items.forEach((item: any) => {
+        const { taxableAmount, gstAmount, lineTotal } = getLineCalculations(item);
+        const row = detailSheet.addRow({
+          invoiceId: invoice.id,
+          status: invoice.status.toUpperCase(),
+          invoiceDate: invoice.date,
+          dueDate: invoice.dueDate,
+          customerName: invoice.customer,
+          customerType: invoice.customerType || '',
+          customerGstin: invoice.customerDetails?.gstin || '',
+          contactName: invoice.customerDetails?.contactName || '',
+          email: invoice.customerDetails?.email || '',
+          phone: invoice.customerDetails?.phone || '',
+          city: invoice.customerDetails?.city || '',
+          state: invoice.customerDetails?.state || '',
+          address: invoice.customerDetails?.address || '',
+          billType: invoice.billType || '',
+          placeOfSupply: invoice.placeOfSupply || '',
+          reverseCharge: invoice.reverseCharge ? 'Yes' : 'No',
+          poNumber: invoice.poNumber || '',
+          poDate: invoice.poDate ? formatDate(invoice.poDate) : '',
+          vehicleNo: invoice.vehicleNo || '',
+          transportMode: invoice.transportMode || '',
+          remarks: invoice.remarks || '',
+          itemType: item.type || '',
+          itemName: item.item || '',
+          itemDescription: item.description || '',
+          hsn: item.hsn || '',
+          quantity: item.qty || '',
+          unit: item.unit || '',
+          rate: item.rate || '',
+          discount: item.discount || '',
+          taxableAmount,
+          gst: item.gst || '',
+          gstAmount,
+          lineTotal,
+          invoiceTotal: invoice.amount,
+        });
+
+        [28, 30, 32, 33, 34].forEach((cellNumber) => {
+          row.getCell(cellNumber).numFmt = '₹#,##0.00';
+        });
+        row.getCell(34).font = { bold: true };
+      });
+    });
+
+    detailSheet.autoFilter = {
+      from: 'A1',
+      to: 'AH1',
+    };
+
     // Add a chart sheet with chart-ready data
     const chartSheet = workbook.addWorksheet('Charts');
 
@@ -414,13 +638,14 @@ export function InvoiceList() {
     chartSheet.getRow(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF90EE90' } };
 
     const statusData = [
-      ['Paid', stats.paid, paidAmount],
-      ['Pending', stats.pending, filteredInvoices.filter(i => i.status === 'pending').reduce((sum, inv) => sum + inv.amount, 0)],
-      ['Overdue', stats.overdue, filteredInvoices.filter(i => i.status === 'overdue').reduce((sum, inv) => sum + inv.amount, 0)]
+      ['Paid', exportStats.paid, paidAmount],
+      ['Pending', exportStats.pending, invoicesToExport.filter(i => i.status === 'pending').reduce((sum, inv) => sum + inv.amount, 0)],
+      ['Overdue', exportStats.overdue, invoicesToExport.filter(i => i.status === 'overdue').reduce((sum, inv) => sum + inv.amount, 0)],
+      ['Draft', exportStats.draft, invoicesToExport.filter(i => i.status === 'draft').reduce((sum, inv) => sum + inv.amount, 0)]
     ];
 
     const maxAmount = Math.max(...statusData.map(d => d[2] as number));
-    const totalCount = statusData.reduce((sum, d) => sum + (d[1] as number), 0);
+    const totalCount = Math.max(1, statusData.reduce((sum, d) => sum + (d[1] as number), 0));
 
     statusData.forEach((row, index) => {
       const dataRow = chartSheet.addRow(row);
@@ -432,7 +657,7 @@ export function InvoiceList() {
       dataRow.getCell(4).numFmt = '0.0"%"';
 
       // Add visual bar for amount
-      const amountPercent = ((row[2] as number) / maxAmount) * 100;
+      const amountPercent = maxAmount > 0 ? ((row[2] as number) / maxAmount) * 100 : 0;
       const visualCell = dataRow.getCell(5);
       visualCell.value = amountPercent;
       visualCell.numFmt = '0"%"';
@@ -443,18 +668,20 @@ export function InvoiceList() {
         visualCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
       } else if (row[0] === 'Pending') {
         visualCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } };
-      } else {
+      } else if (row[0] === 'Overdue') {
         visualCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
+      } else {
+        visualCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E6E6' } };
       }
     });
 
-    chartSheet.getCell('A9').value = '💡 For Count Chart: Select A5:B8 and insert a Doughnut Chart';
-    chartSheet.getCell('A9').font = { italic: true, color: { argb: 'FF0066CC' } };
-    chartSheet.mergeCells('A9:E9');
-
-    chartSheet.getCell('A10').value = '💡 For Amount Chart: Select A5:A8 and C5:C8 (hold Ctrl), then insert a Bar Chart';
+    chartSheet.getCell('A10').value = '💡 For Count Chart: Select A5:B9 and insert a Doughnut Chart';
     chartSheet.getCell('A10').font = { italic: true, color: { argb: 'FF0066CC' } };
     chartSheet.mergeCells('A10:E10');
+
+    chartSheet.getCell('A11').value = '💡 For Amount Chart: Select A5:A9 and C5:C9 (hold Ctrl), then insert a Bar Chart';
+    chartSheet.getCell('A11').font = { italic: true, color: { argb: 'FF0066CC' } };
+    chartSheet.mergeCells('A11:E11');
 
     chartSheet.columns = [
       { width: 20 },
@@ -477,29 +704,33 @@ export function InvoiceList() {
     link.click();
     document.body.removeChild(link);
 
-    toast.success(`Exported ${filteredInvoices.length} invoices`, {
+    toast.success(`Exported ${invoicesToExport.length} invoices`, {
       description: 'Open the Charts sheet in Excel and insert charts from the formatted data'
     });
   };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedInvoices(filteredInvoices.map(inv => inv.id));
+      setSelectedInvoices((currentSelected) => Array.from(new Set([
+        ...currentSelected,
+        ...filteredInvoices.map((invoice) => invoice.id),
+      ])));
     } else {
-      setSelectedInvoices([]);
+      const filteredInvoiceIds = new Set(filteredInvoices.map((invoice) => invoice.id));
+      setSelectedInvoices((currentSelected) => currentSelected.filter((id) => !filteredInvoiceIds.has(id)));
     }
   };
 
   const handleSelectInvoice = (invoiceId: string, checked: boolean) => {
     if (checked) {
-      setSelectedInvoices([...selectedInvoices, invoiceId]);
+      setSelectedInvoices((currentSelected) => Array.from(new Set([...currentSelected, invoiceId])));
     } else {
-      setSelectedInvoices(selectedInvoices.filter(id => id !== invoiceId));
+      setSelectedInvoices((currentSelected) => currentSelected.filter(id => id !== invoiceId));
     }
   };
 
-  const isAllSelected = filteredInvoices.length > 0 && selectedInvoices.length === filteredInvoices.length;
-  const isSomeSelected = selectedInvoices.length > 0 && selectedInvoices.length < filteredInvoices.length;
+  const isAllSelected = filteredInvoices.length > 0 && visibleSelectedInvoices.length === filteredInvoices.length;
+  const isSomeSelected = visibleSelectedInvoices.length > 0 && visibleSelectedInvoices.length < filteredInvoices.length;
 
   return (
     <div className="space-y-6">
@@ -552,22 +783,52 @@ export function InvoiceList() {
       {/* Table Card */}
       <div className="bg-white border border-border rounded-lg">
         {/* Toolbar */}
-        <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4">
+        <div className="p-4 border-b border-border flex flex-col xl:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search by invoice number or customer..."
+              placeholder="Search invoice, customer, GSTIN, phone, email, status..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <div className="flex gap-2">
-            <button className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors">
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex items-center gap-2 px-3 py-2 border border-border bg-white rounded">
               <Filter className="w-4 h-4" />
-              <span className="text-sm">Filter</span>
-            </button>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="bg-transparent text-sm focus:outline-none"
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+              </select>
+            </label>
+            {(statusFilter !== 'all' || searchQuery) && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+              >
+                <span className="text-sm">Clear Filters</span>
+              </button>
+            )}
+            {selectedInvoices.length > 0 && (
+              <button
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-destructive/30 text-destructive bg-white rounded hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-sm">Delete Selected ({selectedInvoices.length})</span>
+              </button>
+            )}
             <button
               onClick={handleExport}
               className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
@@ -845,9 +1106,43 @@ export function InvoiceList() {
               </button>
               <button
                 onClick={confirmDelete}
+                disabled={isDeleting}
                 className="px-4 py-2 bg-destructive text-white rounded hover:bg-destructive/90 transition-colors"
               >
-                Delete Invoice
+                {isDeleting ? 'Deleting...' : 'Delete Invoice'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
+                <XCircle className="w-6 h-6 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Delete Selected Invoices</h3>
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete {selectedInvoices.length} selected invoice{selectedInvoices.length > 1 ? 's' : ''}? This action cannot be undone.
+              </p>
+            </div>
+            <div className="p-6 border-t border-border flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 border border-border rounded hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-destructive text-white rounded hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Selected'}
               </button>
             </div>
           </div>
@@ -896,10 +1191,12 @@ function StatusBadge({ status }: { status: string }) {
     paid: 'bg-success/10 text-success',
     pending: 'bg-warning/10 text-warning',
     overdue: 'bg-destructive/10 text-destructive',
+    draft: 'bg-muted text-muted-foreground',
   };
+  const badgeStyle = styles[status as keyof typeof styles] || 'bg-muted text-muted-foreground';
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${styles[status as keyof typeof styles]}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${badgeStyle}`}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );

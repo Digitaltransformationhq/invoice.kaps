@@ -84,6 +84,8 @@ export function InvoicePreview({
     bankIfsc: '',
     bankBranch: '',
     logo: user?.company_logo || '',
+    esignImage: '',
+    stampImage: '',
   });
 
   useEffect(() => {
@@ -92,7 +94,7 @@ export function InvoicePreview({
     const loadCompanyDetails = async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo')
+        .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo, esign_image, stamp_image')
         .eq('id', user.company_id)
         .single();
 
@@ -112,6 +114,8 @@ export function InvoicePreview({
           bankIfsc: data?.bank_ifsc || '',
           bankBranch: data?.bank_branch || '',
           logo: data?.company_logo || user.company_logo || '',
+          esignImage: data?.esign_image || '',
+          stampImage: data?.stamp_image || '',
         });
       }
     };
@@ -169,6 +173,8 @@ export function InvoicePreview({
   ].filter(Boolean);
   const companyPan = companyDetails.pan || (companyGstin.length >= 12 ? companyGstin.slice(2, 12) : '');
   const companyLogo = companyDetails.logo || user?.company_logo || '';
+  const companyEsign = companyDetails.esignImage || '';
+  const companyStamp = companyDetails.stampImage || '';
   const buyerName = customer?.companyName || 'Customer not selected';
   const buyerAddress = customer?.address || '-';
   const buyerCity = customer?.city || '-';
@@ -558,9 +564,25 @@ export function InvoicePreview({
                   We declare that this invoice shows the actual price of the goods/services described
                   and that all particulars are true and correct.
                 </p>
-                <div className="mt-8 text-right">
-                  <div className="mb-8">For {companyName}</div>
-                  <div className="border-t border-foreground inline-block px-8 pt-1">Authorised Signatory</div>
+                <div className="mt-6 text-right">
+                  <div className="relative ml-auto h-24 w-full max-w-[300px] overflow-hidden">
+                    <div className="relative z-10 pr-1">For {companyName}</div>
+                    {companyStamp && (
+                      <img
+                        src={companyStamp}
+                        alt={`${companyName} stamp`}
+                        className="absolute left-0 -top-2 z-20 max-h-24 max-w-[180px] object-contain opacity-90"
+                      />
+                    )}
+                    {companyEsign && (
+                      <img
+                        src={companyEsign}
+                        alt={`${companyName} signature`}
+                        className="absolute right-4 top-1 z-20 max-h-20 max-w-[230px] object-contain"
+                      />
+                    )}
+                    <div className="absolute bottom-0 right-0 z-10 border-t border-foreground inline-block min-w-[184px] px-8 pt-1 text-center">Authorised Signatory</div>
+                  </div>
                 </div>
               </div>
             </div>
