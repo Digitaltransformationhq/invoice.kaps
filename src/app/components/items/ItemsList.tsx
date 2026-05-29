@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Search, Filter, Edit, Trash2, MoreVertical, Package, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
@@ -18,6 +18,9 @@ interface Item {
   stock?: number;
 }
 
+const GST_RATES = [0, 5, 12, 18, 28];
+type StockFilter = 'all' | 'in-stock' | 'out-of-stock';
+
 export function ItemsList() {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
@@ -26,6 +29,15 @@ export function ItemsList() {
   const [filterType, setFilterType] = useState<'all' | 'product' | 'service'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [gstFilter, setGstFilter] = useState<number[]>([]);
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all');
+  const [unitFilter, setUnitFilter] = useState<string[]>([]);
+  const [minPriceFilter, setMinPriceFilter] = useState('');
+  const [maxPriceFilter, setMaxPriceFilter] = useState('');
+  const [filterPos, setFilterPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const filterRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const mapItemFromDatabase = (item: any): Item => ({
     id: item.id,
@@ -84,12 +96,69 @@ export function ItemsList() {
     loadItems();
   }, [user?.company_id]);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      const inTrigger = filterRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+      if (!inTrigger && !inDropdown) {
+        setShowFilterPanel(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!showFilterPanel) return;
+    const updatePosition = () => {
+      if (filterRef.current) {
+        const rect = filterRef.current.getBoundingClientRect();
+        setFilterPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+      }
+    };
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [showFilterPanel]);
+
+  const availableUnits = Array.from(new Set(items.map(i => i.unit).filter(Boolean))).sort();
+  const activeFilterCount =
+    (gstFilter.length > 0 ? 1 : 0) +
+    (stockFilter !== 'all' ? 1 : 0) +
+    (unitFilter.length > 0 ? 1 : 0) +
+    (minPriceFilter ? 1 : 0) +
+    (maxPriceFilter ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setGstFilter([]);
+    setStockFilter('all');
+    setUnitFilter([]);
+    setMinPriceFilter('');
+    setMaxPriceFilter('');
+  };
+
   const filteredItems = items.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.hsn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = item.name.toLowerCase().includes(q) ||
+                         item.hsn.toLowerCase().includes(q) ||
+                         item.description.toLowerCase().includes(q);
     const matchesType = filterType === 'all' || item.type === filterType;
-    return matchesSearch && matchesType;
+    const matchesGst = gstFilter.length === 0 || gstFilter.includes(item.gst);
+    const matchesStock =
+      stockFilter === 'all' ||
+      (stockFilter === 'in-stock' && (item.stock ?? 0) > 0) ||
+      (stockFilter === 'out-of-stock' && (item.stock ?? 0) === 0);
+    const matchesUnit = unitFilter.length === 0 || unitFilter.includes(item.unit);
+    const min = minPriceFilter ? parseFloat(minPriceFilter) : null;
+    const max = maxPriceFilter ? parseFloat(maxPriceFilter) : null;
+    const matchesPrice =
+      (min === null || Number.isNaN(min) || item.sellingPrice >= min) &&
+      (max === null || Number.isNaN(max) || item.sellingPrice <= max);
+    return matchesSearch && matchesType && matchesGst && matchesStock && matchesUnit && matchesPrice;
   });
 
   const stats = {
@@ -226,9 +295,9 @@ export function ItemsList() {
       </div>
 
       {/* Table Card */}
-      <div className="bg-white border border-border rounded-lg">
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
         {/* Toolbar */}
-        <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4">
+        <div className="p-4 border-b border-violet-100 dark:border-violet-400/10 flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -239,29 +308,196 @@ export function ItemsList() {
               className="w-full pl-10 pr-4 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <button className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors">
-            <Filter className="w-4 h-4" />
-            <span className="text-sm">Filter</span>
-          </button>
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => {
+                if (!showFilterPanel && filterRef.current) {
+                  const rect = filterRef.current.getBoundingClientRect();
+                  setFilterPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+                }
+                setShowFilterPanel((open) => !open);
+              }}
+              className={`inline-flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                showFilterPanel || activeFilterCount > 0
+                  ? 'border-violet-500 dark:border-violet-400 bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-200'
+                  : 'border-violet-200 dark:border-violet-400/30 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              <span>Filter</span>
+              {activeFilterCount > 0 && (
+                <span className="ml-0.5 h-5 min-w-[20px] px-1.5 inline-flex items-center justify-center rounded-full bg-violet-500 text-white text-[10px] font-bold tabular-nums">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {showFilterPanel && (
+              <div
+                ref={dropdownRef}
+                className="fixed w-[340px] bg-card border border-violet-200 dark:border-violet-400/30 rounded-xl shadow-[0_12px_40px_-8px_rgba(139,92,246,0.25)] z-50 overflow-hidden"
+                style={{ top: filterPos.top, right: filterPos.right }}
+              >
+                <div className="px-4 py-3 border-b border-violet-100 dark:border-violet-400/15 flex items-center justify-between">
+                  <h4 className="text-[13px] font-semibold text-foreground">Filters</h4>
+                  {activeFilterCount > 0 ? (
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-[11.5px] font-medium text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200"
+                    >
+                      Clear all
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowFilterPanel(false)}
+                      className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10"
+                      aria-label="Close filters"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-4 space-y-5 max-h-[60vh] overflow-y-auto kaps-modal-scroll">
+                  {/* GST Rate */}
+                  <div>
+                    <h5 className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300 mb-2">GST Rate</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {GST_RATES.map((rate) => {
+                        const selected = gstFilter.includes(rate);
+                        return (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={() =>
+                              setGstFilter(selected ? gstFilter.filter((r) => r !== rate) : [...gstFilter, rate])
+                            }
+                            className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
+                              selected
+                                ? 'bg-violet-500 text-white border-violet-500'
+                                : 'bg-card text-foreground border-violet-200 dark:border-violet-400/25 hover:bg-violet-50 dark:hover:bg-violet-500/10'
+                            }`}
+                          >
+                            {rate}%
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Stock Status */}
+                  <div>
+                    <h5 className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300 mb-2">Stock</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {([
+                        { value: 'all', label: 'All' },
+                        { value: 'in-stock', label: 'In stock' },
+                        { value: 'out-of-stock', label: 'Out of stock' },
+                      ] as { value: StockFilter; label: string }[]).map((opt) => {
+                        const selected = stockFilter === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setStockFilter(opt.value)}
+                            className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
+                              selected
+                                ? 'bg-violet-500 text-white border-violet-500'
+                                : 'bg-card text-foreground border-violet-200 dark:border-violet-400/25 hover:bg-violet-50 dark:hover:bg-violet-500/10'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Unit */}
+                  {availableUnits.length > 0 && (
+                    <div>
+                      <h5 className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300 mb-2">Unit</h5>
+                      <div className="flex flex-wrap gap-1.5">
+                        {availableUnits.map((unit) => {
+                          const selected = unitFilter.includes(unit);
+                          return (
+                            <button
+                              key={unit}
+                              type="button"
+                              onClick={() =>
+                                setUnitFilter(selected ? unitFilter.filter((u) => u !== unit) : [...unitFilter, unit])
+                              }
+                              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
+                                selected
+                                  ? 'bg-violet-500 text-white border-violet-500'
+                                  : 'bg-card text-foreground border-violet-200 dark:border-violet-400/25 hover:bg-violet-50 dark:hover:bg-violet-500/10'
+                              }`}
+                            >
+                              {unit}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selling Price */}
+                  <div>
+                    <h5 className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300 mb-2">Selling Price (₹)</h5>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="Min"
+                        value={minPriceFilter}
+                        onChange={(e) => setMinPriceFilter(e.target.value)}
+                        className="w-full px-3 h-9 border border-violet-200 dark:border-violet-400/30 bg-input-background rounded-lg text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="Max"
+                        value={maxPriceFilter}
+                        onChange={(e) => setMaxPriceFilter(e.target.value)}
+                        className="w-full px-3 h-9 border border-violet-200 dark:border-violet-400/30 bg-input-background rounded-lg text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-4 py-3 border-t border-violet-100 dark:border-violet-400/15 bg-violet-50/40 dark:bg-violet-500/[0.04] flex items-center justify-between">
+                  <span className="text-[11.5px] text-muted-foreground">
+                    {filteredItems.length} of {items.length} {items.length === 1 ? 'item' : 'items'}
+                  </span>
+                  <button
+                    onClick={() => setShowFilterPanel(false)}
+                    className="h-8 px-4 rounded-full text-[12px] font-semibold text-white bg-violet-500 hover:bg-violet-400 transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
+            <thead className="bg-violet-100 dark:bg-violet-500/15">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Item Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">HSN/SAC</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Unit</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Selling Price</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Purchase Price</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground">GST%</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Stock</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Item Name</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">HSN/SAC</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Unit</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Selling Price</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Purchase Price</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">GST%</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Stock</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
               {isLoading && (
                 <tr>
                   <td colSpan={9} className="px-6 py-8 text-center text-sm text-muted-foreground">
@@ -270,7 +506,7 @@ export function ItemsList() {
                 </tr>
               )}
               {!isLoading && filteredItems.map((item) => (
-                <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                <tr key={item.id} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded flex items-center justify-center flex-shrink-0 ${
@@ -297,22 +533,22 @@ export function ItemsList() {
                   </td>
                   <td className="px-6 py-4 text-sm font-mono text-muted-foreground">{item.hsn}</td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">{item.unit}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-foreground text-right">
+                  <td className="px-6 py-4 text-sm font-medium text-foreground text-left tabular-nums">
                     ₹{item.sellingPrice.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground text-right">
+                  <td className="px-6 py-4 text-sm text-muted-foreground text-left tabular-nums">
                     ₹{item.purchasePrice.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4 text-left">
                     <span className="inline-flex items-center px-2.5 py-1 bg-muted rounded text-xs font-medium text-foreground">
                       {item.gst}%
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground text-right">
+                  <td className="px-6 py-4 text-sm text-muted-foreground text-left tabular-nums">
                     {item.stock !== undefined ? item.stock : '-'}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => handleEdit(item)}
                         className="p-1.5 hover:bg-muted rounded transition-colors"
@@ -379,12 +615,14 @@ function StatCard({
   return (
     <button
       onClick={onClick}
-      className={`bg-white border-2 rounded-lg p-6 text-left transition-all hover:shadow-md ${
-        active ? 'border-accent' : 'border-border'
+      className={`bg-card border rounded-xl p-5 text-left transition-all shadow-[0_1px_2px_rgba(139,92,246,0.08)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] ${
+        active
+          ? 'border-violet-500 dark:border-violet-400 ring-2 ring-violet-300/40 dark:ring-violet-400/25'
+          : 'border-violet-300 dark:border-violet-400/30 hover:border-violet-400 dark:hover:border-violet-400/50'
       }`}
     >
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className={`text-4xl font-bold ${color ? colorClasses[color] : 'text-foreground'}`}>
+      <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{label}</div>
+      <div className={`text-[28px] sm:text-[32px] font-semibold tracking-tight tabular-nums ${color ? colorClasses[color] : 'text-foreground'}`}>
         {value}
       </div>
     </button>
@@ -425,7 +663,7 @@ function ItemModal({
       <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">
+          <h2 className="text-lg font-semibold text-violet-600 dark:text-violet-300">
             {item ? 'Edit Item' : 'Add New Item'}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded transition-colors">
@@ -438,7 +676,7 @@ function ItemModal({
           <div className="space-y-4">
             {/* Type Selection */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                 Item Type
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -471,7 +709,7 @@ function ItemModal({
 
             {/* Item Name */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                 Item Name *
               </label>
               <input
@@ -480,13 +718,13 @@ function ItemModal({
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Enter item name"
-                className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                 Description
               </label>
               <textarea
@@ -494,14 +732,14 @@ function ItemModal({
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Brief description of the item"
-                className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
             </div>
 
             {/* HSN/SAC Code & Unit */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                   HSN/SAC Code *
                 </label>
                 <input
@@ -510,17 +748,17 @@ function ItemModal({
                   value={formData.hsn}
                   onChange={(e) => setFormData({ ...formData, hsn: e.target.value })}
                   placeholder="Enter HSN/SAC code"
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                   Unit *
                 </label>
                 <select
                   value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option>Nos</option>
                   <option>JOB</option>
@@ -541,7 +779,7 @@ function ItemModal({
             <div className="grid grid-cols-2 gap-4">
               {formData.type === 'product' && (
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                     Opening Stock
                   </label>
                   <input
@@ -549,7 +787,7 @@ function ItemModal({
                     min="0"
                     value={formData.stock || 0}
                     onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               )}
@@ -577,3 +815,4 @@ function ItemModal({
     </div>
   );
 }
+

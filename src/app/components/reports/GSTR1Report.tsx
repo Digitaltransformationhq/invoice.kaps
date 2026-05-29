@@ -1,416 +1,678 @@
-import { ArrowLeft, Download, FileSpreadsheet, CheckCircle, FileText } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, FileSpreadsheet, CheckCircle, FileText, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useAuth } from '../../../contexts/AuthContext';
+import { supabase } from '../../../lib/supabase';
+import { selectForUser } from '../../../lib/auditorData';
 
 interface GSTR1ReportProps {
   onBack: () => void;
   dateRange: { from: string; to: string };
 }
 
-export function GSTR1Report({ onBack, dateRange }: GSTR1ReportProps) {
-  // CSV Download Helper Functions
-  const downloadCSV = (data: any[], filename: string, headers: string[]) => {
-    const csvContent = [
-      headers.join(','),
-      ...data.map(row => headers.map(header => {
-        const value = row[header] ?? '';
-        // Escape quotes and wrap in quotes if contains comma
-        const stringValue = String(value);
-        return stringValue.includes(',') ? `"${stringValue.replace(/"/g, '""')}"` : stringValue;
-      }).join(','))
-    ].join('\n');
+interface B2BRow {
+  gstin: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  invoiceValue: number;
+  taxableValue: number;
+  rate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+}
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+interface B2CLRow {
+  invoiceNo: string;
+  invoiceDate: string;
+  state: string;
+  invoiceValue: number;
+  taxableValue: number;
+  rate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+}
+
+interface HSNRow {
+  hsnCode: string;
+  description: string;
+  uqc: string;
+  totalQuantity: number;
+  taxableValue: number;
+  rate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+}
+
+interface GSTR1Summary {
+  totalInvoices: number;
+  totalTaxableValue: number;
+  totalCGST: number;
+  totalSGST: number;
+  totalIGST: number;
+  totalTax: number;
+  totalInvoiceValue: number;
+}
+
+const formatDate = (value?: string) => {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const formatRupee = (value: number) =>
+  value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const derivePeriodLabel = (range: { from: string; to: string }) => {
+  if (!range.from || !range.to) return '—';
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return `${range.from} → ${range.to}`;
+  }
+  // Same calendar month?
+  if (from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()) {
+    return from.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  }
+  return `${formatDate(range.from)} – ${formatDate(range.to)}`;
+};
+
+const downloadCSV = (rows: Record<string, any>[], filename: string, headers: string[]) => {
+  if (rows.length === 0) {
+    toast.error('No rows to export.');
+    return;
+  }
+  const escape = (v: any) => {
+    const s = String(v ?? '');
+    return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [
+    headers.join(','),
+    ...rows.map((r) => headers.map((h) => escape(r[h])).join(',')),
+  ].join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+export function GSTR1Report({ onBack, dateRange }: GSTR1ReportProps) {
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [companyDetails, setCompanyDetails] = useState({
+    gstin: user?.company_gstin || '-',
+    legalName: user?.company_name || 'Your Company',
+    tradeName: user?.company_name || 'Your Company',
+  });
+  const [b2b, setB2b] = useState<B2BRow[]>([]);
+  const [b2cl, setB2cl] = useState<B2CLRow[]>([]);
+  const [hsn, setHsn] = useState<HSNRow[]>([]);
+  const [summary, setSummary] = useState<GSTR1Summary>({
+    totalInvoices: 0,
+    totalTaxableValue: 0,
+    totalCGST: 0,
+    totalSGST: 0,
+    totalIGST: 0,
+    totalTax: 0,
+    totalInvoiceValue: 0,
+  });
+
+  useEffect(() => {
+    if (!user?.company_id) return;
+
+    const load = async () => {
+      setIsLoading(true);
+
+      const [companyRes, invoicesRes] = await Promise.all([
+        Promise.resolve(
+          supabase
+            .from('companies')
+            .select('company_name, gstin, trade_name')
+            .eq('id', user.company_id)
+            .maybeSingle()
+        ),
+        selectForUser<any[]>(user, 'reports', 'invoices', () =>
+          Promise.resolve(
+            supabase
+              .from('invoices')
+              .select(`
+                id,
+                invoice_number,
+                invoice_date,
+                subtotal,
+                total_tax,
+                cgst,
+                sgst,
+                igst,
+                total_amount,
+                status,
+                customers(gstin, name, state),
+                invoice_items(item_name, hsn, quantity, unit, rate, gst_rate, taxable_amount, tax_amount)
+              `)
+              .eq('company_id', user.company_id)
+              .gte('invoice_date', dateRange.from)
+              .lte('invoice_date', dateRange.to)
+              .not('status', 'in', '("draft","cancelled")')
+              .order('invoice_date', { ascending: true })
+          ),
+        ),
+      ]);
+
+      const companyData: any = companyRes.data;
+      if (companyData) {
+        setCompanyDetails({
+          gstin: companyData.gstin || user.company_gstin || '-',
+          legalName: companyData.company_name || user.company_name || 'Your Company',
+          tradeName: companyData.trade_name || companyData.company_name || user.company_name || 'Your Company',
+        });
+      }
+
+      if (invoicesRes.error) {
+        toast.error(`Could not load invoices: ${invoicesRes.error.message}`);
+        setIsLoading(false);
+        return;
+      }
+
+      const invoices = invoicesRes.data || [];
+
+      const newB2b: B2BRow[] = [];
+      const newB2cl: B2CLRow[] = [];
+      const hsnAggregate = new Map<string, HSNRow>();
+      const sum: GSTR1Summary = {
+        totalInvoices: invoices.length,
+        totalTaxableValue: 0,
+        totalCGST: 0,
+        totalSGST: 0,
+        totalIGST: 0,
+        totalTax: 0,
+        totalInvoiceValue: 0,
+      };
+
+      invoices.forEach((inv: any) => {
+        const customer = Array.isArray(inv.customers) ? inv.customers[0] : inv.customers;
+        const items = inv.invoice_items || [];
+
+        const taxableValue = Number(inv.subtotal || 0);
+        const cgst = Number(inv.cgst || 0);
+        const sgst = Number(inv.sgst || 0);
+        const igst = Number(inv.igst || 0);
+        const tax = Number(inv.total_tax || cgst + sgst + igst);
+        const invoiceValue = Number(inv.total_amount || taxableValue + tax);
+
+        // Effective rate = (tax / taxable) × 100, rounded to one decimal — used for the table.
+        const rate = taxableValue > 0 ? Math.round((tax / taxableValue) * 1000) / 10 : 0;
+
+        sum.totalTaxableValue += taxableValue;
+        sum.totalCGST += cgst;
+        sum.totalSGST += sgst;
+        sum.totalIGST += igst;
+        sum.totalTax += tax;
+        sum.totalInvoiceValue += invoiceValue;
+
+        const buyerGstin = (customer?.gstin || '').trim();
+        const buyerState = customer?.state || '';
+
+        if (buyerGstin) {
+          // B2B
+          newB2b.push({
+            gstin: buyerGstin,
+            invoiceNo: inv.invoice_number,
+            invoiceDate: formatDate(inv.invoice_date),
+            invoiceValue,
+            taxableValue,
+            rate,
+            cgst,
+            sgst,
+            igst,
+          });
+        } else if (invoiceValue > 250000 && igst > 0) {
+          // B2C Large (inter-state, >2.5L)
+          newB2cl.push({
+            invoiceNo: inv.invoice_number,
+            invoiceDate: formatDate(inv.invoice_date),
+            state: buyerState,
+            invoiceValue,
+            taxableValue,
+            rate,
+            cgst,
+            sgst,
+            igst,
+          });
+        }
+        // Otherwise: B2C small — folds into the HSN summary, no per-invoice row needed.
+
+        // HSN aggregation
+        items.forEach((it: any) => {
+          const hsnCode = (it.hsn || '').trim() || '—';
+          const gstRate = Number(it.gst_rate || 0);
+          const key = `${hsnCode}__${gstRate}`;
+          const existing = hsnAggregate.get(key);
+          const itemTaxable = Number(it.taxable_amount || 0);
+          const itemTax = Number(it.tax_amount || 0);
+          const itemQty = Number(it.quantity || 0);
+
+          // Per-line CGST/SGST/IGST split mirrors the invoice
+          const itemCgst = igst > 0 ? 0 : itemTax / 2;
+          const itemSgst = igst > 0 ? 0 : itemTax / 2;
+          const itemIgst = igst > 0 ? itemTax : 0;
+
+          if (existing) {
+            existing.totalQuantity += itemQty;
+            existing.taxableValue += itemTaxable;
+            existing.cgst += itemCgst;
+            existing.sgst += itemSgst;
+            existing.igst += itemIgst;
+          } else {
+            hsnAggregate.set(key, {
+              hsnCode,
+              description: it.item_name || '',
+              uqc: it.unit || '—',
+              totalQuantity: itemQty,
+              taxableValue: itemTaxable,
+              rate: gstRate,
+              cgst: itemCgst,
+              sgst: itemSgst,
+              igst: itemIgst,
+            });
+          }
+        });
+      });
+
+      setB2b(newB2b);
+      setB2cl(newB2cl);
+      setHsn(Array.from(hsnAggregate.values()).sort((a, b) => b.taxableValue - a.taxableValue));
+      setSummary(sum);
+      setIsLoading(false);
+    };
+
+    load();
+  }, [user?.company_id, dateRange.from, dateRange.to]);
+
+  const periodLabel = useMemo(() => derivePeriodLabel(dateRange), [dateRange.from, dateRange.to]);
+  const periodSlug = periodLabel.replace(/[^A-Za-z0-9]+/g, '_');
+
+  const downloadB2BCSV = () => {
+    downloadCSV(
+      b2b.map((r) => ({
+        GSTIN: r.gstin,
+        Invoice_No: r.invoiceNo,
+        Invoice_Date: r.invoiceDate,
+        Invoice_Value: r.invoiceValue.toFixed(2),
+        Taxable_Value: r.taxableValue.toFixed(2),
+        Rate: r.rate,
+        CGST: r.cgst.toFixed(2),
+        SGST: r.sgst.toFixed(2),
+        IGST: r.igst.toFixed(2),
+      })),
+      `GSTR1_B2B_${periodSlug}.csv`,
+      ['GSTIN', 'Invoice_No', 'Invoice_Date', 'Invoice_Value', 'Taxable_Value', 'Rate', 'CGST', 'SGST', 'IGST'],
+    );
+  };
+
+  const downloadB2CLCSV = () => {
+    downloadCSV(
+      b2cl.map((r) => ({
+        Invoice_No: r.invoiceNo,
+        Invoice_Date: r.invoiceDate,
+        State: r.state,
+        Invoice_Value: r.invoiceValue.toFixed(2),
+        Taxable_Value: r.taxableValue.toFixed(2),
+        Rate: r.rate,
+        CGST: r.cgst.toFixed(2),
+        SGST: r.sgst.toFixed(2),
+        IGST: r.igst.toFixed(2),
+      })),
+      `GSTR1_B2CL_${periodSlug}.csv`,
+      ['Invoice_No', 'Invoice_Date', 'State', 'Invoice_Value', 'Taxable_Value', 'Rate', 'CGST', 'SGST', 'IGST'],
+    );
+  };
+
+  const downloadHSNCSV = () => {
+    downloadCSV(
+      hsn.map((r) => ({
+        HSN_Code: r.hsnCode,
+        Description: r.description,
+        UQC: r.uqc,
+        Total_Quantity: r.totalQuantity,
+        Taxable_Value: r.taxableValue.toFixed(2),
+        Rate: r.rate,
+        CGST: r.cgst.toFixed(2),
+        SGST: r.sgst.toFixed(2),
+        IGST: r.igst.toFixed(2),
+      })),
+      `GSTR1_HSN_Summary_${periodSlug}.csv`,
+      ['HSN_Code', 'Description', 'UQC', 'Total_Quantity', 'Taxable_Value', 'Rate', 'CGST', 'SGST', 'IGST'],
+    );
+  };
+
+  const downloadAllCSV = () => {
+    if (b2b.length === 0 && b2cl.length === 0 && hsn.length === 0) {
+      toast.error('Nothing to export — no invoices in this period.');
+      return;
+    }
+    if (b2b.length > 0) downloadB2BCSV();
+    if (b2cl.length > 0) setTimeout(() => downloadB2CLCSV(), 120);
+    if (hsn.length > 0) setTimeout(() => downloadHSNCSV(), 240);
+  };
+
+  const downloadJSON = () => {
+    const payload = {
+      gstin: companyDetails.gstin,
+      fp: periodSlug, // filing period
+      gt: summary.totalInvoiceValue,
+      cur_gt: summary.totalTaxableValue,
+      b2b,
+      b2cl,
+      hsn,
+      summary,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `GSTR1_${periodSlug}.json`;
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const downloadB2BCSV = () => {
-    const csvData = gstr1Data.b2b.map(item => ({
-      'GSTIN': item.gstin,
-      'Invoice_No': item.invoiceNo,
-      'Invoice_Date': item.invoiceDate,
-      'Invoice_Value': item.invoiceValue,
-      'Taxable_Value': item.taxableValue,
-      'Rate': item.rate,
-      'CGST': item.cgst,
-      'SGST': item.sgst,
-      'IGST': item.igst
-    }));
-    downloadCSV(csvData, `GSTR1_B2B_${gstr1Data.period.replace(' ', '_')}.csv`,
-      ['GSTIN', 'Invoice_No', 'Invoice_Date', 'Invoice_Value', 'Taxable_Value', 'Rate', 'CGST', 'SGST', 'IGST']);
-  };
-
-  const downloadB2CLCSV = () => {
-    const csvData = gstr1Data.b2cl.map(item => ({
-      'Invoice_No': item.invoiceNo,
-      'Invoice_Date': item.invoiceDate,
-      'State': item.state,
-      'Invoice_Value': item.invoiceValue,
-      'Taxable_Value': item.taxableValue,
-      'Rate': item.rate,
-      'CGST': item.cgst,
-      'SGST': item.sgst
-    }));
-    downloadCSV(csvData, `GSTR1_B2CL_${gstr1Data.period.replace(' ', '_')}.csv`,
-      ['Invoice_No', 'Invoice_Date', 'State', 'Invoice_Value', 'Taxable_Value', 'Rate', 'CGST', 'SGST']);
-  };
-
-  const downloadHSNCSV = () => {
-    const csvData = gstr1Data.hsn.map(item => ({
-      'HSN_Code': item.hsnCode,
-      'Description': item.description,
-      'UQC': item.uqc,
-      'Total_Quantity': item.totalQuantity,
-      'Taxable_Value': item.taxableValue,
-      'Rate': item.rate,
-      'CGST': item.cgst,
-      'SGST': item.sgst
-    }));
-    downloadCSV(csvData, `GSTR1_HSN_Summary_${gstr1Data.period.replace(' ', '_')}.csv`,
-      ['HSN_Code', 'Description', 'UQC', 'Total_Quantity', 'Taxable_Value', 'Rate', 'CGST', 'SGST']);
-  };
-
-  const downloadAllCSV = () => {
-    // Download all three CSVs
-    downloadB2BCSV();
-    setTimeout(() => downloadB2CLCSV(), 100);
-    setTimeout(() => downloadHSNCSV(), 200);
-  };
-  // Sample GSTR-1 data
-  const gstr1Data = {
-    gstin: '27AAAAA0000A1Z5',
-    legalName: 'My Company Pvt Ltd',
-    tradeName: 'GSTInvoice Pro',
-    period: 'April 2026',
-
-    // B2B Supplies
-    b2b: [
-      { gstin: '24AAECB4538R1Z9', invoiceNo: 'INV-2026-156', invoiceDate: '12 May 2026', invoiceValue: 125000, taxableValue: 105932, cgst: 9534, sgst: 9534, igst: 0, rate: 18 },
-      { gstin: '29BBBBB1111B2Y4', invoiceNo: 'INV-2026-155', invoiceDate: '11 May 2026', invoiceValue: 89500, taxableValue: 75847, cgst: 6827, sgst: 6827, igst: 0, rate: 18 },
-      { gstin: '24CCCCC2222C3X3', invoiceNo: 'INV-2026-154', invoiceDate: '10 May 2026', invoiceValue: 234000, taxableValue: 198305, cgst: 17847, sgst: 17847, igst: 0, rate: 18 },
-    ],
-
-    // B2C (Large) - Invoice value > 2.5 Lakhs
-    b2cl: [
-      { invoiceNo: 'INV-2026-153', invoiceDate: '08 May 2026', invoiceValue: 280000, taxableValue: 237288, cgst: 21356, sgst: 21356, igst: 0, rate: 18, state: 'Gujarat' },
-    ],
-
-    // HSN Summary
-    hsn: [
-      { hsnCode: '998873', description: 'Welding Work', uqc: 'JOB', totalQuantity: 15, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0, rate: 18 },
-      { hsnCode: '998314', description: 'Consultation Services', uqc: 'HRS', totalQuantity: 120, taxableValue: 300000, cgst: 27000, sgst: 27000, igst: 0, rate: 18 },
-      { hsnCode: '730411', description: 'Steel Pipes', uqc: 'MTR', totalQuantity: 500, taxableValue: 225000, cgst: 20250, sgst: 20250, igst: 0, rate: 18 },
-    ],
-
-    // Tax Summary
-    summary: {
-      totalInvoices: 175,
-      totalTaxableValue: 1050000,
-      totalCGST: 94500,
-      totalSGST: 94500,
-      totalIGST: 0,
-      totalTax: 189000,
-      totalInvoiceValue: 1239000,
-    }
+    URL.revokeObjectURL(url);
+    toast.success('GSTR-1 JSON downloaded.');
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <button
             onClick={onBack}
-            className="p-2 hover:bg-muted rounded transition-colors"
+            className="p-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">GSTR-1 Report</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              GST Return for outward supplies - {gstr1Data.period}
+          <div className="min-w-0">
+            <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">
+              GST Compliance
+            </div>
+            <h1 className="text-[22px] sm:text-[24px] font-semibold text-foreground tracking-tight leading-tight">
+              GSTR-1 Report
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              GST return for outward supplies • {periodLabel}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={downloadAllCSV}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60"
           >
             <FileText className="w-4 h-4" />
-            <span className="text-sm">Download All CSV</span>
+            Download All CSV
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors">
-            <Download className="w-4 h-4" />
-            <span className="text-sm">Download Excel</span>
-          </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors">
+          <button
+            onClick={downloadJSON}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60"
+          >
             <FileSpreadsheet className="w-4 h-4" />
-            <span className="text-sm">Download JSON</span>
+            Download JSON
           </button>
         </div>
       </div>
 
       {/* GSTIN Details */}
-      <div className="bg-white border border-border rounded-lg p-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           <div>
-            <div className="text-xs text-muted-foreground mb-1">GSTIN</div>
-            <div className="font-semibold font-mono">{gstr1Data.gstin}</div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">GSTIN</div>
+            <div className="font-semibold font-mono text-foreground tracking-tight">{companyDetails.gstin || '—'}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Legal Name</div>
-            <div className="font-semibold">{gstr1Data.legalName}</div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Legal Name</div>
+            <div className="font-semibold text-foreground tracking-tight">{companyDetails.legalName}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Trade Name</div>
-            <div className="font-semibold">{gstr1Data.tradeName}</div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Trade Name</div>
+            <div className="font-semibold text-foreground tracking-tight">{companyDetails.tradeName}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Return Period</div>
-            <div className="font-semibold">{gstr1Data.period}</div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Return Period</div>
+            <div className="font-semibold text-foreground tracking-tight">{periodLabel}</div>
           </div>
         </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-border rounded-lg p-6">
-          <div className="text-sm text-muted-foreground mb-2">Total Invoices</div>
-          <div className="text-4xl font-bold text-foreground">{gstr1Data.summary.totalInvoices}</div>
-        </div>
-        <div className="bg-white border border-border rounded-lg p-6">
-          <div className="text-sm text-muted-foreground mb-2">Taxable Value</div>
-          <div className="text-4xl font-bold text-foreground">
-            ₹{(gstr1Data.summary.totalTaxableValue / 100000).toFixed(1)}L
-          </div>
-        </div>
-        <div className="bg-white border border-border rounded-lg p-6">
-          <div className="text-sm text-muted-foreground mb-2">Total Tax</div>
-          <div className="text-4xl font-bold text-warning">
-            ₹{(gstr1Data.summary.totalTax / 100000).toFixed(1)}L
-          </div>
-        </div>
-        <div className="bg-white border border-border rounded-lg p-6">
-          <div className="text-sm text-muted-foreground mb-2">Invoice Value</div>
-          <div className="text-4xl font-bold text-success">
-            ₹{(gstr1Data.summary.totalInvoiceValue / 100000).toFixed(1)}L
-          </div>
-        </div>
+        <SummaryStat label="Total Invoices" value={isLoading ? '—' : String(summary.totalInvoices)} />
+        <SummaryStat label="Taxable Value" value={isLoading ? '—' : `₹${(summary.totalTaxableValue / 100000).toFixed(2)}L`} />
+        <SummaryStat label="Total Tax" value={isLoading ? '—' : `₹${(summary.totalTax / 100000).toFixed(2)}L`} valueClass="text-warning" />
+        <SummaryStat label="Invoice Value" value={isLoading ? '—' : `₹${(summary.totalInvoiceValue / 100000).toFixed(2)}L`} valueClass="text-success" />
       </div>
 
-      {/* B2B Supplies (Table 4A, 4B, 4C, 6B, 6C) */}
-      <div className="bg-white border border-border rounded-lg">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-foreground">4A, 4B, 4C - B2B Supplies</h3>
-            <p className="text-sm text-muted-foreground mt-1">Business to Business - Taxable outward supplies</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={downloadB2BCSV}
-              className="inline-flex items-center gap-2 px-3 py-1.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
-            >
-              <FileText className="w-4 h-4" />
-              Download CSV
-            </button>
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-success/10 text-success rounded text-sm font-medium">
-              <CheckCircle className="w-4 h-4" />
-              {gstr1Data.b2b.length} Records
-            </span>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
+      {/* B2B Supplies */}
+      <SectionCard
+        title="4A, 4B, 4C — B2B Supplies"
+        subtitle="Business-to-Business taxable outward supplies (recipient with GSTIN)"
+        recordsLabel={`${b2b.length} Records`}
+        onDownloadCsv={downloadB2BCSV}
+        isLoading={isLoading}
+      >
+        {b2b.length === 0 ? (
+          <EmptyRow text={isLoading ? 'Loading…' : 'No B2B invoices in this period.'} />
+        ) : (
           <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">GSTIN of Recipient</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Invoice No.</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Invoice Value</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Taxable Value</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground">Rate</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">CGST</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">SGST</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">IGST</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {gstr1Data.b2b.map((item, index) => (
-                <tr key={index} className="hover:bg-muted/30">
+            <ReportTableHead headers={['GSTIN of Recipient', 'Invoice No.', 'Date', 'Invoice Value', 'Taxable Value', 'Rate', 'CGST', 'SGST', 'IGST']} />
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
+              {b2b.map((item, index) => (
+                <tr key={index} className="bg-violet-50/40 dark:bg-violet-500/[0.03] hover:bg-violet-100/60 dark:hover:bg-violet-500/[0.08] transition-colors">
                   <td className="px-4 py-3 text-sm font-mono">{item.gstin}</td>
                   <td className="px-4 py-3 text-sm font-mono">{item.invoiceNo}</td>
-                  <td className="px-4 py-3 text-sm">{item.invoiceDate}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">₹{item.invoiceValue.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.taxableValue.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-center">{item.rate}%</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.cgst.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.sgst.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right">{item.igst > 0 ? `₹${item.igst.toLocaleString()}` : '-'}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{item.invoiceDate}</td>
+                  <td className="px-4 py-3 text-sm text-left font-medium tabular-nums">₹{formatRupee(item.invoiceValue)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.taxableValue)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.rate}%</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.cgst)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.sgst)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.igst > 0 ? `₹${formatRupee(item.igst)}` : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+        )}
+      </SectionCard>
 
-      {/* B2C Large (Table 5A, 5B) */}
-      <div className="bg-white border border-border rounded-lg">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-foreground">5A, 5B - B2C Large (&gt;2.5L)</h3>
-            <p className="text-sm text-muted-foreground mt-1">Business to Consumer - Invoice value above 2.5 Lakhs</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={downloadB2CLCSV}
-              className="inline-flex items-center gap-2 px-3 py-1.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
-            >
-              <FileText className="w-4 h-4" />
-              Download CSV
-            </button>
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-success/10 text-success rounded text-sm font-medium">
-              <CheckCircle className="w-4 h-4" />
-              {gstr1Data.b2cl.length} Records
-            </span>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
+      {/* B2CL */}
+      <SectionCard
+        title="5A, 5B — B2C Large (>₹2.5L, Inter-State)"
+        subtitle="B2C invoices above ₹2.5 lakhs to unregistered customers in other states"
+        recordsLabel={`${b2cl.length} Records`}
+        onDownloadCsv={downloadB2CLCSV}
+        isLoading={isLoading}
+      >
+        {b2cl.length === 0 ? (
+          <EmptyRow text={isLoading ? 'Loading…' : 'No B2C Large invoices in this period.'} />
+        ) : (
           <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Invoice No.</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">State</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Invoice Value</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Taxable Value</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground">Rate</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">CGST</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">SGST</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {gstr1Data.b2cl.map((item, index) => (
-                <tr key={index} className="hover:bg-muted/30">
+            <ReportTableHead headers={['Invoice No.', 'Date', 'State', 'Invoice Value', 'Taxable Value', 'Rate', 'CGST', 'SGST', 'IGST']} />
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
+              {b2cl.map((item, index) => (
+                <tr key={index} className="bg-violet-50/40 dark:bg-violet-500/[0.03] hover:bg-violet-100/60 dark:hover:bg-violet-500/[0.08] transition-colors">
                   <td className="px-4 py-3 text-sm font-mono">{item.invoiceNo}</td>
-                  <td className="px-4 py-3 text-sm">{item.invoiceDate}</td>
-                  <td className="px-4 py-3 text-sm">{item.state}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">₹{item.invoiceValue.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.taxableValue.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-center">{item.rate}%</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.cgst.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.sgst.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{item.invoiceDate}</td>
+                  <td className="px-4 py-3 text-sm">{item.state || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-left font-medium tabular-nums">₹{formatRupee(item.invoiceValue)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.taxableValue)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.rate}%</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.cgst)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.sgst)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.igst > 0 ? `₹${formatRupee(item.igst)}` : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+        )}
+      </SectionCard>
 
-      {/* HSN Summary (Table 12) */}
-      <div className="bg-white border border-border rounded-lg">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-foreground">12 - HSN Summary of Outward Supplies</h3>
-            <p className="text-sm text-muted-foreground mt-1">HSN-wise summary of all outward supplies</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={downloadHSNCSV}
-              className="inline-flex items-center gap-2 px-3 py-1.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
-            >
-              <FileText className="w-4 h-4" />
-              Download CSV
-            </button>
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-success/10 text-success rounded text-sm font-medium">
-              <CheckCircle className="w-4 h-4" />
-              {gstr1Data.hsn.length} HSN Codes
-            </span>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
+      {/* HSN Summary */}
+      <SectionCard
+        title="12 — HSN Summary of Outward Supplies"
+        subtitle="HSN-wise summary of all outward supplies"
+        recordsLabel={`${hsn.length} HSN Codes`}
+        onDownloadCsv={downloadHSNCSV}
+        isLoading={isLoading}
+      >
+        {hsn.length === 0 ? (
+          <EmptyRow text={isLoading ? 'Loading…' : 'No HSN data in this period.'} />
+        ) : (
           <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">HSN Code</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Description</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground">UQC</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Total Qty</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Taxable Value</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground">Rate</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">CGST</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">SGST</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {gstr1Data.hsn.map((item, index) => (
-                <tr key={index} className="hover:bg-muted/30">
+            <ReportTableHead headers={['HSN Code', 'Description', 'UQC', 'Total Qty', 'Taxable Value', 'Rate', 'CGST', 'SGST', 'IGST']} />
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
+              {hsn.map((item, index) => (
+                <tr key={index} className="bg-violet-50/40 dark:bg-violet-500/[0.03] hover:bg-violet-100/60 dark:hover:bg-violet-500/[0.08] transition-colors">
                   <td className="px-4 py-3 text-sm font-mono font-medium">{item.hsnCode}</td>
                   <td className="px-4 py-3 text-sm">{item.description}</td>
-                  <td className="px-4 py-3 text-sm text-center">{item.uqc}</td>
-                  <td className="px-4 py-3 text-sm text-right">{item.totalQuantity}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">₹{item.taxableValue.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-center">{item.rate}%</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.cgst.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right">₹{item.sgst.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm">{item.uqc}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.totalQuantity}</td>
+                  <td className="px-4 py-3 text-sm text-left font-medium tabular-nums">₹{formatRupee(item.taxableValue)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.rate}%</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.cgst)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">₹{formatRupee(item.sgst)}</td>
+                  <td className="px-4 py-3 text-sm text-left tabular-nums">{item.igst > 0 ? `₹${formatRupee(item.igst)}` : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+        )}
+      </SectionCard>
 
       {/* Tax Liability Summary */}
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">Tax Liability Summary</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-4 bg-muted/30 rounded">
-            <div className="text-sm text-muted-foreground mb-2">CGST Liability</div>
-            <div className="text-4xl font-bold text-foreground">
-              ₹{gstr1Data.summary.totalCGST.toLocaleString()}
-            </div>
-          </div>
-          <div className="p-4 bg-muted/30 rounded">
-            <div className="text-sm text-muted-foreground mb-2">SGST Liability</div>
-            <div className="text-4xl font-bold text-foreground">
-              ₹{gstr1Data.summary.totalSGST.toLocaleString()}
-            </div>
-          </div>
-          <div className="p-4 bg-primary/10 rounded">
-            <div className="text-sm text-muted-foreground mb-2">Total Tax Liability</div>
-            <div className="text-4xl font-bold text-primary">
-              ₹{gstr1Data.summary.totalTax.toLocaleString()}
-            </div>
-          </div>
+      <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+        <h3 className="text-[16px] font-semibold text-foreground tracking-tight mb-5">Tax Liability Summary</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <LiabilityCard label="CGST" value={summary.totalCGST} />
+          <LiabilityCard label="SGST" value={summary.totalSGST} />
+          <LiabilityCard label="IGST" value={summary.totalIGST} />
+          <LiabilityCard label="Total Tax" value={summary.totalTax} accent />
         </div>
       </div>
 
       {/* Filing Instructions */}
-      <div className="bg-warning/10 border border-warning/20 rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-3">Filing Instructions</h3>
+      <div className="bg-violet-50/50 dark:bg-violet-500/[0.05] border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6">
+        <h3 className="text-[16px] font-semibold text-foreground tracking-tight mb-3">Filing Instructions</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-            <span>Download the JSON file and upload it to the GST Portal</span>
+            <span>Download the JSON file and upload it to the GST Portal.</span>
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-            <span>Verify all invoice details before filing</span>
+            <span>Verify all invoice details (GSTIN, taxable values, tax split) before filing.</span>
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-            <span>File GSTR-1 by 11th of next month to avoid late fees</span>
+            <span>File GSTR-1 by the 11th of the next month to avoid late fees.</span>
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-            <span>Keep a copy of the filed return for your records</span>
+            <span>Keep a copy of the filed return for your records.</span>
           </li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  recordsLabel,
+  onDownloadCsv,
+  isLoading,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  recordsLabel: string;
+  onDownloadCsv: () => void;
+  isLoading: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
+      <div className="p-5 md:p-6 border-b border-violet-100 dark:border-violet-400/15 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h3 className="text-[16px] font-semibold text-foreground tracking-tight">{title}</h3>
+          <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={onDownloadCsv}
+            className="inline-flex items-center gap-2 px-3 h-9 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[12.5px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            Download CSV
+          </button>
+          <span className="inline-flex items-center gap-1 px-3 h-7 bg-success/10 text-success rounded-md text-[12px] font-semibold">
+            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+            {recordsLabel}
+          </span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">{children}</div>
+    </div>
+  );
+}
+
+function ReportTableHead({ headers }: { headers: string[] }) {
+  return (
+    <thead className="bg-violet-100 dark:bg-violet-500/15">
+      <tr>
+        {headers.map((h) => (
+          <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 whitespace-nowrap">
+            {h}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return (
+    <div className="py-10 text-center text-sm text-muted-foreground">{text}</div>
+  );
+}
+
+function SummaryStat({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.08)]">
+      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">{label}</div>
+      <div className={`text-[28px] sm:text-[32px] font-semibold tracking-tight tabular-nums ${valueClass || 'text-foreground'}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function LiabilityCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  return (
+    <div className={`p-4 rounded-lg border ${accent ? 'bg-violet-50 dark:bg-violet-500/10 border-violet-300 dark:border-violet-400/30' : 'bg-violet-50/40 dark:bg-violet-500/[0.05] border-violet-200/70 dark:border-violet-400/20'}`}>
+      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">{label}</div>
+      <div className={`text-[22px] sm:text-[26px] font-semibold tracking-tight tabular-nums ${accent ? 'text-violet-700 dark:text-violet-300' : 'text-foreground'}`}>
+        ₹{formatRupee(value)}
       </div>
     </div>
   );

@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import { Link } from 'react-router';
-import { ArrowLeft, Plus, Trash2, Save, Send, Eye, Calculator } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { ArrowLeft, Plus, Trash2, Save, Send, Eye } from 'lucide-react';
+import { toast } from 'sonner';
 import { CreditNotePreview } from './CreditNotePreview';
+import { useAuth } from '../../../contexts/AuthContext';
+import { supabase } from '../../../lib/supabase';
+import { insertForUser, selectForUser } from '../../../lib/auditorData';
 
 interface LineItem {
   id: string;
@@ -16,13 +20,52 @@ interface LineItem {
   amount: number;
 }
 
+interface CustomerRow {
+  id: string;
+  name: string;
+  customerType: string;
+  gstin: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+}
+
+interface InvoiceRow {
+  id: string;
+  invoice_number: string;
+  customer_id: string | null;
+  customer_name: string;
+}
+
+const getFinancialYear = (dateValue?: string) => {
+  const date = new Date(dateValue || new Date());
+  const year = date.getFullYear();
+  const startYear = date.getMonth() >= 3 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+};
+
+const todayIso = () => new Date().toISOString().split('T')[0];
+
 export function CreditNoteCreate() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [showPreview, setShowPreview] = useState(false);
   const [noteType, setNoteType] = useState<'credit' | 'debit'>('credit');
-  const [noteNumber, setNoteNumber] = useState('CN-2026-004');
-  const [noteDate, setNoteDate] = useState('2026-05-12');
+  const [noteNumber, setNoteNumber] = useState('');
+  const [noteDate, setNoteDate] = useState(todayIso());
   const [originalInvoice, setOriginalInvoice] = useState('');
   const [reason, setReason] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState('');
+
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
     {
@@ -38,6 +81,97 @@ export function CreditNoteCreate() {
       amount: 0
     }
   ]);
+
+  // Load customers + recent invoices for this company
+  useEffect(() => {
+    if (!user?.company_id) return;
+
+    const load = async () => {
+      setIsLoadingCustomers(true);
+      const [customersRes, invoicesRes] = await Promise.all([
+        selectForUser<any[]>(user, 'customers', 'customers', () =>
+          Promise.resolve(
+            supabase
+              .from('customers')
+              .select('id, name, customer_type, gstin, contact_name, email, phone, address, city, state')
+              .eq('company_id', user.company_id)
+              .eq('is_active', true)
+              .order('name', { ascending: true })
+          )
+        ),
+        selectForUser<any[]>(user, 'invoices', 'invoices', () =>
+          Promise.resolve(
+            supabase
+              .from('invoices')
+              .select('id, invoice_number, customer_id, customers(name)')
+              .eq('company_id', user.company_id)
+              .order('invoice_date', { ascending: false })
+              .limit(100)
+          )
+        ),
+      ]);
+
+      if (customersRes.error) {
+        toast.error(`Could not load customers: ${customersRes.error.message}`);
+      } else {
+        setCustomers((customersRes.data || []).map((c: any) => ({
+          id: c.id,
+          name: c.name || '',
+          customerType: c.customer_type || '',
+          gstin: c.gstin || '',
+          contactName: c.contact_name || '',
+          email: c.email || '',
+          phone: c.phone || '',
+          address: c.address || '',
+          city: c.city || '',
+          state: c.state || '',
+        })));
+      }
+
+      if (!invoicesRes.error) {
+        setInvoices((invoicesRes.data || []).map((inv: any) => {
+          const cust = Array.isArray(inv.customers) ? inv.customers[0] : inv.customers;
+          return {
+            id: inv.id,
+            invoice_number: inv.invoice_number,
+            customer_id: inv.customer_id,
+            customer_name: cust?.name || '',
+          };
+        }));
+      }
+
+      setIsLoadingCustomers(false);
+    };
+
+    load();
+  }, [user?.company_id]);
+
+  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
+
+  // Auto-suggest the next note number whenever the type changes or the date FY changes
+  useEffect(() => {
+    if (!user?.company_id) return;
+
+    const suggest = async () => {
+      const prefix = noteType === 'credit' ? 'CN' : 'DN';
+      const table = noteType === 'credit' ? 'credit_notes' : 'debit_notes';
+      const { count, error } = await supabase
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', user.company_id);
+
+      if (error) return;
+      setNoteNumber(`${prefix}-${getFinancialYear(noteDate)}-${String((count || 0) + 1).padStart(3, '0')}`);
+    };
+
+    suggest();
+  }, [user?.company_id, noteType]);
+
+  // Filter invoices by the chosen customer (if any)
+  const filteredInvoices = useMemo(() => {
+    if (!selectedCustomerId) return invoices;
+    return invoices.filter((inv) => inv.customer_id === selectedCustomerId);
+  }, [invoices, selectedCustomerId]);
 
   const addLineItem = () => {
     setLineItems([
@@ -87,191 +221,357 @@ export function CreditNoteCreate() {
 
   const totalAmount = subtotal + totalGST;
 
+  const saveNote = async (status: 'draft' | 'issued') => {
+    if (!user?.company_id) {
+      toast.error('Company profile is not ready. Please refresh and try again.');
+      return;
+    }
+    if (!noteNumber.trim()) {
+      toast.error('Note number is required.');
+      return;
+    }
+    if (!selectedCustomerId) {
+      toast.error('Select a customer for this note.');
+      return;
+    }
+    if (lineItems.length === 0 || lineItems.every((i) => !i.item.trim() && !i.description.trim())) {
+      toast.error('Add at least one line item with a description.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const matchingInvoice = invoices.find((inv) => inv.invoice_number === originalInvoice);
+      const combinedReason = [reason.trim(), additionalNotes.trim()].filter(Boolean).join('\n\n');
+
+      const noteTable = noteType === 'credit' ? 'credit_notes' : 'debit_notes';
+      const itemsTable = noteType === 'credit' ? 'credit_note_items' : 'debit_note_items';
+      const fkColumn = noteType === 'credit' ? 'credit_note_id' : 'debit_note_id';
+
+      const noteRecord = {
+        company_id: user.company_id,
+        customer_id: selectedCustomerId || null,
+        invoice_id: matchingInvoice?.id || null,
+        note_number: noteNumber.trim(),
+        note_date: noteDate,
+        reason: combinedReason || null,
+        subtotal,
+        total_tax: totalGST,
+        total_amount: totalAmount,
+        status,
+      };
+
+      const { data: note, error: noteError } = await insertForUser<any>(
+        user,
+        'credit_notes',
+        noteTable,
+        () =>
+          Promise.resolve(
+            supabase
+              .from(noteTable)
+              .insert(noteRecord)
+              .select('id, note_number')
+              .single()
+          ),
+        noteRecord,
+        noteNumber.trim(),
+      );
+
+      if (noteError || !note) {
+        throw noteError || new Error('Could not save the note.');
+      }
+
+      const itemRows = lineItems.map((item) => {
+        const baseAmount = item.qty * item.rate;
+        const taxableAmount = baseAmount - (baseAmount * item.discount / 100);
+        const taxAmount = taxableAmount * item.gst / 100;
+        return {
+          [fkColumn]: note.id,
+          item_name: item.item || item.description || 'Line item',
+          description: item.description || null,
+          hsn: item.hsn || null,
+          quantity: item.qty,
+          unit: item.unit || null,
+          rate: item.rate,
+          gst_rate: item.gst,
+          taxable_amount: taxableAmount,
+          tax_amount: taxAmount,
+          total_amount: taxableAmount + taxAmount,
+        };
+      });
+
+      const { error: itemsError } = await insertForUser(
+        user,
+        'credit_notes',
+        itemsTable,
+        () => Promise.resolve(supabase.from(itemsTable).insert(itemRows)),
+        itemRows,
+        noteNumber.trim(),
+      );
+
+      if (itemsError) throw itemsError;
+
+      toast.success(
+        status === 'draft'
+          ? `${noteType === 'credit' ? 'Credit' : 'Debit'} note saved as draft.`
+          : `${noteType === 'credit' ? 'Credit' : 'Debit'} note ${noteNumber} created.`,
+      );
+      navigate('/app/credit-notes');
+    } catch (error: any) {
+      toast.error(error?.message || 'Could not save the note.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveDraft = () => saveNote('draft');
+  const handleCreateAndSend = () => saveNote('issued');
+
+  const accentClass = noteType === 'credit' ? 'text-success' : 'text-warning';
+  const accentBgClass = noteType === 'credit' ? 'bg-success/10' : 'bg-warning/10';
+
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-8 space-y-6 md:space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <Link
             to="/app/credit-notes"
-            className="p-2 hover:bg-muted rounded transition-colors"
+            className="p-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Create {noteType === 'credit' ? 'Credit' : 'Debit'} Note</h1>
-            <p className="text-sm text-muted-foreground mt-1">Add note details and line items</p>
+          <div className="min-w-0">
+            <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">
+              {noteType === 'credit' ? 'Credit Note' : 'Debit Note'}
+            </div>
+            <h1 className="text-[22px] sm:text-[24px] font-semibold text-foreground tracking-tight leading-tight truncate">
+              Create {noteType === 'credit' ? 'Credit' : 'Debit'} Note
+            </h1>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowPreview(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-[13px] font-medium text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60"
           >
             <Eye className="w-4 h-4" />
             Preview
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors">
+          <button
+            onClick={handleSaveDraft}
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-[13px] font-medium text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60 disabled:cursor-wait"
+          >
             <Save className="w-4 h-4" />
-            Save Draft
+            {isSaving ? 'Saving…' : 'Save Draft'}
           </button>
           <button
-            onClick={() => setShowPreview(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+            onClick={handleCreateAndSend}
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
           >
             <Send className="w-4 h-4" />
-            Create & Send
+            {isSaving ? 'Saving…' : 'Create & Send'}
           </button>
         </div>
       </div>
 
-      <div className="space-y-6">
-          {/* Note Type Selection */}
-          <div className="bg-white border border-border rounded-lg p-6">
-            <h3 className="font-semibold text-foreground mb-4">Note Type</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => {
-                  setNoteType('credit');
-                  setNoteNumber('CN-2026-004');
-                }}
-                className={`px-6 py-4 border-2 rounded-lg transition-colors ${
-                  noteType === 'credit'
-                    ? 'border-success bg-success/5 text-success'
-                    : 'border-border hover:border-success/50'
-                }`}
-              >
-                <div className="font-semibold mb-1">Credit Note</div>
-                <div className="text-xs opacity-80">For returns, refunds, discounts</div>
-              </button>
-              <button
-                onClick={() => {
-                  setNoteType('debit');
-                  setNoteNumber('DN-2026-003');
-                }}
-                className={`px-6 py-4 border-2 rounded-lg transition-colors ${
-                  noteType === 'debit'
-                    ? 'border-warning bg-warning/5 text-warning'
-                    : 'border-border hover:border-warning/50'
-                }`}
-              >
-                <div className="font-semibold mb-1">Debit Note</div>
-                <div className="text-xs opacity-80">For additional charges, adjustments</div>
-              </button>
+      {/* STEPS 1 + 2 — Customer & Note Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 1. Customer */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">1</div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Customer</h3>
+          </div>
+          <div className="space-y-3.5">
+            <select
+              value={selectedCustomerId}
+              onChange={(e) => setSelectedCustomerId(e.target.value)}
+              disabled={isLoadingCustomers}
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+            >
+              <option value="">{isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.gstin ? ` — ${c.gstin}` : ''}
+                </option>
+              ))}
+            </select>
+
+            <div className="min-h-[230px]">
+              {selectedCustomer ? (
+                <div className="rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/50 dark:bg-violet-500/[0.05] p-4">
+                  {/* Top row: company name + GSTIN chip + customer type pill */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[16px] font-semibold text-foreground leading-tight">{selectedCustomer.name}</div>
+                      {selectedCustomer.gstin && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-100 dark:bg-violet-500/15 text-[12px] font-mono font-semibold text-violet-700 dark:text-violet-200">
+                          <span className="text-[10px] uppercase tracking-wider opacity-70">GSTIN</span>
+                          {selectedCustomer.gstin}
+                        </div>
+                      )}
+                    </div>
+                    {selectedCustomer.customerType && (
+                      <span className="shrink-0 px-2.5 py-1 rounded-md bg-card border border-violet-200 dark:border-violet-400/30 text-[10.5px] font-bold tracking-wider uppercase text-violet-600 dark:text-violet-300">
+                        {selectedCustomer.customerType}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Address row */}
+                  {(selectedCustomer.address || selectedCustomer.city || selectedCustomer.state) && (
+                    <div className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15">
+                      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Address</div>
+                      <div className="text-[13.5px] text-foreground leading-snug">
+                        {[selectedCustomer.address, selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(', ')}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Contact row — 3-col grid */}
+                  {(selectedCustomer.contactName || selectedCustomer.email || selectedCustomer.phone) && (
+                    <div className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2.5">
+                      {selectedCustomer.contactName && (
+                        <div className="min-w-0">
+                          <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Contact</div>
+                          <div className="text-[13.5px] text-foreground truncate">{selectedCustomer.contactName}</div>
+                        </div>
+                      )}
+                      {selectedCustomer.phone && (
+                        <div className="min-w-0">
+                          <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Phone</div>
+                          <div className="text-[13.5px] text-foreground tabular-nums truncate">{selectedCustomer.phone}</div>
+                        </div>
+                      )}
+                      {selectedCustomer.email && (
+                        <div className="min-w-0">
+                          <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Email</div>
+                          <div className="text-[13.5px] text-foreground truncate" title={selectedCustomer.email}>{selectedCustomer.email}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-muted-foreground px-1">
+                  Pick the customer whose account this note adjusts. Their original invoices appear in step 2.
+                </p>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Note Details Card */}
-          <div className="bg-white border border-border rounded-lg p-6">
-            <h3 className="font-semibold text-foreground mb-4">Note Details</h3>
-            <div className="grid grid-cols-2 gap-4">
+        {/* 2. Note Details */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">2</div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Note Details</h3>
+          </div>
+          <div className="space-y-5">
+            {/* Type toggle */}
+            <div>
+              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Note Type</div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setNoteType('credit')}
+                  className={`px-4 py-3 border-2 rounded-lg transition-all text-left ${
+                    noteType === 'credit'
+                      ? 'border-success bg-success/5 text-success shadow-[0_2px_8px_-4px_rgba(34,197,94,0.4)]'
+                      : 'border-violet-200 dark:border-violet-400/25 hover:border-success/50 text-foreground'
+                  }`}
+                >
+                  <div className="font-semibold text-[13.5px]">Credit Note</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">Returns, refunds, discounts</div>
+                </button>
+                <button
+                  onClick={() => setNoteType('debit')}
+                  className={`px-4 py-3 border-2 rounded-lg transition-all text-left ${
+                    noteType === 'debit'
+                      ? 'border-warning bg-warning/5 text-warning shadow-[0_2px_8px_-4px_rgba(245,158,11,0.4)]'
+                      : 'border-violet-200 dark:border-violet-400/25 hover:border-warning/50 text-foreground'
+                  }`}
+                >
+                  <div className="font-semibold text-[13.5px]">Debit Note</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">Extra charges, adjustments</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Number + Date */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Note Number
-                </label>
+                <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Note Number</label>
                 <input
                   type="text"
                   value={noteNumber}
                   onChange={(e) => setNoteNumber(e.target.value)}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Note Date
-                </label>
+                <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Note Date</label>
                 <input
                   type="date"
                   value={noteDate}
                   onChange={(e) => setNoteDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Original Invoice Number
-                </label>
-                <select
-                  value={originalInvoice}
-                  onChange={(e) => setOriginalInvoice(e.target.value)}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Select original invoice...</option>
-                  <option value="INV-2026-156">INV-2026-156 - TechCorp Solutions</option>
-                  <option value="INV-2026-155">INV-2026-155 - Retail Innovations</option>
-                  <option value="INV-2026-154">INV-2026-154 - Manufacturing Ltd</option>
-                </select>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Reason for {noteType === 'credit' ? 'Credit' : 'Debit'} Note
-                </label>
-                <textarea
-                  rows={2}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder={noteType === 'credit'
-                    ? 'e.g., Product return, Service quality issue, Post-sale discount'
-                    : 'e.g., Additional charges, Price adjustment, Short delivery'}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                 />
               </div>
             </div>
-          </div>
 
-          {/* Customer Details Card */}
-          <div className="bg-white border border-border rounded-lg p-6">
-            <h3 className="font-semibold text-foreground mb-4">Customer Details</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Select Customer
-                </label>
-                <select className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring">
-                  <option>Select a customer...</option>
-                  <option>TechCorp Solutions - 27AAAAA0000A1Z5</option>
-                  <option>Retail Innovations - 29BBBBB1111B2Y4</option>
-                  <option>Manufacturing Ltd - 24CCCCC2222C3X3</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Billing Address
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Enter billing address"
-                    className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Shipping Address
-                  </label>
-                  <div className="flex items-center gap-2 mb-2">
-                    <input type="checkbox" id="same-address" className="w-4 h-4" />
-                    <label htmlFor="same-address" className="text-sm text-muted-foreground">
-                      Same as billing
-                    </label>
-                  </div>
-                  <textarea
-                    rows={3}
-                    placeholder="Enter shipping address"
-                    className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  />
-                </div>
-              </div>
+            {/* Original Invoice */}
+            <div>
+              <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
+                Original Invoice <span className="text-muted-foreground/70 normal-case tracking-normal font-normal">(optional)</span>
+              </label>
+              <select
+                value={originalInvoice}
+                onChange={(e) => setOriginalInvoice(e.target.value)}
+                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+              >
+                <option value="">{selectedCustomerId ? 'Select original invoice…' : 'Pick a customer first to filter invoices'}</option>
+                {filteredInvoices.map((inv) => (
+                  <option key={inv.id} value={inv.invoice_number}>
+                    {inv.invoice_number}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
+                Reason for {noteType === 'credit' ? 'Credit' : 'Debit'} Note
+              </label>
+              <textarea
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={noteType === 'credit'
+                  ? 'e.g. Product return, service quality issue, post-sale discount'
+                  : 'e.g. Additional charges, price adjustment, short delivery'}
+                className="w-full px-3.5 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
+              />
             </div>
           </div>
+        </div>
+      </div>
 
-      {/* Line Items Table - Full Width */}
-      <div className="bg-white border border-border rounded-lg overflow-hidden">
-        <div className="px-8 py-5 border-b border-border flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Line Items</h3>
+      {/* STEP 3 — Line Items */}
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
+        <div className="px-5 md:px-8 py-4 md:py-5 border-b border-violet-100 dark:border-violet-400/15 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">3</div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Line Items</h3>
+          </div>
           <button
             onClick={addLineItem}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors"
+            className="inline-flex items-center gap-2 px-4 h-10 text-[13px] font-semibold bg-violet-500 text-white rounded-lg shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Item
@@ -280,65 +580,65 @@ export function CreditNoteCreate() {
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted/20">
+            <thead className="bg-violet-100 dark:bg-violet-500/15">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-12">#</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground min-w-[200px]">Item</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground min-w-[250px]">Description</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-40">HSN/SAC</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-32">Qty</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-36">Unit</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-36">Rate</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-28">Disc%</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground w-28">GST%</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-foreground w-36">Amount</th>
-                <th className="px-6 py-4 w-12"></th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-12">#</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 min-w-[180px]">Item</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 min-w-[220px]">Description</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-36">HSN/SAC</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-24">Qty</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-28">Unit</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-32">Rate</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-24">Disc%</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-24">GST%</th>
+                <th className="px-4 py-3 text-right text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-36">Amount</th>
+                <th className="px-2 py-3 w-12"></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
               {lineItems.map((item, index) => (
-                <tr key={item.id} className="group border-b border-border last:border-b-0">
-                  <td className="px-6 py-5 text-sm text-muted-foreground text-center align-top">{index + 1}</td>
-                  <td className="px-6 py-5 align-top">
+                <tr key={item.id} className="group bg-violet-50/40 dark:bg-violet-500/[0.03] hover:bg-violet-50 dark:hover:bg-violet-500/[0.06] transition-colors">
+                  <td className="px-4 py-3 text-sm text-muted-foreground text-center align-middle tabular-nums">{index + 1}</td>
+                  <td className="px-4 py-3 align-middle">
                     <input
                       type="text"
                       value={item.item}
                       onChange={(e) => updateLineItem(item.id, 'item', e.target.value)}
-                      placeholder="Product/Service"
-                      className="w-full min-w-[180px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      placeholder="Product or service"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <input
                       type="text"
                       value={item.description}
                       onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                       placeholder="Brief description"
-                      className="w-full min-w-[220px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <input
                       type="text"
                       value={item.hsn}
                       onChange={(e) => updateLineItem(item.id, 'hsn', e.target.value)}
                       placeholder="998314"
-                      className="w-full min-w-[120px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <input
                       type="number"
                       value={item.qty}
                       onChange={(e) => updateLineItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                      className="w-full min-w-[80px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <select
                       value={item.unit}
                       onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                      className="w-full min-w-[100px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     >
                       <option>Nos</option>
                       <option>Hrs</option>
@@ -347,29 +647,29 @@ export function CreditNoteCreate() {
                       <option>Pcs</option>
                     </select>
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <input
                       type="number"
                       value={item.rate}
                       onChange={(e) => updateLineItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
                       placeholder="0.00"
-                      className="w-full min-w-[100px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <input
                       type="number"
                       value={item.discount}
                       onChange={(e) => updateLineItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
                       placeholder="0"
-                      className="w-full min-w-[80px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-4 py-3 align-middle">
                     <select
                       value={item.gst}
                       onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                      className="w-full min-w-[80px] px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     >
                       <option value="0">0%</option>
                       <option value="5">5%</option>
@@ -378,14 +678,15 @@ export function CreditNoteCreate() {
                       <option value="28">28%</option>
                     </select>
                   </td>
-                  <td className="px-6 py-5 text-sm font-medium text-foreground text-right align-top">
+                  <td className="px-4 py-3 text-sm font-medium text-foreground text-right align-middle tabular-nums">
                     ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
-                  <td className="px-6 py-5 align-top">
+                  <td className="px-2 py-3 align-middle">
                     {lineItems.length > 1 && (
                       <button
                         onClick={() => removeLineItem(item.id)}
                         className="p-2 text-destructive hover:bg-destructive/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove item"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -398,59 +699,66 @@ export function CreditNoteCreate() {
         </div>
       </div>
 
-      {/* Summary Section - Full Width */}
+      {/* STEPS 4 + 5 — Additional Notes + Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white border border-border rounded-lg p-6">
-          <label className="block text-sm font-medium text-foreground mb-3">
-            Additional Notes
-          </label>
+        {/* 4. Additional Notes */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">4</div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Additional Notes</h3>
+          </div>
           <textarea
-            rows={4}
-            placeholder="Add any additional notes or remarks..."
-            className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+            rows={8}
+            value={additionalNotes}
+            onChange={(e) => setAdditionalNotes(e.target.value)}
+            placeholder="Add any internal notes, terms, or extra context for this note…"
+            className="w-full px-3.5 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
           />
+          <p className="mt-2 text-[11.5px] text-muted-foreground px-1">Stored alongside the reason — visible on the saved note.</p>
         </div>
 
-        <div className="bg-white border border-border rounded-lg p-6">
-          <div className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="font-medium text-foreground">
-                  ₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total GST</span>
-                <span className="font-medium text-foreground">
-                  ₹{totalGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              <div className="pt-3 border-t border-border">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold text-foreground">Total Amount</span>
-                  <span className={`text-2xl font-semibold ${noteType === 'credit' ? 'text-success' : 'text-warning'}`}>
-                    {noteType === 'credit' ? '-' : '+'}₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+        {/* 5. Summary */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">5</div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Summary</h3>
+          </div>
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between text-[13.5px]">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-medium text-foreground tabular-nums">
+                ₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[13.5px]">
+              <span className="text-muted-foreground">Total GST</span>
+              <span className="font-medium text-foreground tabular-nums">
+                ₹{totalGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="pt-3.5 border-t border-violet-100 dark:border-violet-400/15">
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground">Total Amount</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    {noteType === 'credit' ? 'Customer credit' : 'Additional charge'}
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground text-right">
-                  {noteType === 'credit' ? 'Customer Credit' : 'Additional Charge'}
-                </p>
+                <span className={`text-[26px] font-semibold tabular-nums ${accentClass}`}>
+                  {noteType === 'credit' ? '−' : '+'}₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
+          </div>
 
-            <div className="mt-6 pt-6 border-t border-border">
-              <div className={`px-4 py-3 rounded ${noteType === 'credit' ? 'bg-success/10' : 'bg-warning/10'}`}>
-                <div className={`text-sm font-medium ${noteType === 'credit' ? 'text-success' : 'text-warning'} mb-1`}>
-                  {noteType === 'credit' ? 'Credit Note Impact' : 'Debit Note Impact'}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {noteType === 'credit'
-                    ? 'This amount will be credited to customer account'
-                    : 'This amount will be added to customer outstanding'}
-                </div>
-              </div>
+          <div className={`mt-5 px-4 py-3 rounded-lg ${accentBgClass}`}>
+            <div className={`text-[12.5px] font-semibold ${accentClass} mb-0.5`}>
+              {noteType === 'credit' ? 'Credit Note Impact' : 'Debit Note Impact'}
+            </div>
+            <div className="text-[11.5px] text-muted-foreground leading-snug">
+              {noteType === 'credit'
+                ? "This amount will be credited to the customer's account."
+                : "This amount will be added to the customer's outstanding."}
             </div>
           </div>
         </div>
@@ -464,8 +772,19 @@ export function CreditNoteCreate() {
         noteNumber={noteNumber}
         noteDate={noteDate}
         noteType={noteType}
-        reason={reason}
+        reason={[reason.trim(), additionalNotes.trim()].filter(Boolean).join('\n\n')}
         originalInvoice={originalInvoice}
+        customer={selectedCustomer ? {
+          id: selectedCustomer.id,
+          companyName: selectedCustomer.name,
+          gstin: selectedCustomer.gstin,
+          contactName: selectedCustomer.contactName,
+          email: selectedCustomer.email,
+          phone: selectedCustomer.phone,
+          address: selectedCustomer.address,
+          city: selectedCustomer.city,
+          state: selectedCustomer.state,
+        } : null}
       />
     </div>
   );

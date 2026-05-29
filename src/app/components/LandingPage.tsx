@@ -1,10 +1,41 @@
-import { Link, useNavigate } from 'react-router';
-import { CheckCircle2, FileText, Users, BarChart3, Shield, Smartphone, ArrowRight, Menu, X, Eye, EyeOff, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ArrowRight,
+  Menu,
+  X,
+  Eye,
+  EyeOff,
+  Upload,
+  FileText,
+  Sparkles,
+  Receipt,
+  Zap,
+  IndianRupee,
+  Clock,
+  Search,
+  Plus,
+  LayoutDashboard,
+  Users,
+  Package,
+  FileMinus,
+  CircleCheck,
+  AlertCircle,
+  BarChart3,
+  ShieldCheck,
+  ChevronRight,
+  TrendingUp,
+  Bell,
+  Sun,
+  Moon
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast, Toaster } from 'sonner';
 import { supabase } from '../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../lib/gstin';
+
+type Theme = 'dark' | 'light';
+const THEME_KEY = 'kaps-landing-theme';
 
 export function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -16,7 +47,80 @@ export function LandingPage() {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [loginRole, setLoginRole] = useState<'user' | 'auditor'>('user');
 
-  // Signup form fields
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'light';
+    const saved = window.localStorage.getItem(THEME_KEY);
+    return saved === 'dark' ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {}
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  const isDark = theme === 'dark';
+
+  // Scroll-driven scene: window scales up while pinned hero fades behind it
+  const windowFrameRef = useRef<HTMLDivElement | null>(null);
+  const heroContentRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const winEl = windowFrameRef.current;
+    const heroEl = heroContentRef.current;
+    if (!winEl) return;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      winEl.style.transform = 'scale(1)';
+      if (heroEl) heroEl.style.opacity = '1';
+      return;
+    }
+
+    let rafId = 0;
+    const update = () => {
+      const winRect = winEl.getBoundingClientRect();
+      const vh = window.innerHeight;
+
+      // Window scale animation as it rises into view
+      const scaleStart = vh;
+      const scaleEnd = vh * 0.3;
+      const scaleProgress = Math.max(
+        0,
+        Math.min(1, (scaleStart - winRect.top) / (scaleStart - scaleEnd))
+      );
+      const scale = 0.94 + scaleProgress * 0.06;
+      winEl.style.transform = `scale(${scale.toFixed(3)})`;
+
+      // Hero fade — starts when window's top reaches 80% from top, fully faded at 20%
+      if (heroEl) {
+        const fadeStart = vh * 0.80;
+        const fadeEnd = vh * 0.20;
+        const fadeProgress = Math.max(
+          0,
+          Math.min(1, (fadeStart - winRect.top) / (fadeStart - fadeEnd))
+        );
+        const opacity = 1 - fadeProgress;
+        heroEl.style.opacity = opacity.toFixed(3);
+      }
+    };
+
+    const onScroll = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, []);
+
   const [signupData, setSignupData] = useState({
     fullName: '',
     email: '',
@@ -37,7 +141,6 @@ export function LandingPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       const result = await login(loginEmail, loginPassword, loginRole === 'auditor' ? 'auditor' : 'owner');
       if (result.success) {
@@ -73,7 +176,6 @@ export function LandingPage() {
       toast.error('Company logo must be under 1 MB');
       return;
     }
-
     const reader = new FileReader();
     reader.onload = () => {
       setSignupData((current) => ({ ...current, companyLogo: String(reader.result || '') }));
@@ -84,41 +186,30 @@ export function LandingPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validate required fields
     if (!signupData.fullName || !signupData.email || !signupData.password ||
         !signupData.phone || !signupData.companyName || !signupData.gstin ||
         !signupData.address || !signupData.city || !signupData.state || !signupData.pinCode) {
       toast.error('Please fill in all required fields');
       return;
     }
-
     if (signupData.password.length < 8) {
       toast.error('Password must be at least 8 characters');
       return;
     }
-
-    // GSTIN validation (15 characters)
     if (signupData.gstin.length !== 15) {
       toast.error('GSTIN must be 15 characters');
       return;
     }
-
-    // PIN Code validation (6 digits)
     if (signupData.pinCode.length !== 6 || !/^\d+$/.test(signupData.pinCode)) {
       toast.error('PIN Code must be 6 digits');
       return;
     }
-
-    // Phone validation (10 digits)
     const phoneDigits = signupData.phone.replace(/\D/g, '');
     if (phoneDigits.length !== 10) {
       toast.error('Phone number must be 10 digits');
       return;
     }
-
     try {
-      // Sign up using Supabase Auth with metadata
       const { data, error } = await supabase.auth.signUp({
         email: signupData.email,
         password: signupData.password,
@@ -137,7 +228,6 @@ export function LandingPage() {
           }
         }
       });
-
       if (error) {
         console.error('Signup error:', error);
         if (error.message.toLowerCase().includes('database error saving new user')) {
@@ -147,32 +237,17 @@ export function LandingPage() {
         toast.error('Signup failed: ' + error.message);
         return;
       }
-
       if (!data.user) {
         toast.error('Signup failed. Please try again.');
         return;
       }
-
       toast.success('Account created successfully! Please login to continue.');
       setShowSignupModal(false);
       setShowLoginModal(true);
-
-      // Reset form
       setSignupData({
-        fullName: '',
-        email: '',
-        password: '',
-        phone: '',
-        companyName: '',
-        gstin: '',
-        pan: '',
-        address: '',
-        city: '',
-        state: '',
-        pinCode: '',
-        companyLogo: ''
+        fullName: '', email: '', password: '', phone: '', companyName: '',
+        gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: ''
       });
-
     } catch (error) {
       console.error('Signup error:', error);
       toast.error('An error occurred during signup. Please try again.');
@@ -181,844 +256,1356 @@ export function LandingPage() {
 
   return (
     <>
-      <Toaster position="top-right" richColors />
-      <div className="min-h-screen bg-background">
-      {/* Navbar */}
-      <nav className="border-b border-border bg-white sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-                <FileText className="w-5 h-5 text-white" />
+      <Toaster position="top-right" richColors theme={theme} />
+      <div className={`kaps-root ${isDark ? 'dark' : ''} min-h-screen w-full text-slate-900 dark:text-white antialiased relative [overflow-x:clip]`}>
+        {/* ============================== AMBIENT BG ============================== */}
+        <div aria-hidden className="fixed inset-0 -z-10 kaps-bg" />
+        <div aria-hidden className="fixed inset-0 -z-10 kaps-stars" />
+        <div aria-hidden className="fixed inset-x-0 top-0 -z-10 h-[60vh] kaps-glow-top" />
+
+        {/* ============================== NAVBAR ============================== */}
+        <header className="sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+            <nav className="flex items-center justify-between gap-2 rounded-full border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/[0.04] backdrop-blur-xl pl-3 pr-1.5 sm:pl-4 sm:pr-2 py-1.5 shadow-[0_4px_24px_-6px_rgba(15,23,42,0.10)] dark:shadow-[0_4px_24px_-6px_rgba(0,0,0,0.55)]">
+              <a href="#" className="flex items-center gap-2.5 shrink-0">
+                <div className="relative h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-[0_0_18px_rgba(139,92,246,0.45)]">
+                  <Receipt className="h-3.5 w-3.5 text-white" strokeWidth={2.25} />
+                </div>
+                <span className="hidden sm:inline text-[15px] font-medium tracking-tight text-slate-900 dark:text-white">
+                  GSTInvoice<span className="text-violet-600 dark:text-violet-300"> Pro</span>
+                </span>
+              </a>
+
+              <div className="hidden md:flex items-center gap-0.5">
+                <PillNav href="#" active>Home</PillNav>
+                <PillNav href="#product">Product</PillNav>
+                <PillNav href="#features">Features</PillNav>
+                <PillNav href="#stories">Customers</PillNav>
+                <PillNav href="#contact">Contact</PillNav>
               </div>
-              <span className="text-xl font-semibold text-foreground">GSTInvoice Pro</span>
-            </div>
 
-            <div className="hidden md:flex items-center gap-6">
-              <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Features</a>
-              <a href="#demo" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Demo</a>
-              <div className="h-6 w-px bg-border"></div>
-              <button
-                onClick={() => openLoginModal('user')}
-                className="text-sm font-semibold px-4 py-2 text-primary border-2 border-primary hover:bg-primary/5 rounded-lg transition-colors"
-              >
-                Login
-              </button>
-              <button
-                onClick={openSignupModal}
-                className="text-sm font-semibold px-5 py-2.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors shadow-sm"
-              >
-                Get Started
-              </button>
-            </div>
-
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-white">
-            <div className="px-4 py-3 space-y-3">
-              <a href="#features" className="block text-sm font-medium text-muted-foreground">Features</a>
-              <a href="#demo" className="block text-sm font-medium text-muted-foreground">Demo</a>
-              <div className="h-px bg-border my-2"></div>
-              <button
-                onClick={() => openLoginModal('user')}
-                className="block w-full text-sm font-semibold px-4 py-2 text-primary border-2 border-primary hover:bg-primary/5 rounded-lg transition-colors text-center"
-              >
-                Login
-              </button>
-              <button
-                onClick={openSignupModal}
-                className="block w-full text-sm font-semibold px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors text-center"
-              >
-                Get Started
-              </button>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Hero Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-block px-3 py-1 bg-accent/10 text-accent rounded-full text-sm mb-6">
-                GST-Compliant Invoicing for Indian Businesses
-              </div>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold text-foreground mb-6 leading-tight">
-                Start Managing GST Invoices Professionally
-              </h1>
-              <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-                Complete invoicing solution designed for Indian businesses. Create GST-compliant invoices,
-                manage customers, track payments, and generate reports in minutes.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="hidden md:flex items-center gap-1.5 shrink-0">
+                <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+                <button
+                  onClick={() => openLoginModal('user')}
+                  className="text-[13px] font-medium px-3 h-8 inline-flex items-center text-slate-700 dark:text-white/80 hover:text-slate-900 dark:hover:text-white transition-colors"
+                >
+                  Sign in
+                </button>
                 <button
                   onClick={openSignupModal}
-                  className="inline-flex items-center justify-center px-6 py-3 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+                  className="text-[13px] font-semibold inline-flex items-center px-4 h-8 rounded-full bg-violet-500 hover:bg-violet-400 text-white shadow-[0_4px_18px_-4px_rgba(139,92,246,0.65)] transition-colors"
                 >
-                  Start Free Trial
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  Get Started
                 </button>
-                <a
-                  href="#demo"
-                  className="inline-flex items-center justify-center px-6 py-3 border border-border bg-white text-foreground rounded hover:bg-muted transition-colors"
+              </div>
+
+              <div className="md:hidden flex items-center gap-1 shrink-0">
+                <ThemeToggle isDark={isDark} onToggle={toggleTheme} compact />
+                <button
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-full text-slate-700 dark:text-white/80 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  aria-label="Toggle menu"
                 >
-                  Watch Demo
-                </a>
+                  {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                </button>
               </div>
+            </nav>
+          </div>
 
-              <div className="mt-8 flex items-center gap-6 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-success" />
-                  <span>No credit card required</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-success" />
-                  <span>14-day free trial</span>
-                </div>
-              </div>
+          {mobileMenuOpen && (
+            <div className="md:hidden mt-3 mx-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0d0d2a]/95 backdrop-blur p-4 space-y-1 shadow-lg">
+              <a onClick={() => setMobileMenuOpen(false)} href="#" className="block px-3 py-2 rounded-md text-[13px] text-slate-700 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/5">Home</a>
+              <a onClick={() => setMobileMenuOpen(false)} href="#product" className="block px-3 py-2 rounded-md text-[13px] text-slate-700 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/5">Product</a>
+              <a onClick={() => setMobileMenuOpen(false)} href="#features" className="block px-3 py-2 rounded-md text-[13px] text-slate-700 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/5">Features</a>
+              <a onClick={() => setMobileMenuOpen(false)} href="#stories" className="block px-3 py-2 rounded-md text-[13px] text-slate-700 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/5">Customers</a>
+              <a onClick={() => setMobileMenuOpen(false)} href="#contact" className="block px-3 py-2 rounded-md text-[13px] text-slate-700 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/5">Contact</a>
+              <div className="h-px bg-slate-200 dark:bg-white/10 my-2" />
+              <button onClick={() => openLoginModal('user')} className="w-full text-center px-3 py-2 rounded-md text-[13px] text-slate-700 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/5">Sign in</button>
+              <button onClick={openSignupModal} className="w-full text-center px-3 py-2 rounded-md text-[13px] font-medium border border-slate-300 dark:border-white/15 bg-white dark:bg-white/[0.04] text-slate-900 dark:text-white">Get Started</button>
             </div>
-            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-lg p-8 border border-border">
-              <div className="bg-white rounded shadow-lg p-6">
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">INVOICE</div>
-                    <div className="text-sm font-semibold">#INV-2026-001</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground mb-1">Date</div>
-                    <div className="text-sm">12 May 2026</div>
-                  </div>
-                </div>
-                <div className="space-y-3 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Product Design Services</span>
-                    <span className="font-medium">₹50,000</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">CGST @ 9%</span>
-                    <span className="font-medium">₹4,500</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">SGST @ 9%</span>
-                    <span className="font-medium">₹4,500</span>
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-border flex justify-between items-center">
-                  <span className="font-semibold">Total Amount</span>
-                  <span className="text-xl font-semibold text-primary">₹59,000</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+          )}
+        </header>
 
-      {/* Trusted By Section */}
-      <section className="py-12 bg-white border-y border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-muted-foreground mb-8">Trusted by 10,000+ businesses across India</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 items-center justify-items-center opacity-60">
-            <div className="text-2xl font-semibold text-muted-foreground">TechCorp</div>
-            <div className="text-2xl font-semibold text-muted-foreground">Retail Plus</div>
-            <div className="text-2xl font-semibold text-muted-foreground">Manufacture Co</div>
-            <div className="text-2xl font-semibold text-muted-foreground">Services Ltd</div>
-          </div>
-        </div>
-      </section>
+        {/* ============================== STICKY HERO + WINDOW SCROLL ZONE ============================== */}
+        <div className="relative">
+        {/* ============================== HERO (pinned) ============================== */}
+        <section className="sticky top-[60px] z-0 min-h-[calc(100vh-60px)] flex items-center justify-center pt-8 sm:pt-12 lg:pt-16 pb-12 lg:pb-16 px-4 sm:px-6 lg:px-8">
+          <div
+            ref={heroContentRef}
+            className="max-w-7xl mx-auto w-full -mt-6 sm:-mt-10 will-change-[opacity]"
+            style={{ opacity: 1 }}
+          >
+            <div className="grid lg:grid-cols-12 gap-10 lg:gap-8 items-center">
+              <div className="lg:col-span-6 text-center lg:text-left">
+                <p className="text-[13px] font-medium text-violet-600 dark:text-violet-300/90 tracking-wide">GST Compliance, Built for India</p>
+                <h1 className="mt-5 text-[40px] sm:text-[52px] lg:text-[58px] leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
+                  Streamline GST Invoicing with Smart Automation
+                </h1>
+                <p className="mt-7 max-w-xl mx-auto lg:mx-0 text-[15px] leading-relaxed text-slate-600 dark:text-white/55">
+                  GSTInvoice Pro creates compliant tax invoices, files GSTR-1,
+                  tracks payments and exports books — all from one workspace built for Indian businesses.
+                </p>
 
-      {/* Features Grid */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-semibold text-foreground mb-4">
-              Everything you need for GST invoicing
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Powerful features designed for Indian businesses to manage invoices, customers, and compliance effortlessly
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <FeatureCard
-              icon={<FileText className="w-6 h-6 text-accent" />}
-              title="GST-Compliant Invoices"
-              description="Generate professional invoices with GSTIN, HSN/SAC codes, and automatic tax calculations"
-            />
-            <FeatureCard
-              icon={<Users className="w-6 h-6 text-accent" />}
-              title="Customer Management"
-              description="Manage customer details, track outstanding payments, and view complete transaction history"
-            />
-            <FeatureCard
-              icon={<BarChart3 className="w-6 h-6 text-accent" />}
-              title="Analytics & Reports"
-              description="Real-time dashboards, GST reports, sales analytics, and revenue tracking"
-            />
-            <FeatureCard
-              icon={<Shield className="w-6 h-6 text-accent" />}
-              title="Multi-Company Support"
-              description="Manage multiple businesses from one account with separate GSTIN and branding"
-            />
-            <FeatureCard
-              icon={<Smartphone className="w-6 h-6 text-accent" />}
-              title="Mobile Friendly"
-              description="Create invoices on-the-go from your mobile device or tablet"
-            />
-            <FeatureCard
-              icon={<CheckCircle2 className="w-6 h-6 text-accent" />}
-              title="Payment Tracking"
-              description="Track payments, send reminders, and manage receipts efficiently"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Dashboard Preview */}
-      <section className="py-20 bg-white px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-semibold text-foreground mb-4">
-              Professional dashboard for your business
-            </h2>
-            <p className="text-lg text-muted-foreground">
-              Enterprise-grade interface designed for efficiency and ease of use
-            </p>
-          </div>
-          <div className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-lg p-4 sm:p-8 border border-border">
-            <div className="bg-white rounded shadow-2xl overflow-hidden">
-              <div className="h-8 bg-primary flex items-center px-4 gap-2">
-                <div className="w-2 h-2 rounded-full bg-white/30"></div>
-                <div className="w-2 h-2 rounded-full bg-white/30"></div>
-                <div className="w-2 h-2 rounded-full bg-white/30"></div>
-              </div>
-              <div className="p-6 sm:p-8">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-background p-4 rounded border border-border">
-                    <div className="text-xs text-muted-foreground mb-1">Total Revenue</div>
-                    <div className="text-xl font-semibold text-foreground">₹12.5L</div>
-                    <div className="text-xs text-success mt-1">+12.5%</div>
-                  </div>
-                  <div className="bg-background p-4 rounded border border-border">
-                    <div className="text-xs text-muted-foreground mb-1">Invoices</div>
-                    <div className="text-xl font-semibold text-foreground">142</div>
-                    <div className="text-xs text-success mt-1">+8</div>
-                  </div>
-                  <div className="bg-background p-4 rounded border border-border">
-                    <div className="text-xs text-muted-foreground mb-1">Pending</div>
-                    <div className="text-xl font-semibold text-foreground">₹2.8L</div>
-                    <div className="text-xs text-warning mt-1">12 invoices</div>
-                  </div>
-                  <div className="bg-background p-4 rounded border border-border">
-                    <div className="text-xs text-muted-foreground mb-1">Customers</div>
-                    <div className="text-xl font-semibold text-foreground">89</div>
-                    <div className="text-xs text-success mt-1">+5</div>
-                  </div>
-                </div>
-                <div className="h-48 bg-background rounded border border-border flex items-center justify-center">
-                  <div className="text-center">
-                    <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
-                    <div className="text-sm text-muted-foreground">Revenue Analytics Chart</div>
-                  </div>
+                <div className="mt-9 flex flex-col sm:flex-row items-center lg:justify-start justify-center gap-3">
+                  <button
+                    onClick={openSignupModal}
+                    className="group inline-flex items-center justify-center gap-1.5 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all"
+                  >
+                    Start free trial
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
+                  </button>
+                  <a
+                    href="#product"
+                    className="inline-flex items-center justify-center h-11 px-6 rounded-full border border-slate-300 dark:border-white/15 bg-white dark:bg-white/[0.03] hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-900 dark:text-white text-[14px] font-medium transition-colors shadow-sm dark:shadow-none"
+                  >
+                    See the product
+                  </a>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Pricing - Hidden for now */}
-      {false && (
-        <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-semibold text-foreground mb-4">
-                Simple, transparent pricing
-              </h2>
-              <p className="text-lg text-muted-foreground">
-                Choose the plan that fits your business needs
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-              <PricingCard
-                name="Starter"
-                price="₹499"
-                period="per month"
-                features={[
-                  'Up to 50 invoices/month',
-                  '5 customers',
-                  'Basic reports',
-                  'Email support',
-                  'GST compliance'
-                ]}
-                onGetStarted={openSignupModal}
-              />
-              <PricingCard
-                name="Professional"
-                price="₹999"
-                period="per month"
-                features={[
-                  'Unlimited invoices',
-                  'Unlimited customers',
-                  'Advanced analytics',
-                  'Priority support',
-                  'Multi-company support',
-                  'WhatsApp integration'
-                ]}
-                highlighted
-                onGetStarted={openSignupModal}
-              />
-              <PricingCard
-                name="Enterprise"
-                price="₹2,499"
-                period="per month"
-                features={[
-                  'Everything in Professional',
-                  'Custom integrations',
-                  'Dedicated account manager',
-                  'Custom branding',
-                  'API access',
-                  'SLA guarantee'
-                ]}
-                onGetStarted={openSignupModal}
-              />
+              <div className="lg:col-span-6 flex justify-center lg:justify-end">
+                <img
+                  src="/hero-illustration-light.png"
+                  alt="GSTInvoice Pro features — Tax Invoices, Customers, Reports, GSTR-1 and more orbiting a paid invoice"
+                  className="block dark:hidden w-full max-w-[640px] h-auto select-none pointer-events-none"
+                  draggable={false}
+                />
+                <img
+                  src="/hero-illustration-dark.png"
+                  alt="GSTInvoice Pro features — Tax Invoices, Customers, Reports, GSTR-1 and more orbiting a paid invoice"
+                  className="hidden dark:block w-full max-w-[640px] h-auto select-none pointer-events-none"
+                  draggable={false}
+                />
+              </div>
             </div>
           </div>
         </section>
-      )}
 
-      {/* CTA Section */}
-      <section className="py-20 bg-primary text-white px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-semibold mb-4">
-            Ready to streamline your invoicing?
-          </h2>
-          <p className="text-lg opacity-90 mb-8">
-            Join thousands of businesses managing their GST invoices professionally
-          </p>
-          <button
-            onClick={openSignupModal}
-            className="inline-flex items-center justify-center px-8 py-4 bg-accent text-white rounded hover:bg-accent/90 transition-colors text-lg"
-          >
-            Start Your Free Trial
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </button>
-          <p className="mt-4 text-sm opacity-75">No credit card required • 14-day free trial</p>
-        </div>
-      </section>
+        {/* ============================== DASHBOARD WINDOW MOCKUP (rises over pinned hero) ============================== */}
+        <section id="product" className="relative z-10 px-4 sm:px-6 lg:px-8 pb-24 lg:pb-32">
+          <div className="max-w-6xl mx-auto relative">
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-border py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-white" />
+            {/* Glass bezel wrapping the window — scroll-driven rise animation */}
+            <div
+              ref={windowFrameRef}
+              className="relative rounded-[28px] p-2 sm:p-3 bg-gradient-to-br from-white/55 via-violet-100/45 to-violet-200/40 dark:from-violet-500/[0.10] dark:via-white/[0.04] dark:to-violet-400/[0.12] backdrop-blur-2xl border border-white/85 dark:border-violet-300/20 shadow-[0_0_70px_rgba(139,92,246,0.35),0_25px_55px_-8px_rgba(139,92,246,0.32),0_10px_25px_-4px_rgba(139,92,246,0.22),inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-1px_0_rgba(139,92,246,0.18),inset_1px_0_0_rgba(255,255,255,0.65),inset_-1px_0_0_rgba(139,92,246,0.20)] dark:shadow-[0_0_80px_rgba(167,139,250,0.32),0_25px_60px_-10px_rgba(167,139,250,0.35),0_50px_120px_-30px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(167,139,250,0.30),inset_1px_0_0_rgba(255,255,255,0.10),inset_-1px_0_0_rgba(167,139,250,0.28)]"
+              style={{
+                transform: 'scale(0.94)',
+                transformOrigin: 'center top',
+                willChange: 'transform'
+              }}
+            >
+              {/* Diagonal glass surface highlight — top-left light catch */}
+              <div aria-hidden className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-white/55 via-transparent to-transparent dark:from-white/[0.10] pointer-events-none" />
+              {/* Violet refractive bleed — bottom-right tint */}
+              <div aria-hidden className="absolute inset-0 rounded-[28px] bg-gradient-to-tl from-violet-300/30 via-transparent to-transparent dark:from-violet-400/25 pointer-events-none" />
+              {/* Top-right light catch */}
+              <div aria-hidden className="absolute inset-0 rounded-[28px] bg-gradient-to-bl from-white/25 via-transparent to-transparent dark:from-white/[0.07] pointer-events-none" />
+              {/* Bottom-left violet bleed */}
+              <div aria-hidden className="absolute inset-0 rounded-[28px] bg-gradient-to-tr from-violet-300/25 via-transparent to-transparent dark:from-violet-400/20 pointer-events-none" />
+              <div className="relative rounded-[20px] overflow-hidden bg-[#0F1424] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.18)]">
+                {/* Window chrome */}
+                <div className="h-10 px-4 flex items-center justify-between bg-[#0B0F1C] border-b border-white/[0.06]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded-full bg-[#FF5F57]" />
+                    <span className="h-3 w-3 rounded-full bg-[#FEBC2E]" />
+                    <span className="h-3 w-3 rounded-full bg-[#28C840]" />
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] min-w-[260px] max-w-md w-1/2">
+                    <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                    <span className="text-[11px] font-mono text-white/55 truncate">app.gstinvoicepro.in / dashboard</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-white/30">
+                    <span className="hidden sm:block h-3 w-3 rounded-sm border border-current" />
+                    <span className="hidden sm:block h-1 w-3 rounded-sm bg-current" />
+                  </div>
                 </div>
-                <span className="text-lg font-semibold">GSTInvoice Pro</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Professional GST invoicing for Indian businesses
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-foreground">Features</a></li>
-                <li><a href="#demo" className="hover:text-foreground">Demo</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#about" className="hover:text-foreground">About</a></li>
-                <li><a href="#contact" className="hover:text-foreground">Contact</a></li>
-                <li><a href="#careers" className="hover:text-foreground">Careers</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#privacy" className="hover:text-foreground">Privacy</a></li>
-                <li><a href="#terms" className="hover:text-foreground">Terms</a></li>
-                <li><a href="#security" className="hover:text-foreground">Security</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="pt-8 border-t border-border">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">© 2026 GSTInvoice Pro. All rights reserved.</p>
-              <button
-                onClick={() => openLoginModal('auditor')}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm text-accent hover:text-accent/80 hover:underline transition-colors"
-              >
-                <Users className="w-4 h-4" />
-                <span>Auditor Login</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </footer>
 
-      {/* Login Modal */}
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-foreground">
-                {loginRole === 'user' ? 'Login to Your Account' : 'Auditor Login'}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowLoginModal(false);
-                  setLoginEmail('');
-                  setLoginPassword('');
-                  setLoginRole('user');
-                }}
-                className="p-1 hover:bg-muted rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleLogin} className="p-6 space-y-4">
-              {/* Credentials Hint */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs font-medium text-blue-900 mb-1">
-                  {loginRole === 'user' ? 'Owner Login:' : 'Auditor Login:'}
-                </p>
-                <p className="text-xs text-blue-700">
-                  {loginRole === 'user' ? (
-                    <>Use the owner account created during signup.</>
-                  ) : (
-                    <>Use credentials created by the owner</>
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent pr-12"
-                    placeholder="Enter your password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full px-4 py-2.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium"
-              >
-                Sign in
-              </button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                Don't have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowLoginModal(false);
-                    setShowSignupModal(true);
-                  }}
-                  className="text-accent hover:underline font-medium"
-                >
-                  Sign up
-                </button>
-              </p>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Signup Modal */}
-      {showSignupModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
-              <h3 className="text-xl font-semibold text-foreground">Create Your Account</h3>
-              <button
-                onClick={() => {
-                  setShowSignupModal(false);
-                  setSignupData({
-                    fullName: '',
-                    email: '',
-                    password: '',
-                    phone: '',
-                    companyName: '',
-                    gstin: '',
-                    pan: '',
-                    address: '',
-                    city: '',
-                    state: '',
-                    pinCode: '',
-                    companyLogo: ''
-                  });
-                }}
-                className="p-1 hover:bg-muted rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSignup} className="overflow-y-auto flex-1">
-              <div className="p-6 space-y-6">
-                {/* Personal Information */}
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-4">Personal Information</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Full Name <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={signupData.fullName}
-                        onChange={(e) => setSignupData({ ...signupData, fullName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="John Doe"
-                        required
-                      />
+                {/* App body */}
+                <div className="flex min-h-[460px] lg:min-h-[540px]">
+                  {/* ===== Sidebar ===== */}
+                  <aside className="hidden md:flex w-[200px] lg:w-[220px] flex-col bg-[#0F1A33] border-r border-white/[0.06]">
+                    <div className="px-4 py-4 border-b border-white/[0.06] flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-md bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.4)]">
+                        <Receipt className="h-3.5 w-3.5 text-white" strokeWidth={2.25} />
+                      </div>
+                      <div className="leading-tight">
+                        <div className="text-[12px] font-semibold text-white">GSTInvoice</div>
+                        <div className="text-[9px] text-violet-300/80 font-medium tracking-wider uppercase">Pro</div>
+                      </div>
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Phone Number <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={signupData.phone}
-                        onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="+91 98765 43210"
-                        required
-                      />
+                    <nav className="flex-1 px-2.5 py-3 space-y-0.5 overflow-hidden">
+                      <SbItem icon={<LayoutDashboard className="h-3.5 w-3.5" />} label="Dashboard" active />
+                      <SbItem icon={<Users className="h-3.5 w-3.5" />} label="Customers" />
+                      <SbItem icon={<Package className="h-3.5 w-3.5" />} label="Items & Services" />
+                      <SbItem icon={<Receipt className="h-3.5 w-3.5" />} label="Tax Invoices" badge="142" />
+                      <SbItem icon={<FileMinus className="h-3.5 w-3.5" />} label="Credit / Debit Notes" />
+                      <SbItem icon={<CircleCheck className="h-3.5 w-3.5" />} label="Receipts" />
+                      <SbItem icon={<AlertCircle className="h-3.5 w-3.5" />} label="Outstanding" badge="12" warn />
+                      <SbItem icon={<BarChart3 className="h-3.5 w-3.5" />} label="Reports & GSTR-1" />
+                      <SbItem icon={<ShieldCheck className="h-3.5 w-3.5" />} label="Auditor Management" />
+                    </nav>
+                    <div className="m-2.5 p-3 rounded-lg bg-gradient-to-br from-violet-500/15 to-violet-700/5 border border-violet-400/20">
+                      <div className="text-[10px] uppercase tracking-wider text-violet-300 font-semibold">Free trial</div>
+                      <div className="text-[12px] text-white/80 mt-0.5 font-medium">9 days remaining</div>
+                      <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full w-[65%] bg-gradient-to-r from-violet-400 to-violet-500" />
+                      </div>
                     </div>
+                  </aside>
 
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Email Address <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={signupData.email}
-                        onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="you@example.com"
-                        required
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Password <span className="text-destructive">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showSignupPassword ? 'text' : 'password'}
-                          value={signupData.password}
-                          onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent pr-12"
-                          placeholder="Minimum 8 characters"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSignupPassword(!showSignupPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showSignupPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {/* ===== Main pane ===== */}
+                  <div className="flex-1 bg-[#0B1020] p-4 sm:p-5 lg:p-6 overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 mb-5">
+                      <div>
+                        <div className="flex items-center gap-2 text-[10px] text-white/40 mb-0.5 font-medium tracking-wider uppercase">
+                          <span>Today</span>
+                          <span>·</span>
+                          <span>27 May 2026</span>
+                          <span>·</span>
+                          <span className="text-violet-300/90">FY 26-27</span>
+                        </div>
+                        <h3 className="text-[18px] lg:text-[20px] font-semibold text-white tracking-tight">Dashboard</h3>
+                      </div>
+                      <div className="hidden sm:flex items-center gap-2">
+                        <div className="hidden lg:flex items-center gap-2 px-2.5 h-8 rounded-md border border-white/[0.08] bg-white/[0.02] text-[11px] text-white/55 w-[180px]">
+                          <Search className="h-3 w-3" />
+                          <span>Search invoices…</span>
+                        </div>
+                        <button className="h-8 w-8 rounded-md border border-white/[0.08] bg-white/[0.02] flex items-center justify-center text-white/55">
+                          <Bell className="h-3.5 w-3.5" />
+                        </button>
+                        <button className="inline-flex items-center gap-1 h-8 px-3 rounded-md bg-violet-500 hover:bg-violet-400 text-white text-[11px] font-semibold shadow-[0_4px_18px_-6px_rgba(139,92,246,0.7)]">
+                          <Plus className="h-3 w-3" />
+                          New invoice
                         </button>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Company Information */}
-                <div className="border-t border-border pt-6">
-                  <h4 className="text-sm font-semibold text-foreground mb-4">Company Information</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Company Name <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={signupData.companyName}
-                        onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="Your Company Pvt Ltd"
-                        required
-                      />
+                    <div className="grid grid-cols-3 gap-3 lg:gap-4">
+                      <KpiCard label="Total Revenue" value="₹12,42,500" delta="+ 18.4%" deltaTone="positive" icon={<IndianRupee className="h-3.5 w-3.5" />} accent="violet" />
+                      <KpiCard label="Total Invoices" value="142" delta="+ 23 this month" deltaTone="positive" icon={<FileText className="h-3.5 w-3.5" />} accent="sky" />
+                      <KpiCard label="Pending Amount" value="₹2,84,000" delta="12 invoices" deltaTone="warning" icon={<Clock className="h-3.5 w-3.5" />} accent="amber" />
                     </div>
 
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">Company Logo</label>
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
-                          {signupData.companyLogo ? (
-                            <img src={signupData.companyLogo} alt="Company logo preview" className="w-full h-full object-contain" />
-                          ) : (
-                            <FileText className="w-6 h-6 text-muted-foreground" />
-                          )}
+                    <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.015] overflow-hidden">
+                      <div className="px-4 py-3 flex items-center justify-between border-b border-white/[0.06]">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-[12.5px] font-semibold text-white">Recent invoices</h4>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-white/[0.06] text-white/55">Last 7 days</span>
                         </div>
-                        <label className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors cursor-pointer">
-                          <Upload className="w-4 h-4" />
-                          <span className="text-sm">Upload Logo</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) => handleLogoUpload(event.target.files?.[0])}
-                            className="hidden"
-                          />
-                        </label>
-                        {signupData.companyLogo && (
-                          <button
-                            type="button"
-                            onClick={() => setSignupData({ ...signupData, companyLogo: '' })}
-                            className="text-sm text-muted-foreground hover:text-foreground"
-                          >
-                            Remove
-                          </button>
-                        )}
+                        <a href="#" className="text-[11px] text-violet-300 hover:text-violet-200 inline-flex items-center gap-0.5">
+                          View all <ChevronRight className="h-3 w-3" />
+                        </a>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">PNG, JPG, or SVG under 1 MB.</p>
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        GSTIN <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={signupData.gstin}
-                        onChange={(e) => {
-                          const gstin = normalizeGstin(e.target.value);
-                          setSignupData({ ...signupData, gstin, pan: extractPanFromGstin(gstin) });
-                        }}
-                        maxLength={15}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent font-mono"
-                        placeholder="22AAAAA0000A1Z5"
-                        required
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">15 characters GST Identification Number</p>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        PAN Number
-                      </label>
-                      <input
-                        type="text"
-                        value={signupData.pan}
-                        onChange={(e) => setSignupData({ ...signupData, pan: e.target.value.toUpperCase().slice(0, 10) })}
-                        maxLength={10}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent font-mono"
-                        placeholder="AAAAA0000A"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Address Information */}
-                <div className="border-t border-border pt-6">
-                  <h4 className="text-sm font-semibold text-foreground mb-4">Business Address</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Address <span className="text-destructive">*</span>
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={signupData.address}
-                        onChange={(e) => setSignupData({ ...signupData, address: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent resize-none"
-                        placeholder="Street address, building name, floor"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        City <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={signupData.city}
-                        onChange={(e) => setSignupData({ ...signupData, city: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="Mumbai"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        State <span className="text-destructive">*</span>
-                      </label>
-                      <select
-                        value={signupData.state}
-                        onChange={(e) => setSignupData({ ...signupData, state: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        required
-                      >
-                        <option value="">Select State</option>
-                        <option value="Maharashtra">Maharashtra</option>
-                        <option value="Karnataka">Karnataka</option>
-                        <option value="Tamil Nadu">Tamil Nadu</option>
-                        <option value="Gujarat">Gujarat</option>
-                        <option value="Delhi">Delhi</option>
-                        <option value="Uttar Pradesh">Uttar Pradesh</option>
-                        <option value="West Bengal">West Bengal</option>
-                        <option value="Rajasthan">Rajasthan</option>
-                        <option value="Telangana">Telangana</option>
-                        <option value="Andhra Pradesh">Andhra Pradesh</option>
-                        <option value="Kerala">Kerala</option>
-                        <option value="Punjab">Punjab</option>
-                        <option value="Haryana">Haryana</option>
-                        <option value="Madhya Pradesh">Madhya Pradesh</option>
-                        <option value="Bihar">Bihar</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        PIN Code <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={signupData.pinCode}
-                        onChange={(e) => setSignupData({ ...signupData, pinCode: e.target.value })}
-                        maxLength={6}
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="400001"
-                        required
-                      />
+                      <div className="hidden sm:grid grid-cols-12 px-4 py-2 text-[9.5px] font-semibold tracking-wider uppercase text-white/35 border-b border-white/[0.04]">
+                        <div className="col-span-3">Invoice</div>
+                        <div className="col-span-4">Customer</div>
+                        <div className="col-span-3 text-right">Amount</div>
+                        <div className="col-span-2 text-right">Status</div>
+                      </div>
+                      <div>
+                        <InvoiceRow num="INV/2026/0142" date="27 May" name="Lumen Digital LLP" gstin="27ABCDE1234F1Z5" amount="₹1,77,000" status="paid" />
+                        <InvoiceRow num="INV/2026/0141" date="26 May" name="Northwind & Co" gstin="29AABCN5678P1ZK" amount="₹54,400" status="pending" />
+                        <InvoiceRow num="INV/2026/0140" date="25 May" name="Aarav Studios" gstin="06AAACA9012R1ZQ" amount="₹2,10,000" status="paid" />
+                        <InvoiceRow num="INV/2026/0139" date="22 May" name="Helix Motors Pvt Ltd" gstin="33AAFCH7654P1Z2" amount="₹38,500" status="overdue" />
+                        <InvoiceRow num="INV/2026/0138" date="20 May" name="Saffron Foods" gstin="07AAVFS3210M1Z8" amount="₹92,600" status="paid" last />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="px-6 py-4 border-t border-border bg-muted/30 flex-shrink-0">
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium"
-                >
-                  Create Account
-                </button>
+          </div>
+        </section>
+        </div>
+        {/* ============================== /STICKY HERO + WINDOW SCROLL ZONE ============================== */}
 
-                <p className="text-xs text-center text-muted-foreground mt-3">
-                  Already have an account?{' '}
+        {/* ============================== BENTO ============================== */}
+        <section className="relative pb-20 lg:pb-24 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-5 lg:gap-6">
+            <div className="kaps-card relative rounded-2xl p-7 lg:p-8 min-h-[360px]">
+              <div className="kaps-card-glow" aria-hidden />
+              <p className="relative text-[17px] sm:text-[18px] font-medium leading-snug text-slate-900 dark:text-white">
+                Built for the way<br />
+                Indian businesses bill
+              </p>
+              <ul className="relative mt-7 space-y-4">
+                {[
+                  'GSTIN with auto-derived PAN',
+                  'HSN / SAC code lookup',
+                  'Place-of-supply CGST · SGST · IGST',
+                  'Reverse charge & e-Invoice ready',
+                  'Audit-trail for every revision'
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3.5">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/15 ring-1 ring-violet-400/30 dark:ring-violet-400/30">
+                      <Zap className="h-3 w-3 text-violet-600 dark:text-violet-300" fill="currentColor" />
+                    </span>
+                    <span className="text-[13.5px] text-slate-700 dark:text-white/75">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="grid grid-rows-[auto_1fr] gap-5 lg:gap-6">
+              <div className="kaps-card relative rounded-2xl p-7 lg:p-8">
+                <div className="kaps-card-glow" aria-hidden />
+                <div className="relative flex items-center gap-2 mb-5">
+                  <span className="h-7 w-7 rounded-md border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] flex items-center justify-center">
+                    <Receipt className="h-3.5 w-3.5 text-slate-500 dark:text-white/70" />
+                  </span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
+                  <span className="ml-1 h-7 w-7 rounded-md border border-violet-400/40 bg-violet-500/15 flex items-center justify-center">
+                    <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" />
+                  </span>
+                </div>
+                <h3 className="relative text-[17px] sm:text-[18px] font-medium leading-snug text-slate-900 dark:text-white">
+                  Compliant invoicing,<br />
+                  in a single workspace
+                </h3>
+              </div>
+
+              <div className="kaps-card relative rounded-2xl p-7 lg:p-8 overflow-hidden">
+                <div className="kaps-card-glow" aria-hidden />
+                <OrbitVisual />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================== FEATURES ============================== */}
+        <section id="features" className="relative py-20 lg:py-24 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <p className="text-[13px] font-medium text-violet-600 dark:text-violet-300/90 tracking-wide">Key Features and Benefits</p>
+            <h2 className="mt-5 text-[34px] sm:text-[44px] lg:text-[52px] leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
+              Effortless billing,
+              <br />
+              audit-ready books
+            </h2>
+            <p className="mt-6 max-w-xl mx-auto text-[14.5px] leading-relaxed text-slate-600 dark:text-white/55">
+              Everything an Indian business needs to invoice, collect, and file —
+              <br className="hidden sm:block" />
+              consolidated into one polished interface.
+            </p>
+          </div>
+
+          <div className="mt-16 max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <FeatureCard illustration={<TaxInvoiceIllustration />} title="Tax Invoices" description="Auto-numbered, IRP-ready GST invoices with CGST/SGST/IGST splits" />
+            <FeatureCard illustration={<CreditNoteIllustration />} title="Credit & Debit Notes" description="Issue and reconcile notes with a complete audit trail per invoice" />
+            <FeatureCard illustration={<OutstandingIllustration />} title="Outstanding & Receipts" description="Track every rupee outstanding and send smart payment reminders" />
+            <FeatureCard illustration={<GstrIllustration />} title="GSTR-1 & Excel" description="Export GSTR-1, multi-sheet Excel reports and e-Sign in one click" />
+          </div>
+        </section>
+
+        {/* ============================== TESTIMONIALS ============================== */}
+        <section id="stories" className="relative py-20 lg:py-24 overflow-hidden">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="max-w-4xl mx-auto text-center">
+              <p className="text-[13px] font-medium text-violet-600 dark:text-violet-300/90 tracking-wide">Loved by founders, trusted by CAs</p>
+              <h2 className="mt-5 text-[34px] sm:text-[44px] lg:text-[52px] leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
+                Experience the
+                <br />
+                Future of GST Invoicing
+              </h2>
+              <p className="mt-6 max-w-lg mx-auto text-[14.5px] leading-relaxed text-slate-600 dark:text-white/55">
+                From two-person studios to nationwide distributors,
+                <br className="hidden sm:block" />
+                GSTInvoice Pro powers thousands of Indian businesses.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-16 space-y-5 kaps-marquee-mask">
+            {/* Row 1 */}
+            <div className="kaps-marquee-track">
+              <div className="kaps-marquee flex gap-5 w-max">
+                {[
+                  { initials: 'PS', name: 'Priya Sharma', location: 'CFO · Lumen Digital, Mumbai', gradient: 'from-orange-400 to-rose-500', quote: 'We replaced Excel templates, an e-Invoice utility and a separate GSTR filer with one product. Month-end now closes in two hours.' },
+                  { initials: 'AI', name: 'CA Anjali Iyer', location: 'Partner · Iyer & Associates, Bengaluru', gradient: 'from-violet-400 to-indigo-600', quote: 'Cleanest GST product I’ve used as a chartered accountant. The GSTR-1 export matches the portal byte for byte.' },
+                  { initials: 'RM', name: 'Rohan Mehta', location: 'Founder · Saffron Foods, Pune', gradient: 'from-amber-400 to-orange-500', quote: 'Our field team raises invoices from their phone within seconds of delivery. Payments are reconciled before I reach my desk.' },
+                  { initials: 'NK', name: 'Neha Kapoor', location: 'Owner · Saanvi Boutique, Delhi', gradient: 'from-emerald-400 to-teal-600', quote: 'I run my boutique from my phone. WhatsApp invoices, instant receipts, and a clean GSTR-1 every month — everything I needed.' }
+                ].concat([
+                  { initials: 'PS', name: 'Priya Sharma', location: 'CFO · Lumen Digital, Mumbai', gradient: 'from-orange-400 to-rose-500', quote: 'We replaced Excel templates, an e-Invoice utility and a separate GSTR filer with one product. Month-end now closes in two hours.' },
+                  { initials: 'AI', name: 'CA Anjali Iyer', location: 'Partner · Iyer & Associates, Bengaluru', gradient: 'from-violet-400 to-indigo-600', quote: 'Cleanest GST product I’ve used as a chartered accountant. The GSTR-1 export matches the portal byte for byte.' },
+                  { initials: 'RM', name: 'Rohan Mehta', location: 'Founder · Saffron Foods, Pune', gradient: 'from-amber-400 to-orange-500', quote: 'Our field team raises invoices from their phone within seconds of delivery. Payments are reconciled before I reach my desk.' },
+                  { initials: 'NK', name: 'Neha Kapoor', location: 'Owner · Saanvi Boutique, Delhi', gradient: 'from-emerald-400 to-teal-600', quote: 'I run my boutique from my phone. WhatsApp invoices, instant receipts, and a clean GSTR-1 every month — everything I needed.' }
+                ]).map((t, i) => (
+                  <div key={`row1-${i}`} className="shrink-0 w-[300px] sm:w-[340px] lg:w-[360px] h-[200px]" aria-hidden={i >= 4}>
+                    <Testimonial {...t} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Row 2 — slower, offset */}
+            <div className="kaps-marquee-track">
+              <div className="kaps-marquee-slow flex gap-5 w-max">
+                {[
+                  { initials: 'VR', name: 'Vikram Rao', location: 'Director · Helix Motors, Chennai', gradient: 'from-sky-400 to-blue-600', quote: 'Place-of-supply logic and reverse-charge handling alone saved us hours every month. Implementation took an evening.' },
+                  { initials: 'AS', name: 'Arjun Singh', location: 'Founder · Indigo Labs, Hyderabad', gradient: 'from-fuchsia-400 to-pink-600', quote: 'The fastest GST tool I’ve used. Sub-100ms interactions, beautiful interface, and the auditor view is genuinely thoughtful.' },
+                  { initials: 'MP', name: 'Meera Patel', location: 'CFO · Ahaan Textiles, Surat', gradient: 'from-teal-400 to-emerald-600', quote: 'Excel exports are a dream. Our auditor receives a perfectly formatted multi-sheet workbook with one click.' },
+                  { initials: 'KR', name: 'Karan Reddy', location: 'Founder · Vega Logistics, Hyderabad', gradient: 'from-indigo-400 to-violet-600', quote: 'e-Way bill generation in under five seconds. Our dispatch team has reclaimed their afternoons.' }
+                ].concat([
+                  { initials: 'VR', name: 'Vikram Rao', location: 'Director · Helix Motors, Chennai', gradient: 'from-sky-400 to-blue-600', quote: 'Place-of-supply logic and reverse-charge handling alone saved us hours every month. Implementation took an evening.' },
+                  { initials: 'AS', name: 'Arjun Singh', location: 'Founder · Indigo Labs, Hyderabad', gradient: 'from-fuchsia-400 to-pink-600', quote: 'The fastest GST tool I’ve used. Sub-100ms interactions, beautiful interface, and the auditor view is genuinely thoughtful.' },
+                  { initials: 'MP', name: 'Meera Patel', location: 'CFO · Ahaan Textiles, Surat', gradient: 'from-teal-400 to-emerald-600', quote: 'Excel exports are a dream. Our auditor receives a perfectly formatted multi-sheet workbook with one click.' },
+                  { initials: 'KR', name: 'Karan Reddy', location: 'Founder · Vega Logistics, Hyderabad', gradient: 'from-indigo-400 to-violet-600', quote: 'e-Way bill generation in under five seconds. Our dispatch team has reclaimed their afternoons.' }
+                ]).map((t, i) => (
+                  <div key={`row2-${i}`} className="shrink-0 w-[300px] sm:w-[340px] lg:w-[360px] h-[200px]" aria-hidden={i >= 4}>
+                    <Testimonial {...t} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================== BORDERED CTA ============================== */}
+        <section className="relative py-12 lg:py-16 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto">
+            <div className="relative rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/40 via-white/5 to-violet-500/30">
+              <div className="relative rounded-[22px] bg-[#0a0a26]/95 backdrop-blur-sm px-6 sm:px-12 py-14 sm:py-16 text-center overflow-hidden">
+                <div aria-hidden className="absolute inset-0 kaps-cta-stars opacity-60" />
+                <div aria-hidden className="absolute -top-32 left-1/2 -translate-x-1/2 h-64 w-[80%] rounded-full bg-violet-600/15 blur-3xl" />
+
+                <h2 className="relative text-[28px] sm:text-[38px] lg:text-[44px] leading-[1.1] font-medium tracking-[-0.02em] text-white">
+                  Send your first GST invoice
+                  <br />
+                  before your chai gets cold.
+                </h2>
+                <p className="relative mt-5 max-w-lg mx-auto text-[14px] text-white/55">
+                  Join 10,400+ Indian businesses that have moved off spreadsheets.<br className="hidden sm:block" />
+                  Free for 14 days. No credit card required.
+                </p>
+
+                <div className="relative mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setShowSignupModal(false);
-                      setShowLoginModal(true);
-                    }}
-                    className="text-accent hover:underline font-medium"
+                    onClick={openSignupModal}
+                    className="inline-flex items-center justify-center gap-1.5 h-11 px-7 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all"
+                  >
+                    Create your account
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => openLoginModal('user')}
+                    className="inline-flex items-center justify-center h-11 px-6 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] text-white text-[14px] font-semibold transition-colors"
                   >
                     Sign in
                   </button>
-                </p>
+                </div>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        </section>
+
+        {/* ============================== FOOTER ============================== */}
+        <footer id="contact" className="relative pt-16 border-t border-slate-200 dark:border-white/[0.06] overflow-hidden">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
+              <div className="md:col-span-5">
+                <a href="#" className="flex items-center gap-2.5">
+                  <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-[0_0_22px_rgba(139,92,246,0.45)]">
+                    <Receipt className="h-4 w-4 text-white" strokeWidth={2.25} />
+                  </div>
+                  <span className="text-[17px] font-medium tracking-tight text-slate-900 dark:text-white">
+                    GSTInvoice<span className="text-violet-600 dark:text-violet-300"> Pro</span>
+                  </span>
+                </a>
+                <p className="mt-5 text-[13px] text-slate-600 dark:text-white/55 leading-relaxed max-w-sm">
+                  The modern billing stack for Indian businesses — from your first GST invoice to your hundred-thousandth.
+                </p>
+                <p className="mt-4 text-[13px] text-slate-700 dark:text-white/75">hello@gstinvoicepro.in</p>
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-400/30 text-[11px] font-medium text-emerald-600 dark:text-emerald-300">
+                    <ShieldCheck className="w-3 h-3" />
+                    GSTN-aligned
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-[11px] font-medium text-slate-700 dark:text-white/70">
+                    <TrendingUp className="w-3 h-3" />
+                    SOC 2
+                  </span>
+                </div>
+              </div>
+
+              <div className="md:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-8">
+                <FooterCol heading="Product" links={['Tax Invoices', 'Customers', 'Items & Services', 'Reports & GSTR-1', 'Receipts']} />
+                <FooterCol heading="Company" links={['About', 'Customers', 'Contact', 'Pricing', 'Press kit']} />
+                <FooterCol heading="Legal" links={['Privacy Policy', 'Terms of Service', 'Security', 'GDPR']} />
+              </div>
+            </div>
+
+            <div className="mt-12 pt-6 border-t border-slate-200 dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-[12px] text-slate-500 dark:text-white/40">© 2026 GSTInvoice Pro · Crafted in Mumbai · All rights reserved.</p>
+              <button
+                onClick={() => openLoginModal('auditor')}
+                className="text-[12px] text-slate-600 dark:text-white/55 hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                Auditor sign-in →
+              </button>
+            </div>
+          </div>
+
+          {/* Giant brand wordmark */}
+          <div className="relative mt-10 sm:mt-14 select-none">
+            <div aria-hidden className="absolute inset-x-0 bottom-0 h-[80%] bg-[radial-gradient(55%_70%_at_50%_100%,rgba(139,92,246,0.22),transparent_72%)] pointer-events-none" />
+            <div className="relative flex items-end justify-center overflow-hidden px-2 sm:px-4">
+              <h2
+                aria-label="GSTInvoice Pro"
+                className="font-black tracking-[-0.06em] leading-[0.85] text-[clamp(72px,18vw,260px)] translate-y-[12%] whitespace-nowrap"
+              >
+                <span className="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-900/25 dark:from-white dark:via-white dark:to-white/15 bg-clip-text text-transparent">
+                  GSTInvoice
+                </span>
+                <span className="bg-gradient-to-b from-violet-500 via-violet-500 to-violet-500/25 dark:from-violet-300 dark:via-violet-300 dark:to-violet-300/20 bg-clip-text text-transparent">
+                  Pro
+                </span>
+              </h2>
+            </div>
+          </div>
+        </footer>
+
+        {/* ============================== LOGIN MODAL ============================== */}
+        {showLoginModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
+            onClick={() => {
+              setShowLoginModal(false);
+              setLoginEmail('');
+              setLoginPassword('');
+              setLoginRole('user');
+            }}
+          >
+            <div
+              className="relative max-w-md w-full rounded-2xl p-[1px] bg-gradient-to-br from-violet-500/50 via-slate-200 dark:via-white/10 to-violet-500/30"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="rounded-[15px] bg-white dark:bg-[#0a0a26]/95 backdrop-blur overflow-hidden">
+                <div className="relative px-6 pt-7 pb-3 border-b border-slate-200 dark:border-white/[0.08]">
+                  <button
+                    onClick={() => {
+                      setShowLoginModal(false);
+                      setLoginEmail('');
+                      setLoginPassword('');
+                      setLoginRole('user');
+                    }}
+                    className="absolute right-5 top-5 p-1 rounded-md text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
+                      <Receipt className="w-4 h-4 text-white" strokeWidth={2.25} />
+                    </div>
+                    <h3 className="text-[16px] font-medium tracking-tight text-slate-900 dark:text-white">
+                      {loginRole === 'user' ? 'Welcome back' : 'Auditor sign-in'}
+                    </h3>
+                  </div>
+                  <p className="text-[13px] text-slate-600 dark:text-white/55 mt-4">
+                    {loginRole === 'user'
+                      ? 'Sign in with the owner account you created at signup.'
+                      : 'Sign in with the auditor credentials shared by the business owner.'}
+                  </p>
+                </div>
+
+                <form onSubmit={handleLogin} className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
+                    <input
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      className="kaps-input"
+                      placeholder="you@company.com"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="kaps-input pr-11"
+                        placeholder="Enter your password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all"
+                  >
+                    Sign in
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                  </button>
+
+                  {loginRole === 'user' && (
+                    <p className="text-[12px] text-center text-slate-500 dark:text-white/50 pt-1">
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowLoginModal(false);
+                          setShowSignupModal(true);
+                        }}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        Create one
+                      </button>
+                    </p>
+                  )}
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================== SIGNUP MODAL ============================== */}
+        {showSignupModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
+            onClick={() => {
+              setShowSignupModal(false);
+              setSignupData({
+                fullName: '', email: '', password: '', phone: '', companyName: '',
+                gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: ''
+              });
+            }}
+          >
+            <div
+              className="relative max-w-2xl w-full max-h-[92vh] rounded-2xl p-[1px] bg-gradient-to-br from-violet-500/50 via-slate-200 dark:via-white/10 to-violet-500/30"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="rounded-[15px] bg-white dark:bg-[#0a0a26]/95 backdrop-blur overflow-hidden flex flex-col max-h-[calc(92vh-2px)]">
+                <div className="relative px-6 pt-7 pb-5 border-b border-slate-200 dark:border-white/[0.08] flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      setShowSignupModal(false);
+                      setSignupData({
+                        fullName: '', email: '', password: '', phone: '', companyName: '',
+                        gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: ''
+                      });
+                    }}
+                    className="absolute right-5 top-5 p-1 rounded-md text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
+                      <Receipt className="w-4 h-4 text-white" strokeWidth={2.25} />
+                    </div>
+                    <h3 className="text-[16px] font-medium tracking-tight text-slate-900 dark:text-white">Create your workspace</h3>
+                  </div>
+                  <p className="text-[13px] text-slate-600 dark:text-white/55 mt-2.5">
+                    Set up your business profile to start raising GST-compliant invoices in minutes.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSignup} className="overflow-y-auto flex-1 kaps-modal-scroll">
+                  <div className="p-6 space-y-7">
+                    <FormSection label="Personal information">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Full name" required>
+                          <input type="text" value={signupData.fullName} onChange={(e) => setSignupData({ ...signupData, fullName: e.target.value })} className="kaps-input" placeholder="Priya Sharma" required />
+                        </Field>
+                        <Field label="Phone number" required>
+                          <input type="tel" value={signupData.phone} onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })} className="kaps-input" placeholder="+91 98765 43210" required />
+                        </Field>
+                        <Field label="Email address" required className="sm:col-span-2">
+                          <input type="email" value={signupData.email} onChange={(e) => setSignupData({ ...signupData, email: e.target.value })} className="kaps-input" placeholder="you@company.com" required />
+                        </Field>
+                        <Field label="Password" required className="sm:col-span-2">
+                          <div className="relative">
+                            <input type={showSignupPassword ? 'text' : 'password'} value={signupData.password} onChange={(e) => setSignupData({ ...signupData, password: e.target.value })} className="kaps-input pr-11" placeholder="Minimum 8 characters" required />
+                            <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white">
+                              {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </Field>
+                      </div>
+                    </FormSection>
+
+                    <FormSection label="Company information">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Company name" required className="sm:col-span-2">
+                          <input type="text" value={signupData.companyName} onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })} className="kaps-input" placeholder="Your Company Pvt Ltd" required />
+                        </Field>
+                        <Field label="Company logo" className="sm:col-span-2">
+                          <div className="flex items-center gap-4">
+                            <div className="h-14 w-14 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] flex items-center justify-center overflow-hidden">
+                              {signupData.companyLogo ? (
+                                <img src={signupData.companyLogo} alt="Company logo preview" className="w-full h-full object-contain" />
+                              ) : (
+                                <FileText className="w-5 h-5 text-slate-400 dark:text-white/40" />
+                              )}
+                            </div>
+                            <label className="inline-flex items-center gap-2 px-3.5 h-9 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] rounded-lg hover:bg-slate-50 dark:hover:bg-white/[0.08] transition-colors cursor-pointer text-[13px] font-medium text-slate-700 dark:text-white/85">
+                              <Upload className="w-3.5 h-3.5" />
+                              Upload logo
+                              <input type="file" accept="image/*" onChange={(event) => handleLogoUpload(event.target.files?.[0])} className="hidden" />
+                            </label>
+                            {signupData.companyLogo && (
+                              <button type="button" onClick={() => setSignupData({ ...signupData, companyLogo: '' })} className="text-[12px] text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white">
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 dark:text-white/40 mt-2">PNG, JPG, or SVG · under 1 MB.</p>
+                        </Field>
+                        <Field label="GSTIN" required className="sm:col-span-2" hint="15-character GST identification number">
+                          <input
+                            type="text"
+                            value={signupData.gstin}
+                            onChange={(e) => {
+                              const gstin = normalizeGstin(e.target.value);
+                              setSignupData({ ...signupData, gstin, pan: extractPanFromGstin(gstin) });
+                            }}
+                            maxLength={15}
+                            className="kaps-input font-mono"
+                            placeholder="22AAAAA0000A1Z5"
+                            required
+                          />
+                        </Field>
+                        <Field label="PAN number" className="sm:col-span-2">
+                          <input
+                            type="text"
+                            value={signupData.pan}
+                            onChange={(e) => setSignupData({ ...signupData, pan: e.target.value.toUpperCase().slice(0, 10) })}
+                            maxLength={10}
+                            className="kaps-input font-mono"
+                            placeholder="AAAAA0000A"
+                          />
+                        </Field>
+                      </div>
+                    </FormSection>
+
+                    <FormSection label="Business address">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Address" required className="sm:col-span-2">
+                          <textarea rows={2} value={signupData.address} onChange={(e) => setSignupData({ ...signupData, address: e.target.value })} className="kaps-input resize-none py-2.5" placeholder="Street address, building name, floor" required />
+                        </Field>
+                        <Field label="City" required>
+                          <input type="text" value={signupData.city} onChange={(e) => setSignupData({ ...signupData, city: e.target.value })} className="kaps-input" placeholder="Mumbai" required />
+                        </Field>
+                        <Field label="State" required>
+                          <select value={signupData.state} onChange={(e) => setSignupData({ ...signupData, state: e.target.value })} className="kaps-input" required>
+                            <option value="">Select state</option>
+                            <option value="Maharashtra">Maharashtra</option>
+                            <option value="Karnataka">Karnataka</option>
+                            <option value="Tamil Nadu">Tamil Nadu</option>
+                            <option value="Gujarat">Gujarat</option>
+                            <option value="Delhi">Delhi</option>
+                            <option value="Uttar Pradesh">Uttar Pradesh</option>
+                            <option value="West Bengal">West Bengal</option>
+                            <option value="Rajasthan">Rajasthan</option>
+                            <option value="Telangana">Telangana</option>
+                            <option value="Andhra Pradesh">Andhra Pradesh</option>
+                            <option value="Kerala">Kerala</option>
+                            <option value="Punjab">Punjab</option>
+                            <option value="Haryana">Haryana</option>
+                            <option value="Madhya Pradesh">Madhya Pradesh</option>
+                            <option value="Bihar">Bihar</option>
+                          </select>
+                        </Field>
+                        <Field label="PIN code" required>
+                          <input type="text" value={signupData.pinCode} onChange={(e) => setSignupData({ ...signupData, pinCode: e.target.value })} maxLength={6} className="kaps-input" placeholder="400001" required />
+                        </Field>
+                      </div>
+                    </FormSection>
+                  </div>
+
+                  <div className="px-6 py-4 border-t border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.02] flex-shrink-0">
+                    <button
+                      type="submit"
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all"
+                    >
+                      Create my workspace
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                    </button>
+                    <p className="text-[12px] text-center text-slate-500 dark:text-white/50 mt-3">
+                      Already have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSignupModal(false);
+                          setShowLoginModal(true);
+                        }}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        Sign in
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Local helper styles */}
+      <style>{`
+        .kaps-root {
+          font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+          background: #fafbfd;
+        }
+        .kaps-root.dark {
+          background: #050516;
+        }
+
+        /* Light theme background */
+        .kaps-bg {
+          background:
+            radial-gradient(70% 50% at 50% 0%, rgba(139, 92, 246, 0.10), transparent 60%),
+            radial-gradient(50% 40% at 50% 100%, rgba(139, 92, 246, 0.06), transparent 60%),
+            linear-gradient(180deg, #fafbfd 0%, #f4f3fb 30%, #fafbfd 60%, #ffffff 100%);
+        }
+        .dark .kaps-bg {
+          background:
+            radial-gradient(80% 60% at 50% 0%, rgba(76, 29, 149, 0.25), transparent 60%),
+            radial-gradient(60% 50% at 50% 100%, rgba(76, 29, 149, 0.18), transparent 60%),
+            linear-gradient(180deg, #060617 0%, #08081f 30%, #06061a 60%, #04040f 100%);
+        }
+
+        /* Stars only in dark */
+        .kaps-stars { display: none; }
+        .dark .kaps-stars {
+          display: block;
+          background-image:
+            radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.55), transparent 50%),
+            radial-gradient(1px 1px at 28% 42%, rgba(255,255,255,0.35), transparent 50%),
+            radial-gradient(1.5px 1.5px at 48% 22%, rgba(255,255,255,0.55), transparent 50%),
+            radial-gradient(1px 1px at 72% 38%, rgba(255,255,255,0.4), transparent 50%),
+            radial-gradient(1px 1px at 84% 12%, rgba(255,255,255,0.55), transparent 50%),
+            radial-gradient(1px 1px at 18% 78%, rgba(255,255,255,0.5), transparent 50%),
+            radial-gradient(1.5px 1.5px at 64% 88%, rgba(255,255,255,0.45), transparent 50%),
+            radial-gradient(1px 1px at 36% 92%, rgba(255,255,255,0.35), transparent 50%),
+            radial-gradient(1px 1px at 92% 70%, rgba(255,255,255,0.45), transparent 50%),
+            radial-gradient(1px 1px at 8% 60%, rgba(255,255,255,0.4), transparent 50%),
+            radial-gradient(1px 1px at 58% 64%, rgba(255,255,255,0.35), transparent 50%),
+            radial-gradient(1.5px 1.5px at 22% 32%, rgba(167, 139, 250, 0.55), transparent 50%),
+            radial-gradient(1.5px 1.5px at 78% 56%, rgba(167, 139, 250, 0.5), transparent 50%);
+          background-size: 800px 800px;
+          opacity: 0.9;
+        }
+
+        /* Top glow */
+        .kaps-glow-top {
+          background: radial-gradient(60% 60% at 50% 0%, rgba(139, 92, 246, 0.08), transparent 65%);
+        }
+        .dark .kaps-glow-top {
+          background: radial-gradient(60% 60% at 50% 0%, rgba(139, 92, 246, 0.18), transparent 65%);
+        }
+
+        /* Cards */
+        .kaps-card {
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.06);
+          box-shadow:
+            0 1px 0 rgba(255,255,255,0.6) inset,
+            0 20px 50px -30px rgba(15, 23, 42, 0.14);
+        }
+        .dark .kaps-card {
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+          border: 1px solid rgba(255,255,255,0.07);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.05),
+            0 30px 80px -40px rgba(0,0,0,0.6);
+        }
+
+        /* Violet border for testimonial cards in light theme */
+        .kaps-testimonial-card {
+          border-color: rgba(139, 92, 246, 0.38);
+          border-width: 2px;
+        }
+        .dark .kaps-testimonial-card { border-width: 2px; }
+
+        /* Card inner glow */
+        .kaps-card-glow {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(60% 60% at 50% 0%, rgba(139, 92, 246, 0.05), transparent 65%);
+          opacity: 0.6;
+          pointer-events: none;
+          border-radius: inherit;
+        }
+        .dark .kaps-card-glow {
+          background: radial-gradient(60% 60% at 50% 0%, rgba(139, 92, 246, 0.18), transparent 65%);
+        }
+
+        /* CTA stars (always dark surface) */
+        .kaps-cta-stars {
+          background-image:
+            radial-gradient(1px 1px at 10% 30%, rgba(255,255,255,0.4), transparent 50%),
+            radial-gradient(1px 1px at 28% 70%, rgba(255,255,255,0.35), transparent 50%),
+            radial-gradient(1.5px 1.5px at 48% 12%, rgba(255,255,255,0.5), transparent 50%),
+            radial-gradient(1px 1px at 72% 80%, rgba(255,255,255,0.4), transparent 50%),
+            radial-gradient(1px 1px at 84% 22%, rgba(255,255,255,0.45), transparent 50%),
+            radial-gradient(1.5px 1.5px at 60% 50%, rgba(167, 139, 250, 0.55), transparent 50%);
+          background-size: 400px 400px;
+        }
+
+        /* Inputs — light by default, dark when ancestor has .dark */
+        /* Modal scrollbar — match the dark theme instead of falling back to the system white scrollbar */
+        .kaps-modal-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(15, 23, 42, 0.20) transparent;
+        }
+        .dark .kaps-modal-scroll {
+          scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+        }
+        .kaps-modal-scroll::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .kaps-modal-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .kaps-modal-scroll::-webkit-scrollbar-thumb {
+          background-color: rgba(15, 23, 42, 0.20);
+          border-radius: 9999px;
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+        .kaps-modal-scroll::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(15, 23, 42, 0.30);
+        }
+        .dark .kaps-modal-scroll::-webkit-scrollbar-thumb {
+          background-color: rgba(255, 255, 255, 0.14);
+        }
+        .dark .kaps-modal-scroll::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(255, 255, 255, 0.22);
+        }
+
+        .kaps-input {
+          width: 100%;
+          padding-left: 0.875rem;
+          padding-right: 0.875rem;
+          height: 2.75rem;
+          border: 1px solid rgba(139, 92, 246, 0.35);
+          border-radius: 0.625rem;
+          font-size: 14px;
+          color: #0f172a;
+          background: #ffffff;
+          transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+        }
+        .kaps-input::placeholder { color: #94a3b8; }
+        .kaps-input:focus {
+          outline: none;
+          border-color: rgba(139, 92, 246, 0.6);
+          background: #ffffff;
+          box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+        }
+        .dark .kaps-input {
+          border-color: rgba(255,255,255,0.10);
+          color: #ffffff;
+          background: rgba(255,255,255,0.03);
+        }
+        .dark .kaps-input::placeholder { color: rgba(255,255,255,0.35); }
+        .dark .kaps-input:focus {
+          border-color: rgba(139, 92, 246, 0.6);
+          background: rgba(255,255,255,0.05);
+          box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18);
+        }
+        textarea.kaps-input { height: auto; }
+        select.kaps-input {
+          appearance: none;
+          background-image:
+            linear-gradient(45deg, transparent 50%, #64748b 50%),
+            linear-gradient(135deg, #64748b 50%, transparent 50%);
+          background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+          background-size: 5px 5px, 5px 5px;
+          background-repeat: no-repeat;
+        }
+        .dark select.kaps-input {
+          background-image:
+            linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.5) 50%),
+            linear-gradient(135deg, rgba(255,255,255,0.5) 50%, transparent 50%);
+        }
+        select.kaps-input option { background: #ffffff; color: #0f172a; }
+        .dark select.kaps-input option { background: #0a0a26; color: #ffffff; }
+
+        /* Floating animations */
+        @keyframes kaps-float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+        }
+        .kaps-float { animation: kaps-float 5s ease-in-out infinite; }
+        .kaps-float-slow { animation: kaps-float 7s ease-in-out infinite; }
+
+        /* Testimonials marquee */
+        .kaps-marquee-mask {
+          -webkit-mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+          mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+        }
+        .kaps-marquee-track { overflow: hidden; }
+        @keyframes kaps-marquee-scroll {
+          from { transform: translate3d(0, 0, 0); }
+          to { transform: translate3d(calc(-50% - 0.625rem), 0, 0); }
+        }
+        .kaps-marquee { animation: kaps-marquee-scroll 60s linear infinite; will-change: transform; }
+        .kaps-marquee-slow { animation: kaps-marquee-scroll 60s linear infinite; animation-delay: -7.5s; will-change: transform; }
+
+        /* Feature cards — static glowing violet border on each card */
+        .kaps-feature-card::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          box-shadow:
+            0 0 0 1px rgba(139, 92, 246, 0.42),
+            0 0 24px rgba(139, 92, 246, 0.22),
+            0 0 60px rgba(139, 92, 246, 0.10);
+        }
+        .dark .kaps-feature-card::after {
+          box-shadow:
+            0 0 0 1px rgba(167, 139, 250, 0.42),
+            0 0 24px rgba(139, 92, 246, 0.30),
+            0 0 60px rgba(139, 92, 246, 0.18);
+        }
+        .kaps-marquee-mask:hover .kaps-marquee,
+        .kaps-marquee-mask:hover .kaps-marquee-slow { animation-play-state: paused; }
+        @media (prefers-reduced-motion: reduce) {
+          .kaps-marquee, .kaps-marquee-slow { animation: none; }
+        }
+      `}</style>
     </>
   );
 }
 
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+/* ============================== SUB-COMPONENTS ============================== */
+
+function ThemeToggle({ isDark, onToggle, compact }: { isDark: boolean; onToggle: () => void; compact?: boolean }) {
   return (
-    <div className="bg-white p-6 rounded-lg border border-border hover:shadow-md transition-shadow">
-      <div className="w-12 h-12 bg-accent/10 rounded flex items-center justify-center mb-4">
-        {icon}
+    <button
+      onClick={onToggle}
+      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      className={`relative inline-flex items-center justify-center rounded-full border border-slate-300 dark:border-white/15 bg-white dark:bg-white/[0.03] hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-700 dark:text-white/80 transition-colors shadow-sm dark:shadow-none ${
+        compact ? 'h-9 w-9' : 'h-9 w-9'
+      }`}
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  );
+}
+
+function PillNav({ href, children, active }: { href: string; children: React.ReactNode; active?: boolean }) {
+  return (
+    <a
+      href={href}
+      className={`px-4 h-8 inline-flex items-center text-[13px] rounded-full transition-colors ${
+        active
+          ? 'bg-violet-500 text-white shadow-[0_4px_18px_-6px_rgba(139,92,246,0.7)]'
+          : 'text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white'
+      }`}
+    >
+      {children}
+    </a>
+  );
+}
+
+/* ===== Dashboard mockup sub-parts (always dark) ===== */
+
+function SbItem({
+  icon, label, active, badge, warn
+}: { icon: React.ReactNode; label: string; active?: boolean; badge?: string; warn?: boolean }) {
+  return (
+    <div
+      className={`group flex items-center justify-between px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+        active
+          ? 'bg-violet-500/15 text-white border border-violet-400/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+          : 'text-white/60 hover:text-white hover:bg-white/[0.04] border border-transparent'
+      }`}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={active ? 'text-violet-300' : 'text-white/45 group-hover:text-white/70'}>{icon}</span>
+        <span className="truncate">{label}</span>
       </div>
-      <h3 className="font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
+      {badge && (
+        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tabular-nums ${
+          warn ? 'bg-amber-500/20 text-amber-300' : 'bg-white/[0.06] text-white/55'
+        }`}>
+          {badge}
+        </span>
+      )}
     </div>
   );
 }
 
-function PricingCard({
-  name,
-  price,
-  period,
-  features,
-  highlighted,
-  onGetStarted
+function KpiCard({
+  label, value, delta, deltaTone, icon, accent
 }: {
-  name: string;
-  price: string;
-  period: string;
-  features: string[];
-  highlighted?: boolean;
-  onGetStarted: () => void;
+  label: string;
+  value: string;
+  delta: string;
+  deltaTone: 'positive' | 'warning' | 'neutral';
+  icon: React.ReactNode;
+  accent: 'violet' | 'sky' | 'amber';
 }) {
+  const accentClasses: Record<string, string> = {
+    violet: 'from-violet-400/30 to-violet-600/10 text-violet-300 border-violet-400/30',
+    sky: 'from-sky-400/30 to-sky-600/10 text-sky-300 border-sky-400/30',
+    amber: 'from-amber-400/30 to-amber-600/10 text-amber-300 border-amber-400/30'
+  };
+  const deltaClasses: Record<string, string> = {
+    positive: 'text-emerald-300',
+    warning: 'text-amber-300',
+    neutral: 'text-white/50'
+  };
   return (
-    <div className={`bg-white p-8 rounded-lg border-2 ${highlighted ? 'border-accent shadow-lg scale-105' : 'border-border'}`}>
-      {highlighted && (
-        <div className="bg-accent text-white text-xs px-3 py-1 rounded-full inline-block mb-4">
-          Most Popular
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 lg:p-4">
+      <div className="flex items-start justify-between">
+        <div className="text-[10px] uppercase tracking-wider text-white/45 font-semibold">{label}</div>
+        <div className={`h-6 w-6 rounded-md border bg-gradient-to-br flex items-center justify-center ${accentClasses[accent]}`}>
+          {icon}
         </div>
-      )}
-      <h3 className="text-xl font-semibold text-foreground mb-2">{name}</h3>
-      <div className="mb-6">
-        <span className="text-4xl font-semibold text-foreground">{price}</span>
-        <span className="text-sm text-muted-foreground ml-2">{period}</span>
       </div>
-      <ul className="space-y-3 mb-8">
-        {features.map((feature, index) => (
-          <li key={index} className="flex items-start gap-3 text-sm">
-            <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-            <span className="text-muted-foreground">{feature}</span>
+      <div className="mt-2 text-[18px] lg:text-[22px] font-semibold text-white tracking-tight tabular-nums">{value}</div>
+      <div className={`text-[10px] font-semibold mt-0.5 ${deltaClasses[deltaTone]}`}>{delta}</div>
+    </div>
+  );
+}
+
+function InvoiceRow({
+  num, date, name, gstin, amount, status, last
+}: {
+  num: string; date: string; name: string; gstin: string; amount: string; status: 'paid' | 'pending' | 'overdue'; last?: boolean;
+}) {
+  const statusStyles: Record<string, string> = {
+    paid: 'bg-emerald-500/10 text-emerald-300 border-emerald-400/30',
+    pending: 'bg-amber-500/10 text-amber-300 border-amber-400/30',
+    overdue: 'bg-rose-500/10 text-rose-300 border-rose-400/30'
+  };
+  return (
+    <div className={`grid grid-cols-12 px-4 py-2.5 items-center text-[11px] ${last ? '' : 'border-b border-white/[0.04]'} hover:bg-white/[0.015]`}>
+      <div className="col-span-12 sm:col-span-3 flex items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-400/70 hidden sm:inline-block" />
+        <div className="min-w-0">
+          <div className="font-mono text-white/85 truncate">{num}</div>
+          <div className="text-[10px] text-white/40">{date}</div>
+        </div>
+      </div>
+      <div className="hidden sm:block col-span-4 min-w-0">
+        <div className="text-white/85 font-medium truncate">{name}</div>
+        <div className="text-[10px] text-white/40 font-mono truncate">{gstin}</div>
+      </div>
+      <div className="hidden sm:block col-span-3 text-right font-semibold text-white tabular-nums">{amount}</div>
+      <div className="hidden sm:flex col-span-2 justify-end">
+        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${statusStyles[status]}`}>
+          {status}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Bento orbit ===== */
+
+function OrbitVisual() {
+  const orbiters = [
+    { initials: 'PS', g: 'from-orange-400 to-rose-500', style: { top: '8%', right: '14%' }, anim: 'kaps-float' },
+    { initials: 'AM', g: 'from-fuchsia-400 to-pink-500', style: { bottom: '12%', right: '8%' }, anim: 'kaps-float-slow' },
+    { initials: 'AI', g: 'from-emerald-400 to-teal-500', style: { bottom: '6%', left: '36%' }, anim: 'kaps-float' },
+    { initials: 'RM', g: 'from-sky-400 to-indigo-500', style: { top: '14%', left: '10%' }, anim: 'kaps-float-slow' }
+  ];
+  return (
+    <div className="relative w-full h-[180px] flex items-center justify-center">
+      <div className="absolute h-[180px] w-[180px] rounded-full border border-slate-200 dark:border-white/[0.07]" />
+      <div className="absolute h-[130px] w-[130px] rounded-full border border-dashed border-slate-200 dark:border-white/[0.07]" />
+      <div className="absolute h-[80px] w-[80px] rounded-full border border-slate-200 dark:border-white/[0.08]" />
+
+      {orbiters.map((o, i) => (
+        <div
+          key={i}
+          className={`absolute h-7 w-7 rounded-full bg-gradient-to-br ${o.g} ring-2 ring-white dark:ring-[#0a0a26] flex items-center justify-center text-[10px] font-bold text-white ${o.anim}`}
+          style={o.style}
+        >
+          {o.initials}
+        </div>
+      ))}
+
+      <div className="relative">
+        <div className="absolute -inset-3 rounded-full bg-violet-500/30 blur-xl" />
+        <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-violet-400 to-violet-700 ring-2 ring-white dark:ring-white/15 flex items-center justify-center shadow-[0_0_30px_-4px_rgba(139,92,246,0.7)]">
+          <span className="text-[11px] font-bold text-white">10K+</span>
+        </div>
+        <p className="absolute left-1/2 -translate-x-1/2 mt-2 text-[11px] text-slate-500 dark:text-white/60 whitespace-nowrap top-full">Businesses</p>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Feature illustrations (theme aware) ===== */
+
+function FeatureCard({
+  illustration, title, description
+}: { illustration: React.ReactNode; title: string; description: string }) {
+  return (
+    <div className="kaps-card kaps-feature-card relative rounded-2xl p-6 lg:p-7 flex flex-col">
+      <div className="kaps-card-glow" aria-hidden />
+      <div className="relative h-24 mb-6 flex items-center">{illustration}</div>
+      <h3 className="relative text-[15px] font-medium text-slate-900 dark:text-white">{title}</h3>
+      <p className="relative mt-2 text-[12.5px] leading-relaxed text-slate-600 dark:text-white/55">{description}</p>
+    </div>
+  );
+}
+
+function TaxInvoiceIllustration() {
+  return (
+    <div className="relative w-full">
+      <div className="rounded-md border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] p-2.5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[8.5px] font-mono text-slate-500 dark:text-white/50">INV/2026/0142</span>
+          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-400/30">Paid</span>
+        </div>
+        <div className="space-y-1">
+          <div className="flex justify-between">
+            <div className="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20" />
+            <div className="h-1.5 w-10 rounded-full bg-violet-400/80" />
+          </div>
+          <div className="flex justify-between">
+            <div className="h-1.5 w-16 rounded-full bg-slate-200 dark:bg-white/12" />
+            <div className="h-1.5 w-8 rounded-full bg-slate-300 dark:bg-white/20" />
+          </div>
+          <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-white/5">
+            <div className="h-1.5 w-10 rounded-full bg-slate-400 dark:bg-white/30" />
+            <div className="h-2 w-14 rounded-full bg-violet-500" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreditNoteIllustration() {
+  return (
+    <div className="relative w-full">
+      <div className="absolute -top-1 left-3 right-6 h-10 rounded-md border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] p-1.5">
+        <div className="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/15" />
+        <div className="h-1.5 w-16 rounded-full bg-slate-200 dark:bg-white/10 mt-1.5" />
+      </div>
+      <div className="relative ml-6 mt-6 h-10 rounded-md border border-violet-400/40 bg-violet-500/10 p-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[8px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Credit Note</span>
+          <FileMinus className="h-3 w-3 text-violet-600 dark:text-violet-300" />
+        </div>
+        <div className="h-1.5 w-10 rounded-full bg-slate-300 dark:bg-white/15 mt-1.5" />
+      </div>
+    </div>
+  );
+}
+
+function OutstandingIllustration() {
+  return (
+    <div className="relative w-full">
+      <div className="rounded-md border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] p-2.5">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Clock className="h-3 w-3 text-amber-500 dark:text-amber-300" />
+          <span className="text-[8.5px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Pending · 12</span>
+        </div>
+        <div className="space-y-1.5">
+          {[80, 60, 45].map((w, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <div className="h-1.5 w-10 rounded-full bg-slate-300 dark:bg-white/15" />
+              <div className="flex-1 h-1 rounded-full bg-slate-200 dark:bg-white/5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500" style={{ width: `${w}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GstrIllustration() {
+  return (
+    <div className="relative w-full">
+      <div className="rounded-md border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] p-2.5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[8.5px] font-bold uppercase tracking-wider text-slate-700 dark:text-white/65">GSTR-1 · May</span>
+          <BarChart3 className="h-3 w-3 text-violet-600 dark:text-violet-300" />
+        </div>
+        <div className="flex items-end gap-1 h-8">
+          {[40, 65, 50, 80, 60, 95, 75].map((h, i) => (
+            <div key={i} className="flex-1 rounded-sm bg-gradient-to-t from-violet-500/30 to-violet-400" style={{ height: `${h}%` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Testimonial({
+  initials, name, location, gradient, quote
+}: { initials: string; name: string; location: string; gradient: string; quote: string }) {
+  return (
+    <div className="kaps-card kaps-testimonial-card relative rounded-2xl p-5 lg:p-6 h-full flex flex-col">
+      <div className="kaps-card-glow" aria-hidden />
+      <div className="relative flex items-center gap-3 mb-4">
+        <div className={`h-9 w-9 shrink-0 rounded-full bg-gradient-to-br ${gradient} ring-2 ring-white dark:ring-white/10 flex items-center justify-center text-[11px] font-bold text-white`}>
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium text-slate-900 dark:text-white truncate">{name}</div>
+          <div className="text-[11px] text-slate-500 dark:text-white/45 truncate">{location}</div>
+        </div>
+      </div>
+      <p className="relative text-[12.5px] leading-relaxed text-slate-700 dark:text-white/65 line-clamp-4">{quote}</p>
+    </div>
+  );
+}
+
+function FooterCol({ heading, links }: { heading: string; links: string[] }) {
+  return (
+    <div>
+      <h4 className="text-[11px] font-semibold tracking-[0.16em] uppercase text-slate-500 dark:text-white/40 mb-4">{heading}</h4>
+      <ul className="space-y-2.5">
+        {links.map((l) => (
+          <li key={l}>
+            <a href="#" className="text-[13px] text-slate-700 dark:text-white/70 hover:text-slate-900 dark:hover:text-white transition-colors">{l}</a>
           </li>
         ))}
       </ul>
-      <button
-        onClick={onGetStarted}
-        className={`block w-full py-3 px-4 rounded text-center transition-colors ${
-          highlighted
-            ? 'bg-accent text-white hover:bg-accent/90'
-            : 'bg-background border border-border text-foreground hover:bg-muted'
-        }`}
-      >
-        Get Started
-      </button>
+    </div>
+  );
+}
+
+function FormSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="text-[11px] font-semibold tracking-[0.16em] uppercase text-slate-500 dark:text-white/45 mb-3.5">{label}</h4>
+      {children}
+    </div>
+  );
+}
+
+function Field({
+  label, required, children, className, hint
+}: { label: string; required?: boolean; children: React.ReactNode; className?: string; hint?: string }) {
+  return (
+    <div className={className}>
+      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">
+        {label}{required && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-[11px] text-slate-400 dark:text-white/40 mt-1.5">{hint}</p>}
     </div>
   );
 }

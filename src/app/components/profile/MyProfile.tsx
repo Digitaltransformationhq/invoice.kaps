@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Mail, Phone, MapPin, Save, Camera, Building2, Upload } from 'lucide-react';
+import { Mail, Phone, MapPin, Save, Camera, Building2, Upload, ShieldCheck, Edit3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
@@ -32,17 +32,15 @@ const emptyProfile: ProfileFormData = {
   companyLogo: '',
 };
 
-const states = [
-  'Maharashtra',
-  'Karnataka',
-  'Tamil Nadu',
-  'Gujarat',
-  'Delhi',
-  'Rajasthan',
-  'Uttar Pradesh',
-  'West Bengal',
-  'Telangana',
-  'Kerala',
+const STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman & Nicobar Islands', 'Chandigarh', 'Dadra & Nagar Haveli and Daman & Diu',
+  'Delhi', 'Jammu & Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
 ];
 
 export function MyProfile() {
@@ -282,86 +280,116 @@ export function MyProfile() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[320px]">
-        <div className="text-sm text-muted-foreground">Loading profile...</div>
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Loading profile…</p>
+        </div>
       </div>
     );
   }
 
+  const locationLabel = [formData.city, formData.state].filter(Boolean).join(', ');
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">My Profile</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your personal information</p>
+          <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">
+            Account
+          </div>
+          <h1 className="text-[22px] sm:text-[24px] font-semibold text-foreground tracking-tight leading-tight">
+            My Profile
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage your personal and company information.</p>
         </div>
         {!isEditing ? (
           <button
             onClick={() => setIsEditing(true)}
-            className="px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+            className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
           >
+            <Edit3 className="w-4 h-4" />
             Edit Profile
           </button>
         ) : (
           <div className="flex items-center gap-2">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
             >
               <Save className="w-4 h-4" />
-              {isSaving ? 'Saving...' : 'Save Changes'}
+              {isSaving ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white border border-border rounded-lg p-6">
+        {/* Sidebar — Profile Card */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
           <div className="flex flex-col items-center">
             <div className="relative">
-              <div className="w-32 h-32 bg-accent rounded-full flex items-center justify-center">
-                <span className="text-4xl text-white font-semibold">{initials}</span>
+              <div className="w-32 h-32 bg-gradient-to-br from-violet-500 to-violet-600 rounded-full flex items-center justify-center shadow-[0_8px_24px_-8px_rgba(139,92,246,0.5)]">
+                <span className="text-[40px] text-white font-semibold">{initials}</span>
               </div>
               {isEditing && (
                 <button
                   disabled
-                  title="Profile photo upload is not enabled yet"
-                  className="absolute bottom-0 right-0 w-10 h-10 bg-primary/60 text-white rounded-full flex items-center justify-center cursor-not-allowed"
+                  title="Profile photo upload is coming soon"
+                  className="absolute bottom-0 right-0 w-10 h-10 bg-violet-300/60 text-white rounded-full flex items-center justify-center cursor-not-allowed border-2 border-card"
                 >
                   <Camera className="w-5 h-5" />
                 </button>
               )}
             </div>
-            <h3 className="text-lg font-semibold text-foreground mt-4">{formData.name || 'User'}</h3>
-            <p className="text-sm text-muted-foreground">{formData.designation}</p>
-            <p className="text-sm text-muted-foreground mt-1">{formData.company}</p>
+            <h3 className="text-[18px] font-semibold text-foreground tracking-tight mt-4">{formData.name || 'User'}</h3>
+            <span className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 text-[11px] font-semibold tracking-wider uppercase">
+              <ShieldCheck className="w-3 h-3" />
+              {formData.designation || (isOwner ? 'Owner' : 'Auditor')}
+            </span>
+            {formData.company && (
+              <p className="text-[13.5px] text-muted-foreground mt-2 text-center">{formData.company}</p>
+            )}
           </div>
 
-          <div className="mt-6 pt-6 border-t border-border space-y-3">
+          <div className="mt-6 pt-6 border-t border-violet-100 dark:border-violet-400/15 space-y-3.5">
             <div className="flex items-center gap-3 text-sm">
-              <Mail className="w-4 h-4 text-muted-foreground" />
-              <span className="text-foreground break-all">{formData.email}</span>
+              <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center text-violet-700 dark:text-violet-300 flex-shrink-0">
+                <Mail className="w-4 h-4" />
+              </div>
+              <span className="text-foreground break-all">{formData.email || 'Not set'}</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
-              <Phone className="w-4 h-4 text-muted-foreground" />
-              <span className="text-foreground">{formData.phone || 'Not set'}</span>
+              <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center text-violet-700 dark:text-violet-300 flex-shrink-0">
+                <Phone className="w-4 h-4" />
+              </div>
+              <span className="text-foreground tabular-nums">{formData.phone || 'Not set'}</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
-              <MapPin className="w-4 h-4 text-muted-foreground" />
-              <span className="text-foreground">{[formData.city, formData.state].filter(Boolean).join(', ') || 'Not set'}</span>
+              <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center text-violet-700 dark:text-violet-300 flex-shrink-0">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <span className="text-foreground">{locationLabel || 'Not set'}</span>
             </div>
           </div>
         </div>
 
+        {/* Main column — Personal + Company Information */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-border rounded-lg p-6">
-            <h3 className="font-semibold text-foreground mb-4">Personal Information</h3>
+          {/* Personal Information */}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">1</div>
+              <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Personal Information</h3>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <ProfileInput label="Full Name" value={formData.name} disabled={!isEditing} onChange={(name) => setFormData({ ...formData, name })} />
               <ProfileInput label="Email Address" type="email" value={formData.email} disabled={!isEditing} onChange={(email) => setFormData({ ...formData, email })} />
@@ -370,36 +398,44 @@ export function MyProfile() {
             </div>
           </div>
 
-          <div className="bg-white border border-border rounded-lg p-6">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <h3 className="font-semibold text-foreground">Company Information</h3>
+          {/* Company Information */}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">2</div>
+                <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Company Information</h3>
+              </div>
               {!isOwner && (
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">View only</span>
+                <span className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                  View only
+                </span>
               )}
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Company Logo */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-foreground mb-2">Company Logo</label>
+                <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Company Logo</label>
                 <div className="flex flex-wrap items-center gap-4">
-                  <div className="w-20 h-20 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
+                  <div className="w-20 h-20 rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/40 dark:bg-violet-500/[0.05] flex items-center justify-center overflow-hidden">
                     {formData.companyLogo ? (
                       <img src={formData.companyLogo} alt="Company logo" className="w-full h-full object-contain" />
                     ) : (
-                      <Building2 className="w-7 h-7 text-muted-foreground" />
+                      <Building2 className="w-7 h-7 text-violet-600 dark:text-violet-300" />
                     )}
                   </div>
                   {isEditing && isOwner && (
                     <>
-                      <label className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded hover:bg-muted transition-colors cursor-pointer">
+                      <label className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors cursor-pointer">
                         <Upload className="w-4 h-4" />
-                        <span className="text-sm">Upload Logo</span>
+                        <span>Upload Logo</span>
                         <input type="file" accept="image/*" className="hidden" onChange={(event) => handleCompanyLogoUpload(event.target.files?.[0])} />
                       </label>
                       {formData.companyLogo && (
                         <button
                           type="button"
                           onClick={() => setFormData({ ...formData, companyLogo: '' })}
-                          className="text-sm text-muted-foreground hover:text-foreground"
+                          className="text-[12.5px] text-muted-foreground hover:text-destructive transition-colors"
                         >
                           Remove
                         </button>
@@ -407,26 +443,28 @@ export function MyProfile() {
                     </>
                   )}
                 </div>
+                <p className="text-[11px] text-muted-foreground mt-2">Square PNG/JPG under 1 MB looks best on invoices.</p>
               </div>
+
               <div className="md:col-span-2">
                 <ProfileInput label="Company Name" value={formData.company} disabled={!isEditing || !isOwner} onChange={(company) => setFormData({ ...formData, company })} />
               </div>
-              <ProfileInput label="GSTIN" value={formData.gstin} disabled={!isEditing || !isOwner} inputClassName="font-mono" onChange={(gstin) => setFormData({ ...formData, gstin })} />
-              <ProfileInput label="Pincode" value={formData.pincode} disabled={!isEditing || !isOwner} onChange={(pincode) => setFormData({ ...formData, pincode })} />
+              <ProfileInput label="GSTIN" value={formData.gstin} disabled={!isEditing || !isOwner} inputClassName="font-mono uppercase" onChange={(gstin) => setFormData({ ...formData, gstin })} placeholder="29ABCDE1234F1Z5" />
+              <ProfileInput label="Pincode" value={formData.pincode} disabled={!isEditing || !isOwner} onChange={(pincode) => setFormData({ ...formData, pincode })} placeholder="560001" />
               <div className="md:col-span-2">
                 <ProfileInput label="Address" value={formData.address} disabled={!isEditing || !isOwner} onChange={(address) => setFormData({ ...formData, address })} />
               </div>
               <ProfileInput label="City" value={formData.city} disabled={!isEditing || !isOwner} onChange={(city) => setFormData({ ...formData, city })} />
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">State</label>
+                <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">State</label>
                 <select
                   value={formData.state}
                   onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                   disabled={!isEditing || !isOwner}
-                  className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                  className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <option value="">Select state</option>
-                  {states.map((state) => (
+                  {STATES.map((state) => (
                     <option key={state}>{state}</option>
                   ))}
                 </select>
@@ -458,14 +496,14 @@ function ProfileInput({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-foreground mb-2">{label}</label>
+      <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{label}</label>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${inputClassName}`}
+        className={`w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed ${inputClassName}`}
       />
     </div>
   );

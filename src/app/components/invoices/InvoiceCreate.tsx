@@ -656,176 +656,188 @@ export function InvoiceCreate() {
       </div>
 
       <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-8 space-y-6 md:space-y-8">
-        {/* Two Column Layout - Bill To and Invoice Meta */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Bill To Section with Dropdowns Above */}
-          <div className="space-y-4">
-            {/* Bill To Section */}
-            <div>
-            <h3 className="text-xs font-semibold text-muted-foreground mb-4 uppercase tracking-wide">BILL TO</h3>
-            <div className="bg-white rounded-lg p-4 md:p-6 space-y-4 md:space-y-5">
-              <div>
-                <select
-                  value={selectedCustomer}
-                  onChange={(e) => handleCustomerChange(e.target.value)}
-                  disabled={isLoadingCustomers}
-                  className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                >
-                  <option value="">{isLoadingCustomers ? 'Loading customers...' : 'Select customer...'}</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.companyName} - {customer.gstin}
-                    </option>
-                  ))}
-                  <option value="add-new" className="text-accent font-medium">+ Add Customer</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    PO Number
-                  </label>
-                  <input
-                    type="text"
-                    value={poNumber}
-                    onChange={(e) => setPoNumber(e.target.value)}
-                    placeholder=""
-                    className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    PO Date
-                  </label>
-                  <input
-                    type="date"
-                    value={poDate}
-                    onChange={(e) => setPoDate(e.target.value)}
-                    placeholder="dd-mm-yyyy"
-                    className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Vehicle No.
-                  </label>
-                  <input
-                    type="text"
-                    value={vehicleNo}
-                    onChange={(e) => setVehicleNo(e.target.value)}
-                    placeholder=""
-                    className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Transport Mode
-                  </label>
-                  <input
-                    type="text"
-                    value={transportMode}
-                    onChange={(e) => setTransportMode(e.target.value)}
-                    placeholder=""
-                    className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                  />
-                </div>
-              </div>
+        {/* STEPS 1 + 2 — Customer & Invoice Details */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 1. Customer */}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">1</div>
+              <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Customer</h3>
             </div>
+            <div className="space-y-3.5">
+              <select
+                value={selectedCustomer}
+                onChange={(e) => handleCustomerChange(e.target.value)}
+                disabled={isLoadingCustomers}
+                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+              >
+                <option value="">{isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.companyName} — {customer.gstin}
+                  </option>
+                ))}
+                <option value="add-new" className="text-violet-600 font-medium">+ Add new customer</option>
+              </select>
+
+              <div className="min-h-[230px]">
+              {selectedCustomerDetails ? (
+                <div className="rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/50 dark:bg-violet-500/[0.05] p-4">
+                  {/* Top row: company name + GSTIN chip + customer type */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[16px] font-semibold text-foreground leading-tight">{selectedCustomerDetails.companyName}</div>
+                      {selectedCustomerDetails.gstin && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-100 dark:bg-violet-500/15 text-[12px] font-mono font-semibold text-violet-700 dark:text-violet-200">
+                          <span className="text-[10px] uppercase tracking-wider opacity-70">GSTIN</span>
+                          {selectedCustomerDetails.gstin}
+                        </div>
+                      )}
+                    </div>
+                    {selectedCustomerDetails.customerType && (
+                      <span className="shrink-0 px-2.5 py-1 rounded-md bg-card border border-violet-200 dark:border-violet-400/30 text-[10.5px] font-bold tracking-wider uppercase text-violet-600 dark:text-violet-300">
+                        {selectedCustomerDetails.customerType}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Address row */}
+                  {(selectedCustomerDetails.address || selectedCustomerDetails.city || selectedCustomerDetails.state) && (
+                    <div className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15">
+                      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Address</div>
+                      <div className="text-[13.5px] text-foreground leading-snug">
+                        {[selectedCustomerDetails.address, selectedCustomerDetails.city, selectedCustomerDetails.state].filter(Boolean).join(', ')}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Contact row — 3-col grid so name / phone / email each get their own labeled slot */}
+                  {(selectedCustomerDetails.contactName || selectedCustomerDetails.email || selectedCustomerDetails.phone) && (
+                    <div className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2.5">
+                      {selectedCustomerDetails.contactName && (
+                        <div className="min-w-0">
+                          <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Contact</div>
+                          <div className="text-[13.5px] text-foreground truncate">{selectedCustomerDetails.contactName}</div>
+                        </div>
+                      )}
+                      {selectedCustomerDetails.phone && (
+                        <div className="min-w-0">
+                          <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Phone</div>
+                          <div className="text-[13.5px] text-foreground tabular-nums truncate">{selectedCustomerDetails.phone}</div>
+                        </div>
+                      )}
+                      {selectedCustomerDetails.email && (
+                        <div className="min-w-0">
+                          <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Email</div>
+                          <div className="text-[13.5px] text-foreground truncate" title={selectedCustomerDetails.email}>{selectedCustomerDetails.email}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-muted-foreground px-1">Pick an existing customer or add a new one — their GSTIN drives the tax calculation below.</p>
+              )}
+              </div>
             </div>
           </div>
 
-          {/* Invoice Meta Section */}
-          <div>
-            <h3 className="text-xs font-semibold text-muted-foreground mb-4 uppercase tracking-wide">INVOICE META</h3>
-            <div className="bg-white rounded-lg p-4 md:p-6 space-y-4 md:space-y-5">
+          {/* 2. Invoice Details */}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">2</div>
+              <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Invoice Details</h3>
+            </div>
+            <div className="space-y-5">
+              {/* Invoice Number with inline Manual toggle */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-foreground">
-                    Invoice Number
-                  </label>
-                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <label className="block text-[14px] font-semibold text-foreground">Invoice Number</label>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-[12.5px] text-muted-foreground hover:text-foreground transition-colors">
                     <input
                       type="checkbox"
                       checked={isManualInvoiceNumber}
                       onChange={(e) => setIsManualInvoiceNumber(e.target.checked)}
-                      className="w-4 h-4 rounded"
+                      className="w-3.5 h-3.5 rounded accent-violet-500"
                     />
-                    <span className="text-sm text-muted-foreground">Manual</span>
+                    Manual override
                   </label>
                 </div>
                 {!isManualInvoiceNumber ? (
-                  <div className="px-4 py-3 bg-muted/30 border border-input rounded-lg text-sm text-muted-foreground">
-                    Auto-generated on save
+                  <div className="inline-flex items-center gap-2.5 w-full px-3.5 h-11 bg-violet-50/50 dark:bg-violet-500/[0.06] border border-violet-200 dark:border-violet-400/25 rounded-lg text-[14px] text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-violet-400 shrink-0" />
+                    <span className="flex-1 truncate">Auto-generated when you save</span>
+                    <span className="text-[10.5px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-300 shrink-0">Default series</span>
                   </div>
                 ) : (
                   <input
                     type="text"
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
+                    placeholder="INV/2026/0143"
+                    className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition font-mono"
                   />
                 )}
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Auto from default series. Toggle Manual to override.
-                </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Document Date
-                </label>
-                <input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                />
+
+              {/* Document Date + Place of Supply */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[14px] font-semibold text-foreground mb-2">Document Date</label>
+                  <input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[14px] font-semibold text-foreground mb-2">Place of Supply</label>
+                  <select
+                    value={placeOfSupply}
+                    onChange={(e) => setPlaceOfSupply(e.target.value)}
+                    className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                  >
+                    <option>Auto from customer</option>
+                    <option>Maharashtra</option>
+                    <option>Karnataka</option>
+                    <option>Tamil Nadu</option>
+                    <option>Gujarat</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Place of Supply
-                </label>
-                <select
-                  value={placeOfSupply}
-                  onChange={(e) => setPlaceOfSupply(e.target.value)}
-                  className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-sm"
-                >
-                  <option>Auto from customer</option>
-                  <option>Maharashtra</option>
-                  <option>Karnataka</option>
-                  <option>Tamil Nadu</option>
-                  <option>Gujarat</option>
-                </select>
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Override only when needed
-                </p>
-              </div>
-              <div className="flex items-center gap-3 pt-2">
-                <input
-                  type="checkbox"
-                  id="reverse-charge"
-                  checked={reverseCharge}
-                  onChange={(e) => setReverseCharge(e.target.checked)}
-                  className="w-4 h-4 rounded"
-                />
-                <label htmlFor="reverse-charge" className="text-sm font-medium text-foreground cursor-pointer">
-                  Reverse charge applicable
+
+              {/* Reverse charge — extra top padding nudges this block down */}
+              <div className="pt-3">
+                <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/40 dark:bg-violet-500/[0.04] p-3.5 hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={reverseCharge}
+                    onChange={(e) => setReverseCharge(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-500 mt-0.5 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-semibold text-foreground leading-tight">Reverse charge applicable</div>
+                    <div className="text-[12.5px] text-muted-foreground mt-1 leading-snug">Recipient pays GST instead of supplier (RCM). Used for notified goods and unregistered suppliers.</div>
+                  </div>
                 </label>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Line Items Section */}
-        <div className="bg-white rounded-lg">
-          <div className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between border-b border-border">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">LINE ITEMS</h3>
+        {/* 3. Line Items */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
+          <div className="px-4 md:px-6 py-4 flex items-center justify-between border-b border-violet-100 dark:border-violet-400/15">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">3</div>
+              <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Items & Services</h3>
+            </div>
             <button
               onClick={addLineItem}
-              className="inline-flex items-center gap-2 px-3 md:px-4 py-2 text-sm border border-border bg-white rounded-lg hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3 md:px-4 text-[12.5px] font-medium border border-violet-300 dark:border-violet-400/30 bg-card text-foreground rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Add Line</span>
             </button>
           </div>
@@ -858,7 +870,7 @@ export function InvoiceCreate() {
                           value={item.itemId || ''}
                           onChange={(e) => handleLineItemSelection(item.id, e.target.value)}
                           disabled={isLoadingItems}
-                          className="w-full px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                          className="w-full px-4 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                         >
                           <option value="">{isLoadingItems ? 'Loading items...' : 'Select item...'}</option>
                           {catalogItems.map((catalogItem) => (
@@ -873,7 +885,7 @@ export function InvoiceCreate() {
                           value={item.description}
                           onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                           placeholder="Description"
-                          className="w-full px-4 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+                          className="w-full px-4 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
                         />
                       </div>
                     </td>
@@ -883,7 +895,7 @@ export function InvoiceCreate() {
                         value={item.hsn}
                         onChange={(e) => updateLineItem(item.id, 'hsn', e.target.value)}
                         placeholder=""
-                        className="w-full min-w-[120px] px-3 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        className="w-full min-w-[120px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
                     <td className="px-3 py-5 align-top">
@@ -891,14 +903,14 @@ export function InvoiceCreate() {
                         type="number"
                         value={item.qty}
                         onChange={(e) => updateLineItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                        className="w-full min-w-[80px] px-3 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
                     <td className="px-3 py-5 align-top">
                       <select
                         value={item.unit}
                         onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                        className="w-full min-w-[100px] px-3 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        className="w-full min-w-[100px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       >
                         <option>JOB</option>
                         <option>Hrs</option>
@@ -915,7 +927,7 @@ export function InvoiceCreate() {
                         value={item.rate}
                         onChange={(e) => updateLineItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
                         placeholder="0"
-                        className="w-full min-w-[100px] px-3 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        className="w-full min-w-[100px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
                     <td className="px-3 py-5 align-top">
@@ -924,14 +936,14 @@ export function InvoiceCreate() {
                         value={item.discount}
                         onChange={(e) => updateLineItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
                         placeholder="0"
-                        className="w-full min-w-[80px] px-3 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
                     <td className="px-3 py-5 align-top">
                       <select
                         value={item.gst}
                         onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                        className="w-full min-w-[80px] px-3 py-2.5 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       >
                         <option value="0">0</option>
                         <option value="5">5</option>
@@ -1018,7 +1030,7 @@ export function InvoiceCreate() {
                           value={item.itemId || ''}
                           onChange={(e) => handleLineItemSelection(item.id, e.target.value)}
                           disabled={isLoadingItems}
-                          className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                         >
                           <option value="">{isLoadingItems ? 'Loading items...' : 'Select item...'}</option>
                           {catalogItems.map((catalogItem) => (
@@ -1040,7 +1052,7 @@ export function InvoiceCreate() {
                           value={item.description}
                           onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                           placeholder="Enter description"
-                          className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
                         />
                       </div>
 
@@ -1054,7 +1066,7 @@ export function InvoiceCreate() {
                           value={item.hsn}
                           onChange={(e) => updateLineItem(item.id, 'hsn', e.target.value)}
                           placeholder=""
-                          className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                         />
                       </div>
 
@@ -1068,7 +1080,7 @@ export function InvoiceCreate() {
                             type="number"
                             value={item.qty}
                             onChange={(e) => updateLineItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                            className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                            className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
                         <div>
@@ -1078,7 +1090,7 @@ export function InvoiceCreate() {
                           <select
                             value={item.unit}
                             onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                            className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                            className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           >
                             <option>JOB</option>
                             <option>Hrs</option>
@@ -1102,7 +1114,7 @@ export function InvoiceCreate() {
                             value={item.rate}
                             onChange={(e) => updateLineItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
                             placeholder="0"
-                            className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                            className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
                         <div>
@@ -1114,7 +1126,7 @@ export function InvoiceCreate() {
                             value={item.discount}
                             onChange={(e) => updateLineItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
                             placeholder="0"
-                            className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                            className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
                       </div>
@@ -1127,7 +1139,7 @@ export function InvoiceCreate() {
                         <select
                           value={item.gst}
                           onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                          className="w-full px-4 py-3 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                         >
                           <option value="0">0</option>
                           <option value="5">5</option>
@@ -1160,80 +1172,137 @@ export function InvoiceCreate() {
           </div>
         </div>
 
-        {/* Bottom Section - Remarks and Summary */}
+        {/* 4. References & Transport — optional, grouped so the main flow stays clean */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">4</div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight">
+              References & Transport
+              <span className="ml-2 text-[11px] font-normal text-muted-foreground">Optional</span>
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-[13px] font-semibold text-foreground mb-1.5">PO Number</label>
+              <input
+                type="text"
+                value={poNumber}
+                onChange={(e) => setPoNumber(e.target.value)}
+                placeholder="—"
+                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] font-semibold text-foreground mb-1.5">PO Date</label>
+              <input
+                type="date"
+                value={poDate}
+                onChange={(e) => setPoDate(e.target.value)}
+                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] font-semibold text-foreground mb-1.5">Vehicle Number</label>
+              <input
+                type="text"
+                value={vehicleNo}
+                onChange={(e) => setVehicleNo(e.target.value)}
+                placeholder="—"
+                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] font-semibold text-foreground mb-1.5">Transport Mode</label>
+              <input
+                type="text"
+                value={transportMode}
+                onChange={(e) => setTransportMode(e.target.value)}
+                placeholder="Road / Rail / Air"
+                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 5. Notes & Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-          <div className="bg-white rounded-lg p-4 md:p-6">
-            <label className="block text-sm font-medium text-foreground mb-3">
-              Remarks / Narration
-            </label>
+          {/* Notes */}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+            <div className="flex items-center gap-2 mb-3.5">
+              <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">5</div>
+              <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Notes</h3>
+            </div>
             <textarea
-              rows={5}
+              rows={6}
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Add any additional notes or remarks for this invoice..."
-              className="w-full px-4 py-3 border border-input bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none text-sm"
+              placeholder="Add any additional notes or remarks for this invoice…"
+              className="w-full px-3.5 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
             />
           </div>
 
-          <div className="bg-white rounded-lg p-4 md:p-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-sm py-2">
-                <span className="text-muted-foreground">Sub-Total (Taxable)</span>
-                <span className="font-semibold text-foreground text-base">
-                  ₹{subtotal.toFixed(2)}
-                </span>
+          {/* Summary */}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+            <div className="flex items-center gap-2 mb-3.5">
+              <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">6</div>
+              <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Summary</h3>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-[14px]">
+                <span className="text-muted-foreground">Sub-total (taxable)</span>
+                <span className="font-semibold text-foreground tabular-nums">₹{subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between text-sm py-2">
+              <div className="flex items-center justify-between text-[14px]">
                 <span className="text-muted-foreground">{isInterStateSupply ? 'IGST @ 18%' : 'CGST @ 9%'}</span>
-                <span className="font-medium text-foreground">
-                  ₹{(isInterStateSupply ? igst : cgst).toFixed(2)}
-                </span>
+                <span className="font-medium text-foreground tabular-nums">₹{(isInterStateSupply ? igst : cgst).toFixed(2)}</span>
               </div>
               {!isInterStateSupply && (
-              <div className="flex items-center justify-between text-sm py-2">
-                <span className="text-muted-foreground">SGST @ 9%</span>
-                <span className="font-medium text-foreground">
-                  ₹{sgst.toFixed(2)}
-                </span>
-              </div>
+                <div className="flex items-center justify-between text-[14px]">
+                  <span className="text-muted-foreground">SGST @ 9%</span>
+                  <span className="font-medium text-foreground tabular-nums">₹{sgst.toFixed(2)}</span>
+                </div>
               )}
-              <div className="pt-4 border-t-2 border-border">
-                <div className="flex items-center justify-between py-2">
-                  <span className="font-semibold text-foreground text-lg">Total</span>
-                  <span className="text-3xl font-bold text-primary">
-                    ₹{totalAmount.toFixed(2)}
-                  </span>
+              <div className="pt-3.5 mt-2 border-t border-violet-200 dark:border-violet-400/20">
+                <div className="flex items-end justify-between gap-3">
+                  <span className="text-[12px] uppercase tracking-wider font-semibold text-muted-foreground">Total</span>
+                  <span className="text-[28px] sm:text-[32px] font-bold text-violet-600 dark:text-violet-300 tabular-nums leading-none">₹{totalAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 pt-2">
-          <button
-            onClick={handleSaveDraft}
-            disabled={isSavingInvoice}
-            className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
-          >
-            <Save className="w-4 h-4" />
-            {isSavingInvoice ? 'Saving...' : 'Save as Draft'}
-          </button>
-          {!invoiceCreated && (
+        {/* Sticky-feeling action bar */}
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl px-4 md:px-6 py-3.5 shadow-[0_1px_2px_rgba(139,92,246,0.06)] flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between gap-3">
+          <div className="text-[13px] text-muted-foreground hidden sm:block">
+            {invoiceCreated ? 'Invoice created — review and send to your customer.' : 'Review the details above, then create the invoice.'}
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5">
             <button
-              onClick={() => setShowPreview(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 border border-border bg-white rounded hover:bg-muted transition-colors text-sm"
+              onClick={handleSaveDraft}
+              disabled={isSavingInvoice}
+              className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50"
             >
-              <Eye className="w-4 h-4" />
-              Preview
+              <Save className="w-3.5 h-3.5" />
+              {isSavingInvoice ? 'Saving…' : 'Save as Draft'}
             </button>
-          )}
-          <button
-            onClick={invoiceCreated ? () => setShowPreview(true) : handleCreateInvoice}
-            disabled={isSavingInvoice}
-            className="inline-flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            {isSavingInvoice ? 'Saving...' : invoiceCreated ? 'View Invoice' : 'Create Invoice'}
-          </button>
+            {!invoiceCreated && (
+              <button
+                onClick={() => setShowPreview(true)}
+                className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Preview
+              </button>
+            )}
+            <button
+              onClick={invoiceCreated ? () => setShowPreview(true) : handleCreateInvoice}
+              disabled={isSavingInvoice}
+              className="inline-flex items-center justify-center h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSavingInvoice ? 'Saving…' : invoiceCreated ? 'View Invoice' : 'Create Invoice →'}
+            </button>
+          </div>
         </div>
       </div>
 

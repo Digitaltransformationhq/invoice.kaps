@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { Plus, Search, Filter, Download, Eye, Edit, MoreVertical, Wallet, CheckCircle, Printer, Copy, Trash2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { PaymentVoucherPreview } from './PaymentVoucherPreview';
 import ExcelJS from 'exceljs';
@@ -21,7 +22,11 @@ export function PaymentVouchersList() {
   const [selectedVoucher, setSelectedVoucher] = useState<typeof paymentVouchers[0] | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedVouchers, setSelectedVouchers] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const itemsPerPage = 10;
 
   const filteredVouchers = paymentVouchers.filter(voucher => {
@@ -49,17 +54,26 @@ export function PaymentVouchersList() {
   );
 
   useEffect(() => {
+    if (!activeMenu) return;
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.action-menu')) {
+      const target = event.target as Node;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        !(target as HTMLElement).closest('.action-menu-trigger')
+      ) {
         setActiveMenu(null);
       }
     };
-
-    if (activeMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
+    const close = () => setActiveMenu(null);
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
   }, [activeMenu]);
 
   useEffect(() => {
@@ -78,6 +92,13 @@ export function PaymentVouchersList() {
   }, [showViewModal]);
 
   const handleExport = async () => {
+    const vouchersToExport = selectedVouchers.length > 0
+      ? paymentVouchers.filter((v) => selectedVouchers.includes(v.id))
+      : filteredVouchers;
+    if (vouchersToExport.length === 0) {
+      toast.error('Nothing to export — clear filters or select vouchers first.');
+      return;
+    }
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Payment Vouchers');
 
@@ -121,7 +142,7 @@ export function PaymentVouchersList() {
     });
 
     // Add data rows
-    filteredVouchers.forEach((voucher) => {
+    vouchersToExport.forEach((voucher) => {
       const row = worksheet.addRow([
         voucher.id,
         voucher.date,
@@ -185,7 +206,7 @@ export function PaymentVouchersList() {
 
     // Calculate category totals
     const categoryTotals: Record<string, number> = {};
-    filteredVouchers.forEach(voucher => {
+    vouchersToExport.forEach(voucher => {
       if (!categoryTotals[voucher.category]) {
         categoryTotals[voucher.category] = 0;
       }
@@ -263,7 +284,7 @@ export function PaymentVouchersList() {
     link.click();
     document.body.removeChild(link);
 
-    toast.success(`Exported ${filteredVouchers.length} payment vouchers`, {
+    toast.success(`Exported ${vouchersToExport.length} payment voucher${vouchersToExport.length === 1 ? '' : 's'}`, {
       description: 'Open the Charts sheet in Excel and insert charts from the formatted data'
     });
   };
@@ -299,6 +320,34 @@ export function PaymentVouchersList() {
       description: 'Payment voucher has been removed'
     });
     setActiveMenu(null);
+  };
+
+  const visibleSelectedVouchers = filteredVouchers.filter((v) => selectedVouchers.includes(v.id));
+  const isAllSelected = filteredVouchers.length > 0 && visibleSelectedVouchers.length === filteredVouchers.length;
+  const isSomeSelected = visibleSelectedVouchers.length > 0 && visibleSelectedVouchers.length < filteredVouchers.length;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedVouchers((prev) => Array.from(new Set([...prev, ...filteredVouchers.map((v) => v.id)])));
+    } else {
+      const visibleIds = new Set(filteredVouchers.map((v) => v.id));
+      setSelectedVouchers((prev) => prev.filter((id) => !visibleIds.has(id)));
+    }
+  };
+
+  const handleSelectVoucher = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedVouchers((prev) => Array.from(new Set([...prev, id])));
+    } else {
+      setSelectedVouchers((prev) => prev.filter((v) => v !== id));
+    }
+  };
+
+  const confirmBulkDelete = () => {
+    if (selectedVouchers.length === 0) return;
+    toast.success(`${selectedVouchers.length} voucher${selectedVouchers.length > 1 ? 's' : ''} deleted`);
+    setSelectedVouchers([]);
+    setShowBulkDeleteConfirm(false);
   };
 
   return (
@@ -372,12 +421,21 @@ export function PaymentVouchersList() {
                 <option key={cat} value={cat.toLowerCase()}>{cat}</option>
               ))}
             </select>
+            {selectedVouchers.length > 0 && (
+              <button
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-destructive/30 text-destructive bg-white rounded hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-sm">Delete Selected ({selectedVouchers.length})</span>
+              </button>
+            )}
             <button
               onClick={handleExport}
               className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
             >
               <Download className="w-4 h-4" />
-              <span className="text-sm">Export</span>
+              <span className="text-sm">Export{selectedVouchers.length > 0 ? ` (${selectedVouchers.length})` : ''}</span>
             </button>
           </div>
         </div>
@@ -387,6 +445,17 @@ export function PaymentVouchersList() {
           <table className="w-full">
             <thead className="bg-muted/50 border-b border-border">
               <tr>
+                <th className="pl-6 pr-3 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(input) => {
+                      if (input) input.indeterminate = isSomeSelected;
+                    }}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-500"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Voucher No.</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Date</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Payee</th>
@@ -401,6 +470,14 @@ export function PaymentVouchersList() {
             <tbody className="divide-y divide-border">
               {paginatedVouchers.map((voucher) => (
                 <tr key={voucher.id} className="hover:bg-muted/30 transition-colors">
+                  <td className="pl-6 pr-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedVouchers.includes(voucher.id)}
+                      onChange={(e) => handleSelectVoucher(voucher.id, e.target.checked)}
+                      className="w-4 h-4 rounded accent-violet-500"
+                    />
+                  </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-destructive/10 rounded flex items-center justify-center flex-shrink-0">
@@ -440,40 +517,24 @@ export function PaymentVouchersList() {
                       >
                         <Edit className="w-4 h-4 text-muted-foreground" />
                       </button>
-                      <div className="relative action-menu">
-                        <button
-                          onClick={() => setActiveMenu(activeMenu === voucher.id ? null : voucher.id)}
-                          className="p-1.5 hover:bg-muted rounded transition-colors"
-                          title="More"
-                        >
-                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                        </button>
-                        {activeMenu === voucher.id && (
-                          <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg z-50">
-                            <button
-                              onClick={() => handlePrint(voucher)}
-                              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-muted transition-colors text-left"
-                            >
-                              <Printer className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm text-foreground">Print</span>
-                            </button>
-                            <button
-                              onClick={() => handleDuplicate(voucher)}
-                              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-muted transition-colors text-left"
-                            >
-                              <Copy className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm text-foreground">Duplicate</span>
-                            </button>
-                            <button
-                              onClick={() => handleDelete(voucher)}
-                              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-destructive/10 text-destructive transition-colors text-left border-t border-border"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span className="text-sm">Delete</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        onClick={(e) => {
+                          if (activeMenu === voucher.id) {
+                            setActiveMenu(null);
+                            return;
+                          }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuPosition({
+                            top: rect.bottom + 4,
+                            right: window.innerWidth - rect.right,
+                          });
+                          setActiveMenu(voucher.id);
+                        }}
+                        className="action-menu-trigger p-1.5 hover:bg-muted rounded transition-colors"
+                        title="More"
+                      >
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -485,7 +546,11 @@ export function PaymentVouchersList() {
         {/* Pagination */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredVouchers.length)} of {filteredVouchers.length} vouchers
+            {selectedVouchers.length > 0 ? (
+              <span>{selectedVouchers.length} voucher{selectedVouchers.length > 1 ? 's' : ''} selected</span>
+            ) : (
+              <span>Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredVouchers.length)} of {filteredVouchers.length} vouchers</span>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -563,6 +628,79 @@ export function PaymentVouchersList() {
         </div>
       </div>
 
+      {/* Action menu — portaled out of the table so it can escape the table's
+          overflow-x-auto wrapper. */}
+      {activeMenu && menuPosition && (() => {
+        const voucher = filteredVouchers.find((v) => v.id === activeMenu);
+        if (!voucher) return null;
+        return createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'fixed',
+              top: menuPosition.top,
+              right: menuPosition.right,
+              zIndex: 60,
+            }}
+            className="w-48 bg-card border border-violet-200 dark:border-violet-400/25 rounded-lg shadow-lg py-1"
+          >
+            <button
+              onClick={() => handlePrint(voucher)}
+              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-left"
+            >
+              <Printer className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Print</span>
+            </button>
+            <button
+              onClick={() => handleDuplicate(voucher)}
+              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-left"
+            >
+              <Copy className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Duplicate</span>
+            </button>
+            <div className="border-t border-violet-100 dark:border-violet-400/15 my-1"></div>
+            <button
+              onClick={() => handleDelete(voucher)}
+              className="w-full flex items-center gap-3 px-4 py-2 hover:bg-destructive/10 text-destructive transition-colors text-left"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="text-sm">Delete</span>
+            </button>
+          </div>,
+          document.body,
+        );
+      })()}
+
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Delete Selected Vouchers</h3>
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete {selectedVouchers.length} selected payment voucher{selectedVouchers.length > 1 ? 's' : ''}? This action cannot be undone.
+              </p>
+            </div>
+            <div className="p-6 border-t border-violet-100 dark:border-violet-400/15 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="px-4 py-2 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                className="px-4 py-2 bg-destructive text-white rounded hover:bg-destructive/90 transition-colors"
+              >
+                Delete {selectedVouchers.length} Voucher{selectedVouchers.length > 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* View Modal */}
       {selectedVoucher && (
         <PaymentVoucherPreview
@@ -617,20 +755,21 @@ function StatCard({
 }
 
 function StatusBadge({ status, approvedBy }: { status: string; approvedBy: string }) {
-  const styles = {
-    approved: 'bg-success/10 text-success',
-    pending: 'bg-warning/10 text-warning',
-    rejected: 'bg-destructive/10 text-destructive',
+  const styles: Record<string, string> = {
+    approved: 'bg-success/10 text-success border-success/30',
+    pending: 'bg-warning/10 text-warning border-warning/30',
+    rejected: 'bg-destructive/10 text-destructive border-destructive/30',
   };
+  const badgeStyle = styles[status] || 'bg-muted text-muted-foreground border-border';
 
   return (
     <div className="flex flex-col gap-1">
-      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium ${styles[status as keyof typeof styles]}`}>
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${badgeStyle}`}>
         {status === 'approved' && <CheckCircle className="w-3 h-3" />}
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {status}
       </span>
       {approvedBy && (
-        <span className="text-xs text-muted-foreground">by {approvedBy}</span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">by {approvedBy}</span>
       )}
     </div>
   );
@@ -638,16 +777,17 @@ function StatusBadge({ status, approvedBy }: { status: string; approvedBy: strin
 
 function CategoryBadge({ category }: { category: string }) {
   const styles: Record<string, string> = {
-    'Purchase': 'bg-primary/10 text-primary',
-    'Salary': 'bg-accent/10 text-accent',
-    'Rent': 'bg-warning/10 text-warning',
-    'Utilities': 'bg-success/10 text-success',
-    'Transportation': 'bg-muted text-muted-foreground',
-    'Other': 'bg-muted text-muted-foreground',
+    'Purchase': 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-400/40',
+    'Salary': 'bg-accent/10 text-accent border-accent/30',
+    'Rent': 'bg-warning/10 text-warning border-warning/30',
+    'Utilities': 'bg-success/10 text-success border-success/30',
+    'Transportation': 'bg-muted text-muted-foreground border-border',
+    'Other': 'bg-muted text-muted-foreground border-border',
   };
+  const badgeStyle = styles[category] || 'bg-muted text-muted-foreground border-border';
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${styles[category] || 'bg-muted text-muted-foreground'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${badgeStyle}`}>
       {category}
     </span>
   );
@@ -655,15 +795,16 @@ function CategoryBadge({ category }: { category: string }) {
 
 function PaymentModeBadge({ mode }: { mode: string }) {
   const styles: Record<string, string> = {
-    'Bank Transfer': 'bg-primary/10 text-primary',
-    'Cheque': 'bg-warning/10 text-warning',
-    'UPI': 'bg-success/10 text-success',
-    'Cash': 'bg-muted text-muted-foreground',
-    'Card': 'bg-accent/10 text-accent',
+    'Bank Transfer': 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-400/40',
+    'Cheque': 'bg-warning/10 text-warning border-warning/30',
+    'UPI': 'bg-success/10 text-success border-success/30',
+    'Cash': 'bg-muted text-muted-foreground border-border',
+    'Card': 'bg-accent/10 text-accent border-accent/30',
   };
+  const badgeStyle = styles[mode] || 'bg-muted text-muted-foreground border-border';
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${styles[mode] || 'bg-muted text-muted-foreground'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${badgeStyle}`}>
       {mode}
     </span>
   );

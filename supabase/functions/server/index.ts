@@ -1,8 +1,8 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
-import * as kv from "./kv_store.tsx";
-import * as auth from "./auth.tsx";
+import * as kv from "./kv_store.ts";
+import * as auth from "./auth.ts";
 
 const app = new Hono();
 
@@ -191,6 +191,101 @@ app.get("/make-server-9245971e/auth/audit-logs", async (c) => {
     return c.json({ success: true, data: data || [] });
   } catch (error) {
     console.log("Get audit logs error:", error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// ===== EMAIL ROUTES =====
+
+// Send invoice email via Resend
+// Requires Supabase secret: RESEND_API_KEY
+// Optional Supabase secrets: INVOICE_FROM_EMAIL (defaults to onboarding@resend.dev)
+app.post("/make-server-9245971e/email/send-invoice", async (c) => {
+  try {
+    const payload = await c.req.json();
+    const {
+      to,
+      invoiceNumber,
+      customerName,
+      amount,
+      currency = '₹',
+      fromName,
+      fromEmail,
+      replyTo,
+      htmlBody,
+      attachments,
+    } = payload || {};
+
+    if (!to || !invoiceNumber) {
+      return c.json({ success: false, error: 'Missing recipient email or invoice number' }, 400);
+    }
+
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    if (!resendKey) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Email service not configured. Add RESEND_API_KEY to your Supabase project secrets (Project Settings → Edge Functions → Secrets).',
+        },
+        500,
+      );
+    }
+
+    const defaultFrom = Deno.env.get('INVOICE_FROM_EMAIL') || 'onboarding@resend.dev';
+    const senderEmail = fromEmail || defaultFrom;
+    const fromHeader = fromName ? `${fromName} <${senderEmail}>` : senderEmail;
+
+    const subject = `Invoice ${invoiceNumber}${customerName ? ` for ${customerName}` : ''}`;
+    const fallbackHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px; color: #0f172a; background: #ffffff;">
+        <div style="border-left: 4px solid #8b5cf6; padding-left: 16px; margin-bottom: 24px;">
+          <div style="font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #8b5cf6; font-weight: 600;">Tax Invoice</div>
+          <h2 style="margin: 4px 0 0; font-size: 22px; color: #0f172a;">${invoiceNumber}</h2>
+        </div>
+        <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6;">Hello ${customerName || 'there'},</p>
+        <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6;">
+          Please find your invoice ${invoiceNumber}${amount ? ` for a total of <strong>${currency}${amount}</strong>` : ''} attached for your records.
+        </p>
+        <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6;">
+          If you have any questions about this invoice, just reply to this email.
+        </p>
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="margin: 0; font-size: 13px; color: #64748b;">Thank you for your business.${fromName ? `<br/>${fromName}` : ''}</p>
+      </div>
+    `;
+
+    const body: Record<string, unknown> = {
+      from: fromHeader,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html: htmlBody || fallbackHtml,
+    };
+    if (replyTo) body.reply_to = replyTo;
+    if (Array.isArray(attachments) && attachments.length > 0) body.attachments = attachments;
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resendKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.log('Resend error:', result);
+      return c.json(
+        { success: false, error: result?.message || `Resend returned ${response.status}` },
+        response.status,
+      );
+    }
+
+    return c.json({ success: true, id: result?.id });
+  } catch (error) {
+    console.log('Send invoice email error:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });

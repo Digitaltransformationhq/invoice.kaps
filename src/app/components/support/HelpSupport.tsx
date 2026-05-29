@@ -1,5 +1,6 @@
-import { Mail, Phone, MessageCircle, Book, Video, HelpCircle, FileText, Search } from 'lucide-react';
+import { Mail, Phone, MessageCircle, Book, Video, HelpCircle, FileText, Search, ChevronDown, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 export function HelpSupport() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,7 +16,7 @@ export function HelpSupport() {
     },
     {
       question: 'Can I customize invoice templates?',
-      answer: 'Yes, go to Settings > Invoice Settings to customize invoice prefix, numbering, terms & conditions, and print settings including company logo and bank details.',
+      answer: 'Yes, go to Settings → Invoice Settings to customize invoice prefix, numbering, terms & conditions, and print settings including company logo and bank details.',
     },
     {
       question: 'How do I track outstanding payments?',
@@ -36,25 +37,21 @@ export function HelpSupport() {
       icon: Book,
       title: 'User Guide',
       description: 'Complete documentation and tutorials',
-      color: 'bg-primary/10 text-primary',
     },
     {
       icon: Video,
       title: 'Video Tutorials',
       description: 'Step-by-step video guides',
-      color: 'bg-accent/10 text-accent',
     },
     {
       icon: FileText,
       title: 'GST Compliance',
       description: 'GST filing guides and tax updates',
-      color: 'bg-success/10 text-success',
     },
     {
       icon: MessageCircle,
       title: 'Community Forum',
       description: 'Connect with other users',
-      color: 'bg-warning/10 text-warning',
     },
   ];
 
@@ -64,89 +61,84 @@ export function HelpSupport() {
       faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center max-w-2xl mx-auto">
-        <h1 className="text-3xl font-semibold text-foreground">Help & Support</h1>
-        <p className="text-muted-foreground mt-2">
-          Find answers to your questions or get in touch with our support team
-        </p>
-      </div>
+  const comingSoon = (label: string) => () => toast.info(`${label} is coming soon.`);
 
-      {/* Search */}
-      <div className="max-w-2xl mx-auto">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search for help..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 border border-input bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
-          />
+  return (
+    <div className="space-y-8">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl border border-violet-200 dark:border-violet-400/25 bg-gradient-to-br from-violet-50/80 via-violet-50/40 to-card dark:from-violet-500/[0.08] dark:via-violet-500/[0.04] dark:to-card p-8 md:p-10">
+        <div className="absolute -top-12 -right-12 w-48 h-48 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-56 h-56 bg-violet-400/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative text-center max-w-2xl mx-auto">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-100 dark:bg-violet-500/15 border border-violet-200 dark:border-violet-400/25 text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-700 dark:text-violet-300">
+            <Sparkles className="w-3 h-3" />
+            Help Center
+          </div>
+          <h1 className="text-[28px] sm:text-[32px] font-semibold text-foreground tracking-tight leading-tight mt-3">
+            How can we help you today?
+          </h1>
+          <p className="text-[14px] text-muted-foreground mt-2 leading-relaxed">
+            Search the knowledge base or reach out — most questions are answered in seconds.
+          </p>
+
+          <div className="relative mt-6 max-w-xl mx-auto">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-violet-500" />
+            <input
+              type="text"
+              placeholder="Search invoices, GST, customers…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 h-12 border border-violet-300 dark:border-violet-400/30 bg-card rounded-xl text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 shadow-[0_2px_12px_-4px_rgba(139,92,246,0.25)] transition"
+            />
+          </div>
         </div>
       </div>
 
       {/* Contact Options */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border border-border rounded-lg p-6 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 bg-accent/10 rounded-lg flex items-center justify-center mb-4">
-            <Mail className="w-6 h-6 text-accent" />
-          </div>
-          <h3 className="font-semibold text-foreground mb-2">Email Support</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Get help via email within 24 hours
-          </p>
-          <a
-            href="mailto:support@gstinvoice.com"
-            className="text-sm text-accent hover:text-accent/90 font-medium"
-          >
-            support@gstinvoice.com
-          </a>
-        </div>
-
-        <div className="bg-white border border-border rounded-lg p-6 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center mb-4">
-            <Phone className="w-6 h-6 text-success" />
-          </div>
-          <h3 className="font-semibold text-foreground mb-2">Phone Support</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Mon-Fri, 9 AM - 6 PM IST
-          </p>
-          <a href="tel:+919876543210" className="text-sm text-accent hover:text-accent/90 font-medium">
-            +91 98765 43210
-          </a>
-        </div>
-
-        <div className="bg-white border border-border rounded-lg p-6 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-            <MessageCircle className="w-6 h-6 text-primary" />
-          </div>
-          <h3 className="font-semibold text-foreground mb-2">Live Chat</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Chat with our support team
-          </p>
-          <button className="text-sm text-accent hover:text-accent/90 font-medium">
-            Start Chat
-          </button>
-        </div>
+        <ContactCard
+          icon={Mail}
+          title="Email Support"
+          subtitle="Get help via email within 24 hours."
+          actionLabel="support@gstinvoice.com"
+          actionHref="mailto:support@gstinvoice.com"
+        />
+        <ContactCard
+          icon={Phone}
+          title="Phone Support"
+          subtitle="Mon–Fri, 9 AM – 6 PM IST."
+          actionLabel="+91 98765 43210"
+          actionHref="tel:+919876543210"
+        />
+        <ContactCard
+          icon={MessageCircle}
+          title="Live Chat"
+          subtitle="Chat with our support team in real time."
+          actionLabel="Start Chat"
+          onClick={comingSoon('Live chat')}
+        />
       </div>
 
-      {/* Resources */}
+      {/* Learning Resources */}
       <div>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Learning Resources</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-6 w-6 rounded-full bg-violet-500 text-white flex items-center justify-center">
+            <Book className="w-3.5 h-3.5" strokeWidth={2.5} />
+          </div>
+          <h2 className="text-[16px] font-semibold text-foreground tracking-tight">Learning Resources</h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {resources.map((resource) => (
             <button
               key={resource.title}
-              className="bg-white border border-border rounded-lg p-6 text-left hover:shadow-md transition-all hover:border-accent"
+              onClick={comingSoon(resource.title)}
+              className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 text-left shadow-[0_1px_2px_rgba(139,92,246,0.06)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] hover:border-violet-400 dark:hover:border-violet-400/55 transition-all"
             >
-              <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${resource.color}`}>
-                <resource.icon className="w-6 h-6" />
+              <div className="w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center mb-3">
+                <resource.icon className="w-5 h-5" />
               </div>
-              <h3 className="font-semibold text-foreground mb-2">{resource.title}</h3>
-              <p className="text-sm text-muted-foreground">{resource.description}</p>
+              <h3 className="font-semibold text-foreground tracking-tight">{resource.title}</h3>
+              <p className="text-[12.5px] text-muted-foreground leading-relaxed mt-1">{resource.description}</p>
             </button>
           ))}
         </div>
@@ -155,45 +147,109 @@ export function HelpSupport() {
       {/* FAQs */}
       <div>
         <div className="flex items-center gap-2 mb-4">
-          <HelpCircle className="w-5 h-5 text-accent" />
-          <h2 className="text-lg font-semibold text-foreground">Frequently Asked Questions</h2>
+          <div className="h-6 w-6 rounded-full bg-violet-500 text-white flex items-center justify-center">
+            <HelpCircle className="w-3.5 h-3.5" strokeWidth={2.5} />
+          </div>
+          <h2 className="text-[16px] font-semibold text-foreground tracking-tight">Frequently Asked Questions</h2>
         </div>
         <div className="space-y-3">
           {filteredFaqs.length > 0 ? (
             filteredFaqs.map((faq, index) => (
               <details
                 key={index}
-                className="bg-white border border-border rounded-lg overflow-hidden group"
+                className="group bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden open:border-violet-400 dark:open:border-violet-400/55 open:shadow-[0_4px_16px_-6px_rgba(139,92,246,0.18)]"
               >
-                <summary className="px-6 py-4 cursor-pointer hover:bg-muted transition-colors font-medium text-foreground flex items-center justify-between">
-                  {faq.question}
-                  <span className="text-muted-foreground group-open:rotate-180 transition-transform">
-                    ▼
-                  </span>
+                <summary className="list-none cursor-pointer px-5 md:px-6 py-4 flex items-center justify-between gap-4 hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.05] transition-colors">
+                  <div className="font-medium text-foreground text-[14.5px]">{faq.question}</div>
+                  <ChevronDown className="w-4 h-4 text-violet-600 dark:text-violet-300 flex-shrink-0 transition-transform group-open:rotate-180" />
                 </summary>
-                <div className="px-6 py-4 border-t border-border bg-muted/30">
-                  <p className="text-sm text-muted-foreground leading-relaxed">{faq.answer}</p>
+                <div className="px-5 md:px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 bg-violet-50/40 dark:bg-violet-500/[0.04]">
+                  <p className="text-[13.5px] text-muted-foreground leading-relaxed">{faq.answer}</p>
                 </div>
               </details>
             ))
           ) : (
-            <div className="bg-white border border-border rounded-lg p-8 text-center">
-              <p className="text-muted-foreground">No FAQs found matching "{searchQuery}"</p>
+            <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-10 text-center">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center">
+                <Search className="w-5 h-5 text-violet-600 dark:text-violet-300" />
+              </div>
+              <p className="text-sm text-foreground/80">
+                No FAQs found matching <span className="font-semibold">"{searchQuery}"</span>.
+              </p>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="mt-3 text-[12.5px] font-medium text-violet-600 dark:text-violet-300 hover:underline"
+              >
+                Clear search
+              </button>
             </div>
           )}
         </div>
       </div>
 
       {/* Footer CTA */}
-      <div className="bg-accent/5 border border-accent/20 rounded-lg p-8 text-center">
-        <h3 className="text-lg font-semibold text-foreground mb-2">Still need help?</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Our support team is ready to assist you with any questions
-        </p>
-        <button className="px-6 py-2.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors">
-          Contact Support Team
-        </button>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 to-violet-600 p-8 md:p-10 text-center shadow-[0_8px_28px_-12px_rgba(139,92,246,0.6)]">
+        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/15 mb-3">
+            <MessageCircle className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="text-[20px] font-semibold text-white tracking-tight">Still need help?</h3>
+          <p className="text-[13.5px] text-violet-100 mt-2 max-w-md mx-auto leading-relaxed">
+            Our support team is ready to assist you with any questions about invoicing, GST filing, or your account.
+          </p>
+          <a
+            href="mailto:support@gstinvoice.com"
+            className="inline-flex items-center gap-2 mt-5 px-6 h-11 bg-white text-violet-700 rounded-lg text-[13.5px] font-semibold hover:bg-violet-50 transition-colors"
+          >
+            <Mail className="w-4 h-4" />
+            Contact Support Team
+          </a>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function ContactCard({
+  icon: Icon,
+  title,
+  subtitle,
+  actionLabel,
+  actionHref,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  actionHref?: string;
+  onClick?: () => void;
+}) {
+  const action = actionHref ? (
+    <a
+      href={actionHref}
+      className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 dark:text-violet-300 hover:text-violet-800 dark:hover:text-violet-200 transition-colors"
+    >
+      {actionLabel}
+    </a>
+  ) : (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 dark:text-violet-300 hover:text-violet-800 dark:hover:text-violet-200 transition-colors"
+    >
+      {actionLabel}
+    </button>
+  );
+
+  return (
+    <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] hover:border-violet-400 dark:hover:border-violet-400/55 transition-all">
+      <div className="w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center mb-4">
+        <Icon className="w-5 h-5" />
+      </div>
+      <h3 className="font-semibold text-foreground tracking-tight">{title}</h3>
+      <p className="text-[12.5px] text-muted-foreground leading-relaxed mt-1 mb-4">{subtitle}</p>
+      {action}
     </div>
   );
 }

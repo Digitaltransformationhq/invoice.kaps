@@ -1,0 +1,41 @@
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Modal scrollbar — violet-tinted, themed for both light & dark instead of the system white */
+.kaps-modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.30) transparent;
+}
+.dark .kaps-modal-scroll {
+  scrollbar-color: rgba(167, 139, 250, 0.25) transparent;
+}
+.kaps-modal-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.kaps-modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.kaps-modal-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(139, 92, 246, 0.30);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.kaps-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(139, 92, 246, 0.45);
+}
+.dark .kaps-modal-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(167, 139, 250, 0.25);
+}
+.dark .kaps-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(167, 139, 250, 0.40);
+}

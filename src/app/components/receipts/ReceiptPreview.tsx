@@ -1,4 +1,22 @@
-import { X, Download, Send, Printer } from 'lucide-react';
+import { X, Download, Send, Printer, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { useAuth } from '../../../contexts/AuthContext';
+import { supabase } from '../../../lib/supabase';
+import { getGstinStateName } from '../../../lib/gstin';
+import { sendInvoiceEmail } from '../../../lib/emailInvoice';
+
+interface Customer {
+  id?: string;
+  companyName: string;
+  gstin: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+}
 
 interface ReceiptPreviewProps {
   isOpen: boolean;
@@ -10,6 +28,7 @@ interface ReceiptPreviewProps {
   refNumber: string;
   notes: string;
   invoice?: string;
+  customer?: Customer | null;
 }
 
 export function ReceiptPreview({
@@ -21,10 +40,102 @@ export function ReceiptPreview({
   paymentMode,
   refNumber,
   notes,
-  invoice
+  invoice,
+  customer,
 }: ReceiptPreviewProps) {
+  const { user } = useAuth();
+
+  const [companyDetails, setCompanyDetails] = useState({
+    name: user?.company_name || 'Your Company',
+    gstin: user?.company_gstin || '-',
+    state: getGstinStateName(user?.company_gstin) || '',
+    email: user?.email || '',
+    phone: '',
+    address: '',
+    city: '',
+    pinCode: '',
+    pan: '',
+    bankName: '',
+    bankAccountNumber: '',
+    bankIfsc: '',
+    bankBranch: '',
+    logo: user?.company_logo || '',
+    esignImage: '',
+    stampImage: '',
+  });
+
+  const [isSendingMail, setIsSendingMail] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !user?.company_id) return;
+
+    const loadCompanyDetails = async () => {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo, esign_image, stamp_image')
+        .eq('id', user.company_id)
+        .single();
+
+      if (!error) {
+        setCompanyDetails({
+          name: data?.company_name || user.company_name || 'Your Company',
+          gstin: data?.gstin || user.company_gstin || '-',
+          state: data?.state || getGstinStateName(data?.gstin) || getGstinStateName(user.company_gstin) || '',
+          email: data?.email || user.email || '',
+          phone: data?.phone || '',
+          address: data?.address || '',
+          city: data?.city || '',
+          pinCode: data?.pin_code || '',
+          pan: data?.pan || '',
+          bankName: data?.bank_name || '',
+          bankAccountNumber: data?.bank_account_number || '',
+          bankIfsc: data?.bank_ifsc || '',
+          bankBranch: data?.bank_branch || '',
+          logo: data?.company_logo || user.company_logo || '',
+          esignImage: data?.esign_image || '',
+          stampImage: data?.stamp_image || '',
+        });
+      }
+    };
+
+    loadCompanyDetails();
+  }, [isOpen, user?.company_id, user?.company_name, user?.company_gstin, user?.company_logo, user?.email]);
+
   if (!isOpen) return null;
 
+  const formatDate = (value?: string) => {
+    if (!value) return '-';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Company-side
+  const companyName = companyDetails.name || 'Your Company';
+  const companyGstin = companyDetails.gstin || '-';
+  const companyState = companyDetails.state || getGstinStateName(companyGstin) || '';
+  const companyPan = companyDetails.pan || (companyGstin.length >= 12 ? companyGstin.slice(2, 12) : '');
+  const companyAddressLines = [
+    companyDetails.address,
+    [companyDetails.city, companyState, companyDetails.pinCode].filter(Boolean).join(', '),
+  ].filter(Boolean);
+
+  // Buyer-side
+  const buyerName = customer?.companyName || 'Customer not selected';
+  const buyerAddress = customer?.address || '';
+  const buyerCity = customer?.city || '';
+  const buyerState = customer?.state || getGstinStateName(customer?.gstin) || '';
+  const buyerGstin = customer?.gstin || '';
+  const buyerContact = customer?.contactName || '';
+  const buyerPhone = customer?.phone || '';
+  const buyerEmail = customer?.email || '';
+
+  const displayReceiptNumber = receiptNumber || 'Auto-generated on save';
+
+  // Number to words
   const numberToWords = (num: number): string => {
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
     const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -45,24 +156,63 @@ export function ReceiptPreview({
     return 'Rupees ' + convert(Math.floor(num)) + ' Only';
   };
 
+  const handleSendReceipt = async () => {
+    if (!buyerEmail) {
+      toast.error('Customer email is not available.');
+      return;
+    }
+    if (isSendingMail) return;
+
+    setIsSendingMail(true);
+    const sendingToast = toast.loading(`Sending receipt to ${buyerEmail}…`);
+
+    const result = await sendInvoiceEmail({
+      to: buyerEmail,
+      invoiceNumber: displayReceiptNumber,
+      customerName: buyerName,
+      amount: amount.toFixed(2),
+      fromName: companyName,
+      replyTo: companyDetails.email || undefined,
+    });
+
+    toast.dismiss(sendingToast);
+    setIsSendingMail(false);
+
+    if (result.success) {
+      toast.success(`Receipt ${displayReceiptNumber} sent to ${buyerEmail}`);
+    } else {
+      toast.error(result.error || 'Could not send the receipt email.');
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div className="invoice-preview-actions flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-lg font-semibold text-foreground">Receipt Preview</h2>
           <div className="flex items-center gap-2">
-            <button className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+            >
               <Download className="w-4 h-4" />
               <span className="text-sm">Download PDF</span>
             </button>
-            <button className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+            >
               <Printer className="w-4 h-4" />
               <span className="text-sm">Print</span>
             </button>
-            <button className="inline-flex items-center gap-2 px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors">
-              <Send className="w-4 h-4" />
-              <span className="text-sm">Send Receipt</span>
+            <button
+              onClick={handleSendReceipt}
+              disabled={isSendingMail}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-60 disabled:cursor-wait"
+            >
+              {isSendingMail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              <span className="text-sm">{isSendingMail ? 'Sending…' : 'Send Receipt'}</span>
             </button>
             <button onClick={onClose} className="p-2 hover:bg-muted rounded transition-colors">
               <X className="w-5 h-5" />
@@ -86,18 +236,25 @@ export function ReceiptPreview({
             <div className="grid grid-cols-2 border-b-2 border-foreground">
               <div className="p-6 border-r-2 border-foreground">
                 <div className="flex gap-3">
-                  <div className="w-16 h-16 bg-primary/10 border border-border rounded flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs text-muted-foreground">LOGO</span>
+                  <div className="w-16 h-16 bg-primary/10 border border-border rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {companyDetails.logo ? (
+                      <img src={companyDetails.logo} alt="Company logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">LOGO</span>
+                    )}
                   </div>
-                  <div>
-                    <h2 className="font-bold text-sm mb-1">MY COMPANY PVT LTD</h2>
+                  <div className="min-w-0">
+                    <h2 className="font-bold text-sm mb-1 uppercase">{companyName}</h2>
                     <div className="text-xs leading-relaxed">
-                      <div>123 Business Street</div>
-                      <div>Near City Center</div>
-                      <div>Mumbai, Maharashtra - 400001</div>
-                      <div className="font-semibold mt-2">GSTIN: 27AAAAA0000A1Z5</div>
-                      <div className="mt-2">Phone: +91 98765 43210</div>
-                      <div>Email: accounts@company.com</div>
+                      {companyAddressLines.map((line, idx) => (
+                        <div key={idx}>{line}</div>
+                      ))}
+                      {companyGstin && companyGstin !== '-' && (
+                        <div className="font-semibold mt-2">GSTIN: {companyGstin}</div>
+                      )}
+                      {companyPan && <div>PAN: {companyPan}</div>}
+                      {companyDetails.phone && <div className="mt-2">Phone: {companyDetails.phone}</div>}
+                      {companyDetails.email && <div>Email: {companyDetails.email}</div>}
                     </div>
                   </div>
                 </div>
@@ -106,12 +263,12 @@ export function ReceiptPreview({
                 <table className="w-full text-sm">
                   <tbody>
                     <tr>
-                      <td className="py-2 font-semibold">Receipt No.</td>
-                      <td className="py-2">{receiptNumber}</td>
+                      <td className="py-2 font-semibold w-1/2">Receipt No.</td>
+                      <td className="py-2 font-mono">{displayReceiptNumber}</td>
                     </tr>
                     <tr>
                       <td className="py-2 font-semibold">Date</td>
-                      <td className="py-2">{new Date(receiptDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td className="py-2">{formatDate(receiptDate)}</td>
                     </tr>
                     {invoice && (
                       <tr>
@@ -138,11 +295,15 @@ export function ReceiptPreview({
             <div className="p-6 border-b-2 border-foreground">
               <div className="text-sm font-semibold mb-3">RECEIVED FROM</div>
               <div className="text-sm leading-relaxed">
-                <div className="font-bold text-base">CUSTOMER COMPANY NAME</div>
-                <div className="mt-2">123 Customer Address</div>
-                <div>Area, Landmark</div>
-                <div>City, State, 400001</div>
-                <div className="mt-2">GSTIN: 24AAAAA0000A1Z9</div>
+                <div className="font-bold text-base uppercase">{buyerName}</div>
+                {buyerAddress && <div className="mt-2">{buyerAddress}</div>}
+                {(buyerCity || buyerState) && (
+                  <div>{[buyerCity, buyerState].filter(Boolean).join(', ')}</div>
+                )}
+                {buyerGstin && <div className="mt-2 font-semibold">GSTIN: {buyerGstin}</div>}
+                {buyerContact && <div>Contact: {buyerContact}</div>}
+                {buyerPhone && <div>Phone: {buyerPhone}</div>}
+                {buyerEmail && <div>Email: {buyerEmail}</div>}
               </div>
             </div>
 
@@ -159,10 +320,10 @@ export function ReceiptPreview({
                   <tr className="border-b border-foreground">
                     <td className="p-4 text-sm">
                       {invoice ? `Payment against Invoice ${invoice}` : 'Advance Payment Received'}
-                      {notes && <div className="text-xs text-muted-foreground mt-1">{notes}</div>}
+                      {notes && <div className="text-xs text-muted-foreground mt-1 whitespace-pre-line">{notes}</div>}
                     </td>
-                    <td className="p-4 text-right text-lg font-semibold">
-                      ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <td className="p-4 text-right text-lg font-semibold tabular-nums">
+                      ₹{formatCurrency(amount)}
                     </td>
                   </tr>
                 </tbody>
@@ -174,8 +335,8 @@ export function ReceiptPreview({
               <div className="p-6 bg-success/10">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold">TOTAL AMOUNT RECEIVED</span>
-                  <span className="text-3xl font-bold text-success">
-                    ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <span className="text-3xl font-bold text-success tabular-nums">
+                    ₹{formatCurrency(amount)}
                   </span>
                 </div>
               </div>
@@ -205,9 +366,7 @@ export function ReceiptPreview({
                     )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Date:</span>
-                      <span className="font-medium">
-                        {new Date(receiptDate).toLocaleDateString('en-GB')}
-                      </span>
+                      <span className="font-medium">{formatDate(receiptDate)}</span>
                     </div>
                   </div>
                 </div>
@@ -226,9 +385,17 @@ export function ReceiptPreview({
                 <div>
                   <div className="text-xs font-semibold mb-2">COMPANY DETAILS</div>
                   <div className="text-xs space-y-1">
-                    <div>My Company Pvt Ltd</div>
-                    <div>GSTIN: 27AAAAA0000A1Z5</div>
-                    <div>PAN: AAAAA1234A</div>
+                    <div className="uppercase">{companyName}</div>
+                    {companyGstin && companyGstin !== '-' && <div>GSTIN: {companyGstin}</div>}
+                    {companyPan && <div>PAN: {companyPan}</div>}
+                    {companyDetails.bankName && (
+                      <>
+                        <div className="mt-2 font-semibold">Bank:</div>
+                        <div>{companyDetails.bankName}</div>
+                        {companyDetails.bankAccountNumber && <div>A/c: {companyDetails.bankAccountNumber}</div>}
+                        {companyDetails.bankIfsc && <div>IFSC: {companyDetails.bankIfsc}</div>}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -236,11 +403,19 @@ export function ReceiptPreview({
                     For any queries, please contact:
                   </div>
                   <div className="text-xs mt-1">
-                    <div>Phone: +91 98765 43210</div>
-                    <div>Email: accounts@company.com</div>
+                    {companyDetails.phone && <div>Phone: {companyDetails.phone}</div>}
+                    {companyDetails.email && <div>Email: {companyDetails.email}</div>}
                   </div>
                   <div className="mt-4 pt-4 border-t border-border">
-                    <div className="font-semibold mb-6">For My Company Pvt Ltd</div>
+                    <div className="font-semibold mb-3 uppercase">For {companyName}</div>
+                    <div className="h-12 flex items-end justify-end gap-2 mb-1">
+                      {companyDetails.esignImage && (
+                        <img src={companyDetails.esignImage} alt="Signature" className="h-12 object-contain" />
+                      )}
+                      {companyDetails.stampImage && (
+                        <img src={companyDetails.stampImage} alt="Stamp" className="h-12 object-contain" />
+                      )}
+                    </div>
                     <div className="text-xs border-t border-foreground inline-block px-8 pt-1">
                       Authorised Signatory
                     </div>

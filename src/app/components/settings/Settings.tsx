@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Lock, FileText, IndianRupee, Upload } from 'lucide-react';
+import { Building2, Lock, FileText, IndianRupee, Upload, Stamp, PenTool, Landmark, Shield, Receipt, Percent } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
@@ -87,7 +87,7 @@ function withTimeout<T>(promise: PromiseLike<T>, label: string): Promise<T> {
       reject(new Error(`${label} timed out. Please check your Supabase connection and try again.`));
     }, SETTINGS_REQUEST_TIMEOUT_MS);
 
-    promise
+    Promise.resolve(promise)
       .then(resolve)
       .catch(reject)
       .finally(() => window.clearTimeout(timeoutId));
@@ -228,10 +228,10 @@ export function Settings() {
   const { user, isOwner } = useAuth();
 
   const tabs = [
-    { id: 'company', name: 'Company', icon: Building2 },
-    { id: 'invoice', name: 'Invoice Settings', icon: FileText },
-    { id: 'tax', name: 'Tax Settings', icon: IndianRupee },
-    { id: 'security', name: 'Security', icon: Lock },
+    { id: 'company', name: 'Company', icon: Building2, description: 'Logo, address, banking' },
+    { id: 'invoice', name: 'Invoice Settings', icon: FileText, description: 'Numbering and defaults' },
+    { id: 'tax', name: 'Tax Settings', icon: IndianRupee, description: 'GST and supply rules' },
+    { id: 'security', name: 'Security', icon: Lock, description: 'Password and login' },
   ];
 
   const loadSettings = async () => {
@@ -467,39 +467,58 @@ export function Settings() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[320px]">
-        <div className="text-sm text-muted-foreground">Loading settings...</div>
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Loading settings…</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your application preferences</p>
+        <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">
+          Workspace
+        </div>
+        <h1 className="text-[22px] sm:text-[24px] font-semibold text-foreground tracking-tight leading-tight">
+          Settings
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">Manage your company, invoice defaults, GST rules, and security.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Sidebar tabs */}
         <div className="lg:col-span-1">
-          <div className="bg-white border border-border rounded-lg p-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-accent text-white'
-                    : 'text-foreground hover:bg-muted'
-                }`}
-              >
-                <tab.icon className="w-5 h-5" />
-                <span className="text-sm font-medium">{tab.name}</span>
-              </button>
-            ))}
+          <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-2 shadow-[0_1px_2px_rgba(139,92,246,0.06)] sticky top-4">
+            {tabs.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all text-left ${
+                    active
+                      ? 'bg-violet-500 text-white shadow-[0_2px_8px_-4px_rgba(139,92,246,0.5)]'
+                      : 'text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10'
+                  }`}
+                >
+                  <tab.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${active ? 'text-white' : 'text-violet-600 dark:text-violet-300'}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13.5px] font-semibold tracking-tight">{tab.name}</div>
+                    <div className={`text-[11px] mt-0.5 ${active ? 'text-violet-100' : 'text-muted-foreground'}`}>
+                      {tab.description}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="lg:col-span-3">
+        {/* Main content */}
+        <div className="lg:col-span-3 space-y-6">
           {activeTab === 'company' && (
             <CompanySettings
               company={company}
@@ -531,6 +550,53 @@ export function Settings() {
         </div>
       </div>
     </div>
+  );
+}
+
+function SectionCard({
+  icon: Icon,
+  title,
+  subtitle,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
+      <div className="flex items-start gap-3 mb-5">
+        <div className="h-9 w-9 rounded-lg bg-violet-500 text-white flex items-center justify-center flex-shrink-0 shadow-[0_2px_8px_-4px_rgba(139,92,246,0.5)]">
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-[16px] font-semibold text-foreground tracking-tight">{title}</h3>
+          {subtitle && <p className="text-[12.5px] text-muted-foreground mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SaveButton({
+  onSave,
+  isSaving,
+  label,
+}: {
+  onSave: () => void;
+  isSaving: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onSave}
+      disabled={isSaving}
+      className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
+    >
+      {isSaving ? 'Saving…' : label}
+    </button>
   );
 }
 
@@ -576,31 +642,31 @@ function CompanySettings({
   return (
     <div className="space-y-6">
       {!canEdit && <ViewOnlyNotice />}
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">Company Information</h3>
+
+      <SectionCard icon={Building2} title="Company Information" subtitle="The legal identity used on every invoice, receipt, and report.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-foreground mb-2">Company Logo</label>
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Company Logo</label>
             <div className="flex flex-wrap items-center gap-4">
-              <div className="w-20 h-20 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
+              <div className="w-20 h-20 rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/40 dark:bg-violet-500/[0.05] flex items-center justify-center overflow-hidden">
                 {company.company_logo ? (
                   <img src={company.company_logo} alt="Company logo" className="w-full h-full object-contain" />
                 ) : (
-                  <Building2 className="w-7 h-7 text-muted-foreground" />
+                  <Building2 className="w-7 h-7 text-violet-600 dark:text-violet-300" />
                 )}
               </div>
               {canEdit && (
                 <>
-                  <label className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded hover:bg-muted transition-colors cursor-pointer">
+                  <label className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors cursor-pointer">
                     <Upload className="w-4 h-4" />
-                    <span className="text-sm">Upload Logo</span>
+                    <span>Upload Logo</span>
                     <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageUpload('company_logo', 'company logo', event.target.files?.[0])} />
                   </label>
                   {company.company_logo && (
                     <button
                       type="button"
                       onClick={() => setCompany({ ...company, company_logo: '' })}
-                      className="text-sm text-muted-foreground hover:text-foreground"
+                      className="text-[12.5px] text-muted-foreground hover:text-destructive transition-colors"
                     >
                       Remove
                     </button>
@@ -608,20 +674,22 @@ function CompanySettings({
                 </>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">PNG, JPG, or SVG under 1 MB. This logo appears in the sidebar and invoices.</p>
+            <p className="text-[11px] text-muted-foreground mt-2">PNG, JPG, or SVG under 1 MB. Appears in the sidebar and on invoices.</p>
           </div>
+
           <SettingsInput label="Company Name" value={company.company_name} disabled={!canEdit} className="md:col-span-2" onChange={(company_name) => setCompany({ ...company, company_name })} />
           <SettingsInput
             label="GSTIN"
             value={company.gstin}
             disabled={!canEdit}
-            inputClassName="font-mono"
+            inputClassName="font-mono uppercase"
+            placeholder="29ABCDE1234F1Z5"
             onChange={(value) => {
               const gstin = normalizeGstin(value);
               setCompany({ ...company, gstin, pan: extractPanFromGstin(gstin) });
             }}
           />
-          <SettingsInput label="PAN Number" value={company.pan} disabled={!canEdit} inputClassName="font-mono" onChange={(pan) => setCompany({ ...company, pan: pan.toUpperCase().slice(0, 10) })} />
+          <SettingsInput label="PAN Number" value={company.pan} disabled={!canEdit} inputClassName="font-mono uppercase" placeholder="ABCDE1234F" onChange={(pan) => setCompany({ ...company, pan: pan.toUpperCase().slice(0, 10) })} />
           <SettingsTextarea label="Registered Address" value={company.address} disabled={!canEdit} className="md:col-span-2" onChange={(address) => setCompany({ ...company, address })} />
           <SettingsInput label="City" value={company.city} disabled={!canEdit} onChange={(city) => setCompany({ ...company, city })} />
           <SettingsInput label="State" value={company.state} disabled={!canEdit} onChange={(state) => setCompany({ ...company, state })} />
@@ -630,24 +698,18 @@ function CompanySettings({
           <SettingsInput label="Email Address" type="email" value={company.email} disabled={!canEdit} onChange={(email) => setCompany({ ...company, email })} />
         </div>
         {canEdit && (
-          <div className="mt-6">
-            <button
-              onClick={onSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Company'}
-            </button>
+          <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
+            <SaveButton onSave={onSave} isSaving={isSaving} label="Save Company" />
           </div>
         )}
-      </div>
+      </SectionCard>
 
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">E-Sign & Stamp</h3>
+      <SectionCard icon={PenTool} title="E-Sign & Stamp" subtitle="Drop these into the authorised signatory box on PDF invoices.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <ImageUploadField
             title="Signature Image"
             image={company.esign_image}
+            emptyIcon={PenTool}
             emptyLabel="SIGN"
             canEdit={canEdit}
             uploadLabel="Upload Signature"
@@ -657,6 +719,7 @@ function CompanySettings({
           <ImageUploadField
             title="Stamp Image"
             image={company.stamp_image}
+            emptyIcon={Stamp}
             emptyLabel="STAMP"
             canEdit={canEdit}
             uploadLabel="Upload Stamp"
@@ -664,40 +727,27 @@ function CompanySettings({
             onRemove={() => setCompany({ ...company, stamp_image: '' })}
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-4">PNG, JPG, or SVG under 1 MB. These appear only inside the authorised signatory box on invoices.</p>
+        <p className="text-[11px] text-muted-foreground mt-4">PNG, JPG, or SVG under 1 MB. Background is auto-removed so the signature/stamp blends cleanly on the invoice.</p>
         {canEdit && (
-          <div className="mt-6">
-            <button
-              onClick={onSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save E-Sign'}
-            </button>
+          <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
+            <SaveButton onSave={onSave} isSaving={isSaving} label="Save E-Sign" />
           </div>
         )}
-      </div>
+      </SectionCard>
 
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">Bank Details</h3>
+      <SectionCard icon={Landmark} title="Bank Details" subtitle="Shown on invoices so customers can pay you directly.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SettingsInput label="Bank Name" value={company.bank_name} disabled={!canEdit} onChange={(bank_name) => setCompany({ ...company, bank_name })} />
           <SettingsInput label="Account Number" value={company.bank_account_number} disabled={!canEdit} inputClassName="font-mono" onChange={(bank_account_number) => setCompany({ ...company, bank_account_number })} />
-          <SettingsInput label="IFSC Code" value={company.bank_ifsc} disabled={!canEdit} inputClassName="font-mono" onChange={(bank_ifsc) => setCompany({ ...company, bank_ifsc })} />
+          <SettingsInput label="IFSC Code" value={company.bank_ifsc} disabled={!canEdit} inputClassName="font-mono uppercase" placeholder="SBIN0001234" onChange={(bank_ifsc) => setCompany({ ...company, bank_ifsc })} />
           <SettingsInput label="Branch Name" value={company.bank_branch} disabled={!canEdit} onChange={(bank_branch) => setCompany({ ...company, bank_branch })} />
         </div>
         {canEdit && (
-          <div className="mt-6">
-            <button
-              onClick={onSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Bank Details'}
-            </button>
+          <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
+            <SaveButton onSave={onSave} isSaving={isSaving} label="Save Bank Details" />
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -705,6 +755,7 @@ function CompanySettings({
 function ImageUploadField({
   title,
   image,
+  emptyIcon: EmptyIcon,
   emptyLabel,
   canEdit,
   uploadLabel,
@@ -713,6 +764,7 @@ function ImageUploadField({
 }: {
   title: string;
   image: string;
+  emptyIcon?: React.ComponentType<{ className?: string }>;
   emptyLabel: string;
   canEdit: boolean;
   uploadLabel: string;
@@ -721,27 +773,29 @@ function ImageUploadField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-foreground mb-2">{title}</label>
+      <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">{title}</label>
       <div className="flex flex-wrap items-center gap-4">
-        <div className="w-32 h-20 rounded border border-border bg-muted flex items-center justify-center overflow-hidden">
+        <div className="w-32 h-20 rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/40 dark:bg-violet-500/[0.05] flex items-center justify-center overflow-hidden">
           {image ? (
             <img src={image} alt={title} className="w-full h-full object-contain" />
+          ) : EmptyIcon ? (
+            <EmptyIcon className="w-6 h-6 text-violet-600 dark:text-violet-300" />
           ) : (
-            <span className="text-xs text-muted-foreground">{emptyLabel}</span>
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-300">{emptyLabel}</span>
           )}
         </div>
         {canEdit && (
-          <div className="flex items-center gap-3">
-            <label className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded hover:bg-muted transition-colors cursor-pointer">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors cursor-pointer">
               <Upload className="w-4 h-4" />
-              <span className="text-sm">{uploadLabel}</span>
+              <span>{uploadLabel}</span>
               <input type="file" accept="image/*" className="hidden" onChange={(event) => onUpload(event.target.files?.[0])} />
             </label>
             {image && (
               <button
                 type="button"
                 onClick={onRemove}
-                className="text-sm text-muted-foreground hover:text-foreground"
+                className="text-[12.5px] text-muted-foreground hover:text-destructive transition-colors"
               >
                 Remove
               </button>
@@ -769,39 +823,33 @@ function InvoiceSettings({
   return (
     <div className="space-y-6">
       {!canEdit && <ViewOnlyNotice />}
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">Invoice Defaults</h3>
+
+      <SectionCard icon={Receipt} title="Invoice Defaults" subtitle="The starting values whenever you create a new invoice.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={!canEdit} onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
-          <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={!canEdit} onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />
-          <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={!canEdit} onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
+          <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={!canEdit} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
+          <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={!canEdit} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />
+          <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={!canEdit} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Currency</label>
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Currency</label>
             <select
               value={settings.currency}
               onChange={(event) => setSettings({ ...settings, currency: event.target.value })}
               disabled={!canEdit}
-              className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="INR">INR (₹)</option>
-              <option value="USD">USD (₹)</option>
-              <option value="EUR">EUR</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
             </select>
           </div>
-          <SettingsTextarea label="Terms & Conditions" value={settings.terms} disabled={!canEdit} className="md:col-span-2" onChange={(terms) => setSettings({ ...settings, terms })} />
+          <SettingsTextarea label="Terms &amp; Conditions" value={settings.terms} disabled={!canEdit} className="md:col-span-2" onChange={(terms) => setSettings({ ...settings, terms })} />
         </div>
         {canEdit && (
-          <div className="mt-6">
-            <button
-              onClick={onSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Invoice Settings'}
-            </button>
+          <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
+            <SaveButton onSave={onSave} isSaving={isSaving} label="Save Invoice Settings" />
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -822,16 +870,16 @@ function TaxSettings({
   return (
     <div className="space-y-6">
       {!canEdit && <ViewOnlyNotice />}
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">GST Configuration</h3>
+
+      <SectionCard icon={Percent} title="GST Configuration" subtitle="Default tax rates and supply rules applied to new invoices.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Default GST Rate</label>
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Default GST Rate</label>
             <select
               value={settings.default_gst_rate}
               onChange={(event) => setSettings({ ...settings, default_gst_rate: Number(event.target.value) })}
               disabled={!canEdit}
-              className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="0">0%</option>
               <option value="5">5%</option>
@@ -840,30 +888,29 @@ function TaxSettings({
               <option value="28">28%</option>
             </select>
           </div>
-          <SettingsInput label="Default Place of Supply" value={settings.default_place_of_supply} disabled={!canEdit} onChange={(default_place_of_supply) => setSettings({ ...settings, default_place_of_supply })} />
-          <label className="md:col-span-2 flex items-center gap-3">
+          <SettingsInput label="Default Place of Supply" value={settings.default_place_of_supply} disabled={!canEdit} placeholder="e.g. Karnataka" onChange={(default_place_of_supply) => setSettings({ ...settings, default_place_of_supply })} />
+          <label className={`md:col-span-2 flex items-center gap-3 px-4 py-3 rounded-lg border ${settings.enable_reverse_charge ? 'border-violet-500 bg-violet-50/60 dark:bg-violet-500/10' : 'border-violet-200 dark:border-violet-400/25 bg-card'} ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
             <input
               type="checkbox"
               checked={settings.enable_reverse_charge}
               onChange={(event) => setSettings({ ...settings, enable_reverse_charge: event.target.checked })}
               disabled={!canEdit}
-              className="w-4 h-4"
+              className="w-4 h-4 rounded accent-violet-500"
             />
-            <span className="text-sm text-foreground">Enable Reverse Charge Mechanism</span>
+            <div className="min-w-0">
+              <div className="text-[13.5px] font-semibold text-foreground">Enable Reverse Charge Mechanism</div>
+              <div className="text-[11.5px] text-muted-foreground mt-0.5">
+                When on, RCM rules apply to invoices marked with reverse charge.
+              </div>
+            </div>
           </label>
         </div>
         {canEdit && (
-          <div className="mt-6">
-            <button
-              onClick={onSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Tax Settings'}
-            </button>
+          <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
+            <SaveButton onSave={onSave} isSaving={isSaving} label="Save Tax Settings" />
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -948,29 +995,29 @@ function SecuritySettings({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-border rounded-lg p-6">
-        <h3 className="font-semibold text-foreground mb-4">Password & Authentication</h3>
+      <SectionCard icon={Shield} title="Password &amp; Authentication" subtitle="Change the password used to sign in to your account.">
         <div className="space-y-4">
           <SettingsInput label="Current Password" type="password" value={passwordData.currentPassword} onChange={(currentPassword) => setPasswordData({ ...passwordData, currentPassword })} />
           <SettingsInput label="New Password" type="password" value={passwordData.newPassword} onChange={(newPassword) => setPasswordData({ ...passwordData, newPassword })} />
           <SettingsInput label="Confirm New Password" type="password" value={passwordData.confirmPassword} onChange={(confirmPassword) => setPasswordData({ ...passwordData, confirmPassword })} />
-          <button
-            onClick={updatePassword}
-            disabled={isSaving}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {isSaving ? 'Updating...' : 'Update Password'}
-          </button>
         </div>
-      </div>
+        <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
+          <SaveButton onSave={updatePassword} isSaving={isSaving} label="Update Password" />
+        </div>
+      </SectionCard>
     </div>
   );
 }
 
 function ViewOnlyNotice() {
   return (
-    <div className="bg-muted border border-border rounded-lg p-4 text-sm text-muted-foreground">
-      You can view these settings. Only the owner can make changes.
+    <div className="bg-violet-50/60 dark:bg-violet-500/[0.06] border border-violet-200 dark:border-violet-400/25 rounded-xl p-4 text-sm text-foreground/85 flex items-start gap-3">
+      <div className="h-8 w-8 rounded-full bg-violet-500 flex items-center justify-center flex-shrink-0">
+        <Shield className="w-4 h-4 text-white" />
+      </div>
+      <p className="leading-relaxed pt-1">
+        You can view these settings. Only the owner can make changes.
+      </p>
     </div>
   );
 }
@@ -983,6 +1030,7 @@ function SettingsInput({
   type = 'text',
   className = '',
   inputClassName = '',
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -991,16 +1039,18 @@ function SettingsInput({
   type?: string;
   className?: string;
   inputClassName?: string;
+  placeholder?: string;
 }) {
   return (
     <div className={className}>
-      <label className="block text-sm font-medium text-foreground mb-2">{label}</label>
+      <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
-        className={`w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${inputClassName}`}
+        placeholder={placeholder}
+        className={`w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed ${inputClassName}`}
       />
     </div>
   );
@@ -1021,13 +1071,13 @@ function SettingsTextarea({
 }) {
   return (
     <div className={className}>
-      <label className="block text-sm font-medium text-foreground mb-2">{label}</label>
+      <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{label}</label>
       <textarea
         rows={3}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
-        className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-60"
+        className="w-full px-3.5 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none disabled:opacity-60 disabled:cursor-not-allowed"
       />
     </div>
   );

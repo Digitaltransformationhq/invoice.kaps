@@ -111,14 +111,15 @@ export function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Welcome back! Here's your business overview</p>
+          <div className="text-[11px] uppercase tracking-[0.16em] font-semibold text-accent/80">Overview</div>
+          <h1 className="mt-1 text-2xl sm:text-[28px] font-semibold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Welcome back — here's how your business is doing today.</p>
         </div>
         <Link
           to="/app/invoices/new"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+          className="inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-full bg-accent text-white text-[13px] font-semibold shadow-[0_8px_24px_-8px_rgba(139,92,246,0.65)] hover:bg-accent/90 transition-all"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           Create Invoice
         </Link>
       </div>
@@ -129,67 +130,74 @@ export function Dashboard() {
           value={isLoading ? 'Loading...' : formatCompactCurrency(paidRevenue)}
           change="Paid invoices"
           trend="up"
-          icon={<IndianRupee className="w-5 h-5 text-accent" />}
+          icon={<IndianRupee className="w-5 h-5" />}
+          tone="violet"
         />
         <KPICard
           title="Total Invoices"
           value={isLoading ? 'Loading...' : allInvoices.length.toLocaleString('en-IN')}
           change={`${thisMonthInvoiceCount} this month`}
           trend="up"
-          icon={<FileText className="w-5 h-5 text-accent" />}
+          icon={<FileText className="w-5 h-5" />}
+          tone="sky"
         />
         <KPICard
           title="Pending Amount"
           value={isLoading ? 'Loading...' : formatCompactCurrency(pendingAmount)}
           change={`${pendingInvoices.length} invoices`}
           trend="neutral"
-          icon={<Clock className="w-5 h-5 text-warning" />}
+          icon={<Clock className="w-5 h-5" />}
+          tone="amber"
         />
       </div>
 
-      <div className="bg-white border border-border rounded-lg">
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <h3 className="font-semibold text-foreground">Recent Invoices</h3>
-          <Link to="/app/invoices" className="text-sm text-accent hover:text-accent/90">
-            View all
-          </Link>
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[15px] font-semibold text-foreground tracking-tight">Recent Invoices</h3>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wider uppercase bg-violet-100 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300">Last 5</span>
         </div>
+        <Link to="/app/invoices" className="text-[12.5px] font-medium text-accent hover:text-accent/80 transition-colors">
+          View all →
+        </Link>
+      </div>
+
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted/50">
+            <thead className="bg-violet-100 dark:bg-violet-500/15">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Invoice</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Customer</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Status</th>
+                <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Invoice</th>
+                <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Customer</th>
+                <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Amount</th>
+                <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
               {isLoading && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={4} className="px-5 py-8 text-center text-sm text-muted-foreground">
                     Loading invoices...
                   </td>
                 </tr>
               )}
               {!isLoading && recentInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={4} className="px-5 py-10 text-center text-sm text-muted-foreground">
                     No invoices found. Create your first invoice to see it here.
                   </td>
                 </tr>
               )}
               {!isLoading && recentInvoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-6 py-3">
-                    <div className="text-sm font-medium text-foreground">{invoice.invoiceNumber}</div>
-                    <div className="text-xs text-muted-foreground">{invoice.date}</div>
+                <tr key={invoice.id} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
+                  <td className="px-5 py-3">
+                    <div className="text-[13px] font-mono font-medium text-foreground">{invoice.invoiceNumber}</div>
+                    <div className="text-[11px] text-muted-foreground">{invoice.date}</div>
                   </td>
-                  <td className="px-6 py-3 text-sm text-muted-foreground">{invoice.customer}</td>
-                  <td className="px-6 py-3 text-sm font-medium text-foreground text-right">
+                  <td className="px-5 py-3 text-[13px] text-foreground">{invoice.customer}</td>
+                  <td className="px-5 py-3 text-[13px] font-semibold text-foreground text-left tabular-nums">
                     {formatCurrency(invoice.amount)}
                   </td>
-                  <td className="px-6 py-3">
+                  <td className="px-5 py-3">
                     <StatusBadge status={invoice.status} />
                   </td>
                 </tr>
@@ -207,28 +215,35 @@ function KPICard({
   value,
   change,
   trend,
-  icon
+  icon,
+  tone
 }: {
   title: string;
   value: string;
   change: string;
   trend: 'up' | 'down' | 'neutral';
   icon: React.ReactNode;
+  tone: 'violet' | 'sky' | 'amber';
 }) {
+  const toneStyles = {
+    violet: 'bg-gradient-to-br from-violet-500/15 to-violet-700/5 text-violet-600 dark:text-violet-300 ring-violet-500/20',
+    sky: 'bg-gradient-to-br from-sky-500/15 to-sky-700/5 text-sky-600 dark:text-sky-300 ring-sky-500/20',
+    amber: 'bg-gradient-to-br from-amber-500/15 to-amber-700/5 text-amber-600 dark:text-amber-300 ring-amber-500/20',
+  };
   return (
-    <div className="bg-white border border-border rounded-lg p-6 hover:shadow-md transition-shadow">
+    <div className="bg-card border border-violet-300 dark:border-violet-400/30 rounded-xl p-5 shadow-[0_1px_2px_rgba(139,92,246,0.08)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] hover:border-violet-400 dark:hover:border-violet-400/50 transition-all">
       <div className="flex items-start justify-between mb-4">
-        <div className="text-sm text-muted-foreground">{title}</div>
-        <div className="w-10 h-10 bg-accent/10 rounded flex items-center justify-center">
+        <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">{title}</div>
+        <div className={`h-9 w-9 rounded-lg flex items-center justify-center ring-1 ${toneStyles[tone]}`}>
           {icon}
         </div>
       </div>
-      <div className="text-4xl font-bold text-foreground mb-2">{value}</div>
-      <div className={`flex items-center gap-1 text-sm ${
-        trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground'
+      <div className="text-[28px] sm:text-[32px] font-semibold tracking-tight text-foreground tabular-nums">{value}</div>
+      <div className={`mt-1.5 flex items-center gap-1 text-[12px] font-medium ${
+        trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-warning'
       }`}>
-        {trend === 'up' && <ArrowUpRight className="w-4 h-4" />}
-        {trend === 'down' && <ArrowDownRight className="w-4 h-4" />}
+        {trend === 'up' && <ArrowUpRight className="w-3.5 h-3.5" />}
+        {trend === 'down' && <ArrowDownRight className="w-3.5 h-3.5" />}
         <span>{change}</span>
       </div>
     </div>
@@ -236,18 +251,19 @@ function KPICard({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const styles = {
-    draft: 'bg-muted text-muted-foreground',
-    sent: 'bg-accent/10 text-accent',
-    paid: 'bg-success/10 text-success',
-    pending: 'bg-warning/10 text-warning',
-    overdue: 'bg-destructive/10 text-destructive',
-    cancelled: 'bg-muted text-muted-foreground',
+  const styles: Record<string, string> = {
+    draft: 'bg-muted text-muted-foreground border-border',
+    sent: 'bg-accent/10 text-accent border-accent/30',
+    paid: 'bg-success/10 text-success border-success/30',
+    pending: 'bg-warning/10 text-warning border-warning/30',
+    overdue: 'bg-destructive/10 text-destructive border-destructive/30',
+    cancelled: 'bg-muted text-muted-foreground border-border',
   };
+  const style = styles[status] || styles.draft;
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${styles[status as keyof typeof styles] || styles.draft}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${style}`}>
+      {status}
     </span>
   );
 }

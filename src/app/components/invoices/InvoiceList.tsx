@@ -1,8 +1,10 @@
 import { Link, useNavigate } from 'react-router';
-import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle } from 'lucide-react';
+import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { InvoicePreview } from './InvoicePreview';
 import { toast } from 'sonner';
+import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import ExcelJS from 'exceljs';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -37,9 +39,11 @@ export function InvoiceList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [isSendingMail, setIsSendingMail] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -202,6 +206,18 @@ export function InvoiceList() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Close menu on scroll or resize so it doesn't drift away from its trigger
+  useEffect(() => {
+    if (!openMenuId) return;
+    const close = () => setOpenMenuId(null);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [openMenuId]);
+
   const handleView = (invoice: any) => {
     logAuditorAction(user, 'invoices', 'invoices', 'view_invoice', { invoiceNumber: invoice.id });
     setSelectedInvoice(invoice);
@@ -234,18 +250,34 @@ export function InvoiceList() {
     setSelectedInvoice(null);
   };
 
-  const handleMailInvoice = (invoice: InvoiceRow) => {
+  const handleMailInvoice = async (invoice: InvoiceRow) => {
     const email = invoice.customerDetails?.email || '';
     if (!email) {
       toast.error('Customer email is not available');
       return;
     }
+    if (isSendingMail) return;
 
-    const subject = encodeURIComponent(`Invoice ${invoice.id}`);
-    const body = encodeURIComponent(getInvoiceShareMessage(invoice));
-    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-    setShowSendModal(false);
-    setSelectedInvoice(null);
+    setIsSendingMail(true);
+    const sendingToast = toast.loading(`Sending invoice to ${email}…`);
+
+    const result = await sendInvoiceEmail({
+      to: email,
+      invoiceNumber: invoice.id,
+      customerName: invoice.customer,
+      amount: invoice.amount.toFixed(2),
+    });
+
+    toast.dismiss(sendingToast);
+    setIsSendingMail(false);
+
+    if (result.success) {
+      toast.success(`Invoice ${invoice.id} sent to ${email}`);
+      setShowSendModal(false);
+      setSelectedInvoice(null);
+    } else {
+      toast.error(result.error || 'Could not send the invoice email.');
+    }
   };
 
   const handleDownload = (invoice: any) => {
@@ -781,9 +813,9 @@ export function InvoiceList() {
       </div>
 
       {/* Table Card */}
-      <div className="bg-white border border-border rounded-lg">
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
         {/* Toolbar */}
-        <div className="p-4 border-b border-border flex flex-col xl:flex-row gap-4">
+        <div className="p-4 border-b border-violet-100 dark:border-violet-400/10 flex flex-col xl:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -842,7 +874,7 @@ export function InvoiceList() {
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
+            <thead className="bg-violet-100 dark:bg-violet-500/15">
               <tr>
                 <th className="px-6 py-3 text-left">
                   <input
@@ -854,19 +886,19 @@ export function InvoiceList() {
                       }
                     }}
                     onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="w-4 h-4 rounded"
+                    className="w-4 h-4 rounded accent-violet-500"
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Invoice</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Due Date</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Invoice</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Customer</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Due Date</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
               {isLoading && (
                 <tr>
                   <td colSpan={8} className="px-6 py-8 text-center text-sm text-muted-foreground">
@@ -882,13 +914,13 @@ export function InvoiceList() {
                 </tr>
               )}
               {!isLoading && filteredInvoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-muted/30 transition-colors">
+                <tr key={invoice.id} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
                   <td className="px-6 py-4">
                     <input
                       type="checkbox"
                       checked={selectedInvoices.includes(invoice.id)}
                       onChange={(e) => handleSelectInvoice(invoice.id, e.target.checked)}
-                      className="w-4 h-4 rounded"
+                      className="w-4 h-4 rounded accent-violet-500"
                     />
                   </td>
                   <td className="px-6 py-4">
@@ -903,8 +935,8 @@ export function InvoiceList() {
                   <td className="px-6 py-4">
                     <div className="text-sm text-muted-foreground">{invoice.dueDate}</div>
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="text-sm font-medium text-foreground">
+                  <td className="px-6 py-4 text-left">
+                    <div className="text-sm font-medium text-foreground tabular-nums">
                       ₹{invoice.amount.toLocaleString()}
                     </div>
                   </td>
@@ -912,7 +944,7 @@ export function InvoiceList() {
                     <StatusBadge status={invoice.status} />
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-start gap-2">
                       <button
                         onClick={() => handleView(invoice)}
                         className="p-1.5 hover:bg-muted rounded transition-colors"
@@ -934,57 +966,24 @@ export function InvoiceList() {
                       >
                         <Send className="w-4 h-4 text-muted-foreground" />
                       </button>
-                      <div className="relative">
-                        <button
-                          onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
-                          className="p-1.5 hover:bg-muted rounded transition-colors"
-                          title="More"
-                        >
-                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                        </button>
-
-                        {/* Dropdown Menu */}
-                        {openMenuId === invoice.id && (
-                          <div
-                            ref={menuRef}
-                            className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg z-50"
-                          >
-                            <div className="py-1">
-                              <button
-                                onClick={() => handleDownload(invoice)}
-                                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-muted transition-colors text-left"
-                              >
-                                <Download className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm text-foreground">Download PDF</span>
-                              </button>
-                              <button
-                                onClick={() => handleDuplicate(invoice)}
-                                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-muted transition-colors text-left"
-                              >
-                                <Copy className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm text-foreground">Duplicate</span>
-                              </button>
-                              {invoice.status !== 'paid' && (
-                                <button
-                                  onClick={() => handleMarkPaid(invoice)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 hover:bg-muted transition-colors text-left"
-                                >
-                                  <CheckCircle className="w-4 h-4 text-success" />
-                                  <span className="text-sm text-foreground">Mark as Paid</span>
-                                </button>
-                              )}
-                              <div className="border-t border-border my-1"></div>
-                              <button
-                                onClick={() => handleDelete(invoice.id)}
-                                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-destructive/10 transition-colors text-left"
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                                <span className="text-sm text-destructive">Delete</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        onClick={(e) => {
+                          if (openMenuId === invoice.id) {
+                            setOpenMenuId(null);
+                            return;
+                          }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuPosition({
+                            top: rect.bottom + 4,
+                            right: window.innerWidth - rect.right,
+                          });
+                          setOpenMenuId(invoice.id);
+                        }}
+                        className="p-1.5 hover:bg-muted rounded transition-colors"
+                        title="More"
+                      >
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -994,7 +993,7 @@ export function InvoiceList() {
         </div>
 
         {/* Pagination */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             {selectedInvoices.length > 0 ? (
               <span>{selectedInvoices.length} invoice{selectedInvoices.length > 1 ? 's' : ''} selected</span>
@@ -1003,18 +1002,70 @@ export function InvoiceList() {
             )}
           </div>
           <div className="flex gap-2">
-            <button className="px-3 py-1.5 border border-border rounded text-sm hover:bg-muted transition-colors">
+            <button className="px-3 py-1.5 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded text-sm hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
               Previous
             </button>
-            <button className="px-3 py-1.5 bg-primary text-white rounded text-sm">1</button>
-            <button className="px-3 py-1.5 border border-border rounded text-sm hover:bg-muted transition-colors">2</button>
-            <button className="px-3 py-1.5 border border-border rounded text-sm hover:bg-muted transition-colors">3</button>
-            <button className="px-3 py-1.5 border border-border rounded text-sm hover:bg-muted transition-colors">
+            <button className="px-3 py-1.5 bg-violet-500 text-white rounded text-sm font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)]">1</button>
+            <button className="px-3 py-1.5 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded text-sm hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">2</button>
+            <button className="px-3 py-1.5 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded text-sm hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">3</button>
+            <button className="px-3 py-1.5 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded text-sm hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
               Next
             </button>
           </div>
         </div>
       </div>
+
+      {/* Action menu — portaled out of the table so it can escape the table's
+          overflow-x-auto wrapper. */}
+      {openMenuId && menuPosition && (() => {
+        const invoice = invoices.find((inv) => inv.id === openMenuId);
+        if (!invoice) return null;
+        return createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'fixed',
+              top: menuPosition.top,
+              right: menuPosition.right,
+              zIndex: 60,
+            }}
+            className="w-48 bg-card border border-violet-200 dark:border-violet-400/25 rounded-lg shadow-lg py-1"
+          >
+            <button
+              onClick={() => handleDownload(invoice)}
+              className="w-full flex items-center gap-2 px-4 py-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-left"
+            >
+              <Download className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Download PDF</span>
+            </button>
+            <button
+              onClick={() => handleDuplicate(invoice)}
+              className="w-full flex items-center gap-2 px-4 py-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-left"
+            >
+              <Copy className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Duplicate</span>
+            </button>
+            {invoice.status !== 'paid' && (
+              <button
+                onClick={() => handleMarkPaid(invoice)}
+                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-success/10 transition-colors text-left"
+              >
+                <CheckCircle className="w-4 h-4 text-success" />
+                <span className="text-sm text-foreground">Mark as Paid</span>
+              </button>
+            )}
+            <div className="border-t border-violet-100 dark:border-violet-400/15 my-1"></div>
+            <button
+              onClick={() => handleDelete(invoice.id)}
+              className="w-full flex items-center gap-2 px-4 py-2 hover:bg-destructive/10 transition-colors text-left"
+            >
+              <Trash2 className="w-4 h-4 text-destructive" />
+              <span className="text-sm text-destructive">Delete</span>
+            </button>
+          </div>,
+          document.body,
+        );
+      })()}
 
       {/* Invoice Preview Modal */}
       {selectedInvoice && (
@@ -1042,37 +1093,84 @@ export function InvoiceList() {
 
       {/* Send Invoice Modal */}
       {showSendModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-border">
-              <h3 className="text-lg font-semibold text-foreground">Send Invoice</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Send {selectedInvoice.id} to {selectedInvoice.customer}
-              </p>
-            </div>
-            <div className="p-6 space-y-3">
-              <button
-                onClick={() => handleWhatsAppInvoice(selectedInvoice)}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
-              >
-                <MessageCircle className="w-4 h-4" />
-                WhatsApp the Invoice
-              </button>
-              <button
-                onClick={() => handleMailInvoice(selectedInvoice)}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
-              >
-                <Mail className="w-4 h-4" />
-                Mail Invoice
-              </button>
-            </div>
-            <div className="p-6 border-t border-border flex items-center justify-end gap-3">
+        <div
+          className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setShowSendModal(false);
+            setSelectedInvoice(null);
+          }}
+        >
+          <div
+            className="bg-card rounded-2xl border border-violet-200 dark:border-violet-400/30 max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="relative px-6 pt-6 pb-5 border-b border-violet-100 dark:border-violet-400/15">
               <button
                 onClick={() => {
                   setShowSendModal(false);
                   setSelectedInvoice(null);
                 }}
-                className="px-4 py-2 border border-border rounded hover:bg-muted transition-colors"
+                className="absolute right-5 top-5 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-lg bg-violet-500 flex items-center justify-center shrink-0">
+                  <Send className="w-4 h-4 text-white" strokeWidth={2.25} />
+                </div>
+                <div className="min-w-0 pr-8">
+                  <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">Send Invoice</div>
+                  <h2 className="text-[16px] font-semibold tracking-tight text-foreground leading-tight truncate">
+                    {selectedInvoice.id} <span className="text-muted-foreground font-normal">to</span> {selectedInvoice.customer}
+                  </h2>
+                </div>
+              </div>
+            </div>
+
+            {/* Send options */}
+            <div className="px-6 py-5 space-y-2.5">
+              <button
+                onClick={() => handleWhatsAppInvoice(selectedInvoice)}
+                disabled={isSendingMail}
+                className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                  <MessageCircle className="w-4 h-4" strokeWidth={2.25} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-foreground">WhatsApp the Invoice</div>
+                  <div className="text-[11.5px] text-muted-foreground">Send via WhatsApp Business</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleMailInvoice(selectedInvoice)}
+                disabled={isSendingMail}
+                className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-60 disabled:cursor-wait"
+              >
+                <div className="h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0">
+                  {isSendingMail ? (
+                    <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
+                  ) : (
+                    <Mail className="w-4 h-4" strokeWidth={2.25} />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-foreground">{isSendingMail ? 'Sending…' : 'Mail Invoice'}</div>
+                  <div className="text-[11.5px] text-muted-foreground">{isSendingMail ? `Delivering to ${selectedInvoice.customerDetails?.email || ''}` : 'Sent via Resend to the customer'}</div>
+                </div>
+              </button>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 bg-violet-50/40 dark:bg-violet-500/[0.04] flex items-center justify-end">
+              <button
+                onClick={() => {
+                  setShowSendModal(false);
+                  setSelectedInvoice(null);
+                }}
+                className="h-10 px-5 rounded-full text-[13px] font-medium text-foreground border border-violet-200 dark:border-violet-400/25 bg-card hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
               >
                 Cancel
               </button>
@@ -1174,12 +1272,14 @@ function StatCard({
   return (
     <button
       onClick={onClick}
-      className={`bg-white border-2 rounded-lg p-4 text-left transition-all hover:shadow-md ${
-        active ? 'border-accent' : 'border-border'
+      className={`bg-card border rounded-xl p-5 text-left transition-all shadow-[0_1px_2px_rgba(139,92,246,0.08)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] ${
+        active
+          ? 'border-violet-500 dark:border-violet-400 ring-2 ring-violet-300/40 dark:ring-violet-400/25'
+          : 'border-violet-300 dark:border-violet-400/30 hover:border-violet-400 dark:hover:border-violet-400/50'
       }`}
     >
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className={`text-4xl font-bold ${color ? colorClasses[color] : 'text-foreground'}`}>
+      <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{label}</div>
+      <div className={`text-[28px] sm:text-[32px] font-semibold tracking-tight tabular-nums ${color ? colorClasses[color] : 'text-foreground'}`}>
         {value}
       </div>
     </button>
@@ -1187,17 +1287,19 @@ function StatCard({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const styles = {
-    paid: 'bg-success/10 text-success',
-    pending: 'bg-warning/10 text-warning',
-    overdue: 'bg-destructive/10 text-destructive',
-    draft: 'bg-muted text-muted-foreground',
+  const styles: Record<string, string> = {
+    draft: 'bg-muted text-muted-foreground border-border',
+    sent: 'bg-accent/10 text-accent border-accent/30',
+    paid: 'bg-success/10 text-success border-success/30',
+    pending: 'bg-warning/10 text-warning border-warning/30',
+    overdue: 'bg-destructive/10 text-destructive border-destructive/30',
+    cancelled: 'bg-muted text-muted-foreground border-border',
   };
-  const badgeStyle = styles[status as keyof typeof styles] || 'bg-muted text-muted-foreground';
+  const badgeStyle = styles[status] || styles.draft;
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${badgeStyle}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${badgeStyle}`}>
+      {status}
     </span>
   );
 }

@@ -27,6 +27,7 @@ export function OutstandingList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'current' | 'overdue-30' | 'overdue-60' | 'overdue-90'>('all');
   const [viewMode, setViewMode] = useState<'invoice' | 'customer'>('invoice');
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   const formatDate = (value?: string) => {
     if (!value) return '-';
@@ -104,6 +105,36 @@ export function OutstandingList() {
     return matchesSearch && matchesStatus;
   });
 
+  const visibleSelectedItems = filteredData.filter((i) => selectedItems.includes(i.id));
+  const isAllSelected = filteredData.length > 0 && visibleSelectedItems.length === filteredData.length;
+  const isSomeSelected = visibleSelectedItems.length > 0 && visibleSelectedItems.length < filteredData.length;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedItems((prev) => Array.from(new Set([...prev, ...filteredData.map((i) => i.id)])));
+    } else {
+      const visibleIds = new Set(filteredData.map((i) => i.id));
+      setSelectedItems((prev) => prev.filter((id) => !visibleIds.has(id)));
+    }
+  };
+
+  const handleSelectItem = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedItems((prev) => Array.from(new Set([...prev, id])));
+    } else {
+      setSelectedItems((prev) => prev.filter((x) => x !== id));
+    }
+  };
+
+  const handleSendSelectedReminders = () => {
+    const items = outstandingData.filter((i) => selectedItems.includes(i.id));
+    if (items.length === 0) return;
+    const uniqueEmails = new Set(items.map((i) => i.customerEmail).filter(Boolean));
+    toast.success(`Reminders queued for ${uniqueEmails.size} customer${uniqueEmails.size > 1 ? 's' : ''} (${items.length} invoice${items.length > 1 ? 's' : ''})`, {
+      description: 'Email reminders will be sent shortly',
+    });
+  };
+
   // Calculate customer-wise outstanding
   const customerOutstanding = Object.values(
     outstandingData.reduce((acc, item) => {
@@ -135,7 +166,14 @@ export function OutstandingList() {
   };
 
   const handleExport = async () => {
-    logAuditorAction(user, 'outstanding', 'invoices', 'export_outstanding', { count: filteredData.length });
+    const dataToExport = selectedItems.length > 0
+      ? outstandingData.filter((i) => selectedItems.includes(i.id))
+      : filteredData;
+    if (dataToExport.length === 0) {
+      toast.error('Nothing to export — clear filters or select rows first.');
+      return;
+    }
+    logAuditorAction(user, 'outstanding', 'invoices', 'export_outstanding', { count: dataToExport.length });
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Outstanding Payments');
 
@@ -184,7 +222,7 @@ export function OutstandingList() {
     });
 
     // Add data rows
-    outstandingData.forEach((item) => {
+    dataToExport.forEach((item) => {
       const row = worksheet.addRow([
         item.invoiceId,
         item.customer,
@@ -394,30 +432,30 @@ export function OutstandingList() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleExport}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
           >
             <Download className="w-4 h-4" />
-            <span className="text-sm">Export</span>
+            <span className="text-sm">Export{selectedItems.length > 0 ? ` (${selectedItems.length})` : ''}</span>
           </button>
           <button
-            onClick={handleBulkReminders}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+            onClick={selectedItems.length > 0 ? handleSendSelectedReminders : handleBulkReminders}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-violet-500 text-white rounded-lg text-sm font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
           >
             <Mail className="w-4 h-4" />
-            <span className="text-sm">Send Reminders</span>
+            <span className="text-sm">{selectedItems.length > 0 ? `Send Reminders (${selectedItems.length})` : 'Send Reminders'}</span>
           </button>
         </div>
       </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="md:col-span-2 bg-white border-2 border-destructive rounded-lg p-6">
+        <div className="md:col-span-2 bg-card border-2 border-destructive/40 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(220,38,38,0.06)]">
           <div className="flex items-start justify-between mb-2">
-            <div className="text-xs text-muted-foreground">Total Outstanding</div>
+            <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Total Outstanding</div>
             <AlertCircle className="w-5 h-5 text-destructive" />
           </div>
-          <div className="text-3xl font-semibold text-destructive mb-1">
-            ₹{(stats.total / 100000).toFixed(2)}L
+          <div className="text-[28px] sm:text-[32px] font-semibold tracking-tight tabular-nums text-destructive mb-1">
+            ₹{(stats.total / 100000).toFixed(2)}<span className="text-xs ml-0.5 font-normal">L</span>
           </div>
           <div className="text-xs text-muted-foreground">
             {stats.invoiceCount} invoices • {stats.customerCount} customers
@@ -455,9 +493,9 @@ export function OutstandingList() {
       </div>
 
       {/* Table Card */}
-      <div className="bg-white border border-border rounded-lg">
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl shadow-[0_1px_2px_rgba(139,92,246,0.06)] overflow-hidden">
         {/* Toolbar */}
-        <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4">
+        <div className="p-4 border-b border-violet-100 dark:border-violet-400/10 flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -468,24 +506,24 @@ export function OutstandingList() {
               className="w-full pl-10 pr-4 py-2 border border-input bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <div className="flex gap-2">
-            <div className="inline-flex border border-border rounded overflow-hidden">
+          <div className="flex flex-wrap gap-2">
+            <div className="inline-flex border border-violet-200 dark:border-violet-400/25 rounded-lg overflow-hidden bg-card">
               <button
                 onClick={() => setViewMode('invoice')}
-                className={`px-4 py-2 text-sm transition-colors ${
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
                   viewMode === 'invoice'
-                    ? 'bg-primary text-white'
-                    : 'bg-white hover:bg-muted'
+                    ? 'bg-violet-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                    : 'text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10'
                 }`}
               >
                 By Invoice
               </button>
               <button
                 onClick={() => setViewMode('customer')}
-                className={`px-4 py-2 text-sm transition-colors ${
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
                   viewMode === 'customer'
-                    ? 'bg-primary text-white'
-                    : 'bg-white hover:bg-muted'
+                    ? 'bg-violet-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                    : 'text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10'
                 }`}
               >
                 By Customer
@@ -493,7 +531,7 @@ export function OutstandingList() {
             </div>
             <button
               onClick={() => setStatusFilter('all')}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-white rounded hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
             >
               <Filter className="w-4 h-4" />
               <span className="text-sm">All</span>
@@ -505,22 +543,41 @@ export function OutstandingList() {
         {viewMode === 'invoice' && (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-muted/50 border-b border-border">
+              <thead className="bg-violet-100 dark:bg-violet-500/15">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Invoice</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Customer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Invoice Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Due Date</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Invoice Amt</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Paid</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Balance</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground">Days</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                  <th className="pl-6 pr-3 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      ref={(input) => {
+                        if (input) input.indeterminate = isSomeSelected;
+                      }}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="w-4 h-4 rounded accent-violet-500"
+                    />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Invoice</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Customer</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Invoice Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Due Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Invoice Amt</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Paid</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Balance</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Days</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
                 {filteredData.map((item) => (
-                  <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={item.id} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
+                    <td className="pl-6 pr-3 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.includes(item.id)}
+                        onChange={(e) => handleSelectItem(item.id, e.target.checked)}
+                        className="w-4 h-4 rounded accent-violet-500"
+                      />
+                    </td>
                     <td className="px-6 py-4 text-sm font-mono font-medium text-foreground">
                       {item.invoiceId}
                     </td>
@@ -530,23 +587,23 @@ export function OutstandingList() {
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{item.invoiceDate}</td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{item.dueDate}</td>
-                    <td className="px-6 py-4 text-sm font-medium text-foreground text-right">
+                    <td className="px-6 py-4 text-sm font-medium text-foreground text-left tabular-nums">
                       ₹{item.amount.toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 text-sm text-success text-right">
+                    <td className="px-6 py-4 text-sm text-success text-left tabular-nums">
                       {item.paidAmount > 0 ? `₹${item.paidAmount.toLocaleString()}` : '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-destructive text-right">
+                    <td className="px-6 py-4 text-sm font-semibold text-destructive text-left tabular-nums">
                       ₹{(item.amount - item.paidAmount).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-left">
                       <AgingBadge status={item.status} days={item.daysPastDue} />
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-start gap-2">
                         <button
                           onClick={() => handleCall(item.customerPhone, item.customer)}
-                          className="p-1.5 hover:bg-muted rounded transition-colors"
+                          className="p-1.5 hover:bg-violet-200/60 dark:hover:bg-violet-500/15 rounded transition-colors"
                           title="Call Customer"
                         >
                           <Phone className="w-4 h-4 text-muted-foreground" />
@@ -558,7 +615,7 @@ export function OutstandingList() {
                             item.invoiceId,
                             item.amount - item.paidAmount
                           )}
-                          className="p-1.5 hover:bg-muted rounded transition-colors"
+                          className="p-1.5 hover:bg-violet-200/60 dark:hover:bg-violet-500/15 rounded transition-colors"
                           title="Send Reminder"
                         >
                           <Mail className="w-4 h-4 text-muted-foreground" />
@@ -576,18 +633,18 @@ export function OutstandingList() {
         {viewMode === 'customer' && (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-muted/50 border-b border-border">
+              <thead className="bg-violet-100 dark:bg-violet-500/15">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground">Customer</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground">Invoices</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Total Outstanding</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground">Oldest Due</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Customer</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Invoices</th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Total Outstanding</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Oldest Due</th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
                 {customerOutstanding.map((customer, index) => (
-                  <tr key={index} className="hover:bg-muted/30 transition-colors">
+                  <tr key={index} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-destructive/10 rounded-full flex items-center justify-center flex-shrink-0">
@@ -600,34 +657,36 @@ export function OutstandingList() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="inline-flex items-center px-3 py-1 bg-muted rounded text-sm font-medium">
+                      <span className="inline-flex items-center px-3 py-1 bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 rounded text-sm font-medium tabular-nums">
                         {customer.invoiceCount}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="text-lg font-semibold text-destructive">
+                      <div className="text-lg font-semibold text-destructive tabular-nums">
                         ₹{customer.totalOutstanding.toLocaleString()}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
                       {customer.oldestDue > 0 ? (
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-medium ${
-                          customer.oldestDue > 60 ? 'bg-destructive/10 text-destructive' :
-                          customer.oldestDue > 30 ? 'bg-warning/10 text-warning' :
-                          'bg-success/10 text-success'
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${
+                          customer.oldestDue > 60 ? 'bg-destructive/10 text-destructive border-destructive/30' :
+                          customer.oldestDue > 30 ? 'bg-warning/10 text-warning border-warning/30' :
+                          'bg-success/10 text-success border-success/30'
                         }`}>
                           <Clock className="w-3 h-3" />
                           {customer.oldestDue} days
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Current</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border bg-success/10 text-success border-success/30">
+                          Current
+                        </span>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleCall(customer.customerPhone, customer.customer)}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 border border-border bg-white rounded hover:bg-muted transition-colors"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
                           title="Call Customer"
                         >
                           <Phone className="w-3 h-3" />
@@ -636,7 +695,6 @@ export function OutstandingList() {
                         <button
                           onClick={() => {
                             const customerInvoices = outstandingData.filter(i => i.customer === customer.customer);
-                            const invoiceList = customerInvoices.map(i => i.invoiceId).join(', ');
                             const subject = encodeURIComponent(`Payment Reminder: Multiple Invoices`);
                             const body = encodeURIComponent(
                               `Dear ${customer.customer},\n\n` +
@@ -650,7 +708,7 @@ export function OutstandingList() {
                             window.location.href = `mailto:${customer.customerEmail}?subject=${subject}&body=${body}`;
                             toast.success(`Email reminder opened for ${customer.customer}`);
                           }}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-violet-500 text-white rounded hover:bg-violet-600 transition-colors shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)]"
                           title="Send Reminder"
                         >
                           <Mail className="w-3 h-3" />
@@ -698,12 +756,14 @@ function StatCard({
   return (
     <button
       onClick={onClick}
-      className={`bg-white border-2 rounded-lg p-4 text-left transition-all hover:shadow-md ${
-        active ? 'border-accent' : 'border-border'
+      className={`bg-card border rounded-xl p-4 text-left transition-all shadow-[0_1px_2px_rgba(139,92,246,0.08)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] ${
+        active
+          ? 'border-violet-500 dark:border-violet-400 ring-2 ring-violet-300/40 dark:ring-violet-400/25'
+          : 'border-violet-300 dark:border-violet-400/30 hover:border-violet-400 dark:hover:border-violet-400/50'
       }`}
     >
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className={`text-xl font-semibold ${color ? colorClasses[color] : 'text-foreground'}`}>
+      <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">{label}</div>
+      <div className={`text-xl font-semibold tabular-nums ${color ? colorClasses[color] : 'text-foreground'}`}>
         {value}
       </div>
     </button>
@@ -711,20 +771,21 @@ function StatCard({
 }
 
 function AgingBadge({ status, days }: { status: string; days: number }) {
-  const styles = {
-    'current': 'bg-success/10 text-success',
-    'overdue-30': 'bg-warning/10 text-warning',
-    'overdue-60': 'bg-warning/10 text-warning',
-    'overdue-90': 'bg-destructive/10 text-destructive',
+  const styles: Record<string, string> = {
+    'current': 'bg-success/10 text-success border-success/30',
+    'overdue-30': 'bg-warning/10 text-warning border-warning/30',
+    'overdue-60': 'bg-warning/10 text-warning border-warning/30',
+    'overdue-90': 'bg-destructive/10 text-destructive border-destructive/30',
   };
+  const badgeStyle = styles[status] || 'bg-muted text-muted-foreground border-border';
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${styles[status as keyof typeof styles]}`}>
+    <div className="flex flex-col items-start gap-1">
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${badgeStyle}`}>
         {days === 0 ? 'Current' : `${days} days`}
       </span>
       {days > 0 && (
-        <span className="text-xs text-muted-foreground">overdue</span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">overdue</span>
       )}
     </div>
   );

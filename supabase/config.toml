@@ -1,0 +1,8 @@
+# Supabase project config — only the per-function overrides are needed for
+# the email integration. Keep this file checked in so deploys stay reproducible.
+
+[functions.send-invoice-email]
+# The frontend calls this function with the publishable anon key (not a JWT
+# session token), so the gateway-side JWT check has to be off. The function
+# does its own input validation.
+verify_jwt = false
