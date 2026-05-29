@@ -473,7 +473,7 @@ export function CreditNotesList() {
         </div>
         <Link
           to="/app/credit-notes/new"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+          className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
         >
           <Plus className="w-4 h-4" />
           Create Note

@@ -336,17 +336,17 @@ export function ReportsDashboard() {
             <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
               GSTR-1 is due on the 11th of the following month for monthly filers. Generate the report from your live invoices and download the JSON to upload to the GST Portal.
             </p>
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex flex-row items-stretch gap-2 sm:gap-3 sm:flex-wrap">
               <button
                 onClick={() => setSelectedReport('gstr1')}
-                className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors whitespace-nowrap flex-1 sm:flex-initial"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 Generate GSTR-1
               </button>
               <button
                 onClick={() => toast.info('Generate the GSTR-1 report first, then use the Download JSON button there.')}
-                className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors whitespace-nowrap flex-1 sm:flex-initial"
               >
                 <Download className="w-4 h-4" />
                 Download JSON

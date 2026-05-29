@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Plus, Trash2, Eye, EyeOff, CheckSquare, Square, Shield, Edit, X } from 'lucide-react';
+import { Plus, Trash2, Eye, EyeOff, CheckSquare, Square, Shield, Edit, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -43,6 +43,7 @@ export function AuditorManagement() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAuditor, setSelectedAuditor] = useState<Auditor | null>(null);
+  const [expandedAuditorId, setExpandedAuditorId] = useState<string>('');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -64,10 +65,9 @@ export function AuditorManagement() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('app_users')
+        .from('auditors')
         .select('id, full_name, email, created_at, auditor_permissions(permission_name)')
         .eq('company_id', user.company_id)
-        .eq('role', 'auditor')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
@@ -238,7 +238,7 @@ export function AuditorManagement() {
             resetForm();
             setShowCreateModal(true);
           }}
-          className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
+          className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
         >
           <Plus className="w-4 h-4" />
           Create Auditor
@@ -273,95 +273,190 @@ export function AuditorManagement() {
                 resetForm();
                 setShowCreateModal(true);
               }}
-              className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
+              className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
             >
               <Plus className="w-4 h-4" />
               Create First Auditor
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-violet-100 dark:bg-violet-500/15">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Permissions</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
-                {auditors.map((auditor) => (
-                  <tr key={auditor.id} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-violet-500 text-white flex items-center justify-center flex-shrink-0 text-[13px] font-bold">
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-violet-100 dark:bg-violet-500/15">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Permissions</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Created</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-violet-100 dark:divide-violet-400/10">
+                  {auditors.map((auditor) => (
+                    <tr key={auditor.id} className="bg-violet-50/60 dark:bg-violet-500/[0.04] hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.10] transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-violet-500 text-white flex items-center justify-center flex-shrink-0 text-[13px] font-bold">
+                            {auditor.full_name.slice(0, 1).toUpperCase()}
+                          </div>
+                          <div className="text-sm font-medium text-foreground">{auditor.full_name}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">{auditor.email}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1.5 max-w-md">
+                          {auditor.permissions.length === 0 ? (
+                            <span className="text-[11.5px] text-muted-foreground italic">No permissions</span>
+                          ) : (
+                            <>
+                              {auditor.permissions.slice(0, 3).map((p) => (
+                                <span
+                                  key={p}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                                >
+                                  {PERMISSION_LABEL[p] || p}
+                                </span>
+                              ))}
+                              {auditor.permissions.length > 3 && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300">
+                                  +{auditor.permissions.length - 3} more
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground tabular-nums">
+                        {new Date(auditor.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-start gap-1.5">
+                          <button
+                            onClick={() => openEditModal(auditor)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground hover:bg-violet-100 dark:hover:bg-violet-500/15 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => openPermissionsModal(auditor)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/15 rounded transition-colors"
+                            title="Manage Permissions"
+                          >
+                            <Shield className="w-4 h-4" />
+                            Permissions
+                          </button>
+                          <button
+                            onClick={() => setDeletingAuditor(auditor)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden divide-y divide-violet-100 dark:divide-violet-400/10">
+              {auditors.map((auditor) => {
+                const isExpanded = expandedAuditorId === auditor.id;
+                return (
+                  <div key={auditor.id} className="p-4">
+                    {/* Collapsed Header */}
+                    <div
+                      onClick={() => setExpandedAuditorId(isExpanded ? '' : auditor.id)}
+                      className="flex items-center justify-between cursor-pointer gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-full bg-violet-500 text-white flex items-center justify-center flex-shrink-0 text-[14px] font-bold">
                           {auditor.full_name.slice(0, 1).toUpperCase()}
                         </div>
-                        <div className="text-sm font-medium text-foreground">{auditor.full_name}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-foreground truncate">{auditor.full_name}</div>
+                          <div className="text-[12px] text-muted-foreground truncate">{auditor.email}</div>
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{auditor.email}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1.5 max-w-md">
-                        {auditor.permissions.length === 0 ? (
-                          <span className="text-[11.5px] text-muted-foreground italic">No permissions</span>
+                      <button className="p-2 hover:bg-muted rounded-lg transition-colors flex-shrink-0">
+                        {isExpanded ? (
+                          <ChevronUp className="w-5 h-5 text-muted-foreground" />
                         ) : (
-                          <>
-                            {auditor.permissions.slice(0, 3).map((p) => (
-                              <span
-                                key={p}
-                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300"
-                              >
-                                {PERMISSION_LABEL[p] || p}
-                              </span>
-                            ))}
-                            {auditor.permissions.length > 3 && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300">
-                                +{auditor.permissions.length - 3} more
-                              </span>
-                            )}
-                          </>
+                          <ChevronDown className="w-5 h-5 text-muted-foreground" />
                         )}
+                      </button>
+                    </div>
+
+                    {/* Expanded Details */}
+                    {isExpanded && (
+                      <div className="space-y-4 mt-4 pt-4 border-t border-violet-100 dark:border-violet-400/10">
+                        {/* Permissions */}
+                        <div>
+                          <div className="text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 mb-2">
+                            Permissions
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {auditor.permissions.length === 0 ? (
+                              <span className="text-[12px] text-muted-foreground italic">No permissions granted</span>
+                            ) : (
+                              auditor.permissions.map((p) => (
+                                <span
+                                  key={p}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                                >
+                                  {PERMISSION_LABEL[p] || p}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Created date */}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Created</span>
+                          <span className="font-medium text-foreground tabular-nums">
+                            {new Date(auditor.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="pt-3 border-t border-violet-100 dark:border-violet-400/10 flex flex-col gap-2">
+                          <button
+                            onClick={() => openEditModal(auditor)}
+                            className="inline-flex items-center justify-center gap-2 px-4 h-11 text-[13.5px] font-medium text-foreground border border-violet-200 dark:border-violet-400/25 hover:bg-violet-50 dark:hover:bg-violet-500/10 rounded-lg transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Edit Auditor
+                          </button>
+                          <button
+                            onClick={() => openPermissionsModal(auditor)}
+                            className="inline-flex items-center justify-center gap-2 px-4 h-11 text-[13.5px] font-medium text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-400/25 hover:bg-violet-50 dark:hover:bg-violet-500/10 rounded-lg transition-colors"
+                          >
+                            <Shield className="w-4 h-4" />
+                            Manage Permissions
+                          </button>
+                          <button
+                            onClick={() => setDeletingAuditor(auditor)}
+                            className="inline-flex items-center justify-center gap-2 px-4 h-11 text-[13.5px] font-medium text-destructive border border-destructive/30 hover:bg-destructive/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete Auditor
+                          </button>
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground tabular-nums">
-                      {new Date(auditor.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-start gap-1.5">
-                        <button
-                          onClick={() => openEditModal(auditor)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground hover:bg-violet-100 dark:hover:bg-violet-500/15 rounded transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => openPermissionsModal(auditor)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/15 rounded transition-colors"
-                          title="Manage Permissions"
-                        >
-                          <Shield className="w-4 h-4" />
-                          Permissions
-                        </button>
-                        <button
-                          onClick={() => setDeletingAuditor(auditor)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 rounded transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

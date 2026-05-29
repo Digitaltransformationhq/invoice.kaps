@@ -1273,15 +1273,15 @@ export function InvoiceCreate() {
         </div>
 
         {/* Sticky-feeling action bar */}
-        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl px-4 md:px-6 py-3.5 shadow-[0_1px_2px_rgba(139,92,246,0.06)] flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between gap-3">
-          <div className="text-[13px] text-muted-foreground hidden sm:block">
+        <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl px-4 md:px-6 py-3.5 shadow-[0_1px_2px_rgba(139,92,246,0.06)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="text-[13px] text-muted-foreground min-w-0 md:flex-1 md:pr-2">
             {invoiceCreated ? 'Invoice created — review and send to your customer.' : 'Review the details above, then create the invoice.'}
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5">
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5 md:justify-end md:shrink-0">
             <button
               onClick={handleSaveDraft}
               disabled={isSavingInvoice}
-              className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
             >
               <Save className="w-3.5 h-3.5" />
               {isSavingInvoice ? 'Saving…' : 'Save as Draft'}
@@ -1289,7 +1289,7 @@ export function InvoiceCreate() {
             {!invoiceCreated && (
               <button
                 onClick={() => setShowPreview(true)}
-                className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium"
+                className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
               >
                 <Eye className="w-3.5 h-3.5" />
                 Preview
@@ -1298,7 +1298,7 @@ export function InvoiceCreate() {
             <button
               onClick={invoiceCreated ? () => setShowPreview(true) : handleCreateInvoice}
               disabled={isSavingInvoice}
-              className="inline-flex items-center justify-center h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
             >
               {isSavingInvoice ? 'Saving…' : invoiceCreated ? 'View Invoice' : 'Create Invoice →'}
             </button>

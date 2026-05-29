@@ -227,45 +227,49 @@ export function CreditNotePreview({
   };
 
   return (
-    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[96vh] sm:max-h-[90vh] flex flex-col">
         {/* Modal Header */}
-        <div className="invoice-preview-actions flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">
+        <div className="invoice-preview-actions flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 border-b border-border">
+          <h2 className="hidden sm:block text-lg font-semibold text-foreground shrink-0">
             {noteType === 'credit' ? 'Credit' : 'Debit'} Note Preview
           </h2>
-          <div className="flex items-center gap-2">
+          <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">Preview</h2>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              title="Download PDF"
             >
               <Download className="w-4 h-4" />
-              <span className="text-sm">Download PDF</span>
+              <span className="hidden sm:inline text-sm">Download PDF</span>
             </button>
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              title="Print"
             >
               <Printer className="w-4 h-4" />
-              <span className="text-sm">Print</span>
+              <span className="hidden sm:inline text-sm">Print</span>
             </button>
             <button
               onClick={handleSendNote}
               disabled={isSendingMail}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              title="Send Note"
             >
               {isSendingMail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              <span className="text-sm">{isSendingMail ? 'Sending…' : 'Send Note'}</span>
+              <span className="hidden sm:inline text-sm">{isSendingMail ? 'Sending…' : 'Send Note'}</span>
             </button>
-            <button onClick={onClose} className="p-2 hover:bg-muted rounded transition-colors">
+            <button onClick={onClose} className="p-2 hover:bg-muted rounded transition-colors" title="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Note Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="bg-white border-2 border-foreground mx-auto max-w-[210mm]" style={{ fontFamily: 'Arial, sans-serif' }}>
+        <div className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+          <div className="invoice-print-page bg-white border-2 border-foreground mx-auto max-w-[210mm]" style={{ fontFamily: 'Arial, sans-serif' }}>
             {/* Header */}
             <div className="text-right px-4 pt-2 text-xs">
               <div className="font-semibold">ORIGINAL FOR BUYER</div>

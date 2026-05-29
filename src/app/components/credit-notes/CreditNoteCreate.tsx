@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ArrowLeft, Plus, Trash2, Save, Send, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Send, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { CreditNotePreview } from './CreditNotePreview';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -66,6 +66,7 @@ export function CreditNoteCreate() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedItemId, setExpandedItemId] = useState<string>('1');
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
     {
@@ -351,32 +352,6 @@ export function CreditNoteCreate() {
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setShowPreview(true)}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-[13px] font-medium text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60"
-          >
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-          <button
-            onClick={handleSaveDraft}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-[13px] font-medium text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60 disabled:cursor-wait"
-          >
-            <Save className="w-4 h-4" />
-            {isSaving ? 'Saving…' : 'Save Draft'}
-          </button>
-          <button
-            onClick={handleCreateAndSend}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
-          >
-            <Send className="w-4 h-4" />
-            {isSaving ? 'Saving…' : 'Create & Send'}
-          </button>
-        </div>
       </div>
 
       {/* STEPS 1 + 2 — Customer & Note Details */}
@@ -578,7 +553,8 @@ export function CreditNoteCreate() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-violet-100 dark:bg-violet-500/15">
               <tr>
@@ -697,6 +673,179 @@ export function CreditNoteCreate() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Card View */}
+        <div className="lg:hidden divide-y divide-violet-100 dark:divide-violet-400/10">
+          {lineItems.map((item, index) => {
+            const isExpanded = expandedItemId === item.id;
+            const taxable = item.qty * item.rate * (1 - item.discount / 100);
+            return (
+              <div key={item.id} className="p-4">
+                {/* Collapsed Header */}
+                <div
+                  onClick={() => setExpandedItemId(isExpanded ? '' : item.id)}
+                  className="flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-muted-foreground">Item #{index + 1}</span>
+                      {item.item && (
+                        <span className="text-sm text-foreground truncate">- {item.item}</span>
+                      )}
+                    </div>
+                    <div className="text-sm font-semibold text-violet-600 dark:text-violet-300 mt-1 tabular-nums">
+                      ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {lineItems.length > 1 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeLineItem(item.id);
+                        }}
+                        className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button className="p-2 hover:bg-muted rounded-lg transition-colors">
+                      {isExpanded ? (
+                        <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="space-y-4 mt-4 pt-4 border-t border-violet-100 dark:border-violet-400/10">
+                    {/* Item */}
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">Item</label>
+                      <input
+                        type="text"
+                        value={item.item}
+                        onChange={(e) => updateLineItem(item.id, 'item', e.target.value)}
+                        placeholder="Product or service"
+                        className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      />
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">Description</label>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                        placeholder="Brief description"
+                        className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      />
+                    </div>
+
+                    {/* HSN */}
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">HSN/SAC</label>
+                      <input
+                        type="text"
+                        value={item.hsn}
+                        onChange={(e) => updateLineItem(item.id, 'hsn', e.target.value)}
+                        placeholder="998314"
+                        className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      />
+                    </div>
+
+                    {/* Qty and Unit */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">Quantity</label>
+                        <input
+                          type="number"
+                          value={item.qty}
+                          onChange={(e) => updateLineItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">Unit</label>
+                        <select
+                          value={item.unit}
+                          onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        >
+                          <option>Nos</option>
+                          <option>Hrs</option>
+                          <option>Days</option>
+                          <option>Kgs</option>
+                          <option>Pcs</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Rate and Discount */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">Rate</label>
+                        <input
+                          type="number"
+                          value={item.rate}
+                          onChange={(e) => updateLineItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">Discount %</label>
+                        <input
+                          type="number"
+                          value={item.discount}
+                          onChange={(e) => updateLineItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        />
+                      </div>
+                    </div>
+
+                    {/* GST */}
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">GST %</label>
+                      <select
+                        value={item.gst}
+                        onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
+                        className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      >
+                        <option value="0">0%</option>
+                        <option value="5">5%</option>
+                        <option value="12">12%</option>
+                        <option value="18">18%</option>
+                        <option value="28">28%</option>
+                      </select>
+                    </div>
+
+                    {/* Calculated Amounts */}
+                    <div className="pt-3 border-t border-violet-100 dark:border-violet-400/10 space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Taxable Amount</span>
+                        <span className="font-medium text-foreground tabular-nums">
+                          ₹{taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground font-semibold">Total Amount</span>
+                        <span className="font-semibold text-foreground tabular-nums">
+                          ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* STEPS 4 + 5 — Additional Notes + Summary */}
@@ -761,6 +910,39 @@ export function CreditNoteCreate() {
                 : "This amount will be added to the customer's outstanding."}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Sticky-feeling action bar */}
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl px-4 md:px-6 py-3.5 shadow-[0_1px_2px_rgba(139,92,246,0.06)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="text-[13px] text-muted-foreground min-w-0 md:flex-1 md:pr-2">
+          Review the details above, then save or send this {noteType === 'credit' ? 'credit' : 'debit'} note.
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5 md:justify-end md:shrink-0">
+          <button
+            onClick={() => setShowPreview(true)}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Preview
+          </button>
+          <button
+            onClick={handleSaveDraft}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {isSaving ? 'Saving…' : 'Save Draft'}
+          </button>
+          <button
+            onClick={handleCreateAndSend}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {isSaving ? 'Saving…' : 'Create & Send'}
+          </button>
         </div>
       </div>
 

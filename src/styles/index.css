@@ -114,8 +114,86 @@
     padding-top: 1mm !important;
   }
 
+  .invoice-print-page {
+    zoom: 1 !important;
+    transform: none !important;
+  }
+
   .invoice-print-page .py-1 {
     padding-top: 0.8mm !important;
     padding-bottom: 0.8mm !important;
+  }
+}
+
+/* Screen-only: shrink the A4 invoice page so it fits inside the preview
+ * modal on phones and tablets without changing the document's internal
+ * layout. The print stylesheet above resets `zoom` and `transform` so
+ * printing always happens at full scale. */
+@media screen and (max-width: 380px) {
+  .invoice-preview-modal .invoice-print-page {
+    zoom: 0.4;
+  }
+}
+@media screen and (min-width: 381px) and (max-width: 480px) {
+  .invoice-preview-modal .invoice-print-page {
+    zoom: 0.48;
+  }
+}
+@media screen and (min-width: 481px) and (max-width: 640px) {
+  .invoice-preview-modal .invoice-print-page {
+    zoom: 0.62;
+  }
+}
+@media screen and (min-width: 641px) and (max-width: 820px) {
+  .invoice-preview-modal .invoice-print-page {
+    zoom: 0.78;
+  }
+}
+@media screen and (min-width: 821px) and (max-width: 1024px) {
+  .invoice-preview-modal .invoice-print-page {
+    zoom: 0.9;
+  }
+}
+
+/* Firefox <126 doesn't support `zoom`; fall back to transform-scale for
+ * those builds. Modern Firefox (126+, the current channel) implements zoom
+ * natively, so this @supports negation cleanly targets only the old engines.
+ * `transform-origin: top center` keeps the document centred while the
+ * surrounding scroll container measures the unscaled box, which we then
+ * correct with the matching negative bottom margin. */
+@media screen and (max-width: 380px) {
+  @supports (-moz-appearance: none) and (not (zoom: 1)) {
+    .invoice-preview-modal .invoice-print-page {
+      transform: scale(0.4);
+      transform-origin: top center;
+      margin-bottom: -60%;
+    }
+  }
+}
+@media screen and (min-width: 381px) and (max-width: 480px) {
+  @supports (-moz-appearance: none) and (not (zoom: 1)) {
+    .invoice-preview-modal .invoice-print-page {
+      transform: scale(0.48);
+      transform-origin: top center;
+      margin-bottom: -52%;
+    }
+  }
+}
+@media screen and (min-width: 481px) and (max-width: 640px) {
+  @supports (-moz-appearance: none) and (not (zoom: 1)) {
+    .invoice-preview-modal .invoice-print-page {
+      transform: scale(0.62);
+      transform-origin: top center;
+      margin-bottom: -38%;
+    }
+  }
+}
+@media screen and (min-width: 641px) and (max-width: 820px) {
+  @supports (-moz-appearance: none) and (not (zoom: 1)) {
+    .invoice-preview-modal .invoice-print-page {
+      transform: scale(0.78);
+      transform-origin: top center;
+      margin-bottom: -22%;
+    }
   }
 }

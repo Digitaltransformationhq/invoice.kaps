@@ -339,7 +339,7 @@ export function LandingPage() {
             <div className="grid lg:grid-cols-12 gap-10 lg:gap-8 items-center">
               <div className="lg:col-span-6 text-center lg:text-left">
                 <p className="text-[13px] font-medium text-violet-600 dark:text-violet-300/90 tracking-wide">GST Compliance, Built for India</p>
-                <h1 className="mt-5 text-[40px] sm:text-[52px] lg:text-[58px] leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
+                <h1 className="mt-5 text-[32px] sm:text-[44px] md:text-[52px] lg:text-[58px] leading-[1.08] sm:leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
                   Streamline GST Invoicing with Smart Automation
                 </h1>
                 <p className="mt-7 max-w-xl mx-auto lg:mx-0 text-[15px] leading-relaxed text-slate-600 dark:text-white/55">
@@ -412,8 +412,8 @@ export function LandingPage() {
                     <span className="h-3 w-3 rounded-full bg-[#FEBC2E]" />
                     <span className="h-3 w-3 rounded-full bg-[#28C840]" />
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] min-w-[260px] max-w-md w-1/2">
-                    <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] flex-1 min-w-0 sm:min-w-[260px] sm:flex-initial max-w-md sm:w-1/2">
+                    <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
                     <span className="text-[11px] font-mono text-white/55 truncate">app.gstinvoicepro.in / dashboard</span>
                   </div>
                   <div className="flex items-center gap-2 text-white/30">
@@ -483,7 +483,7 @@ export function LandingPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3 lg:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4">
                       <KpiCard label="Total Revenue" value="₹12,42,500" delta="+ 18.4%" deltaTone="positive" icon={<IndianRupee className="h-3.5 w-3.5" />} accent="violet" />
                       <KpiCard label="Total Invoices" value="142" delta="+ 23 this month" deltaTone="positive" icon={<FileText className="h-3.5 w-3.5" />} accent="sky" />
                       <KpiCard label="Pending Amount" value="₹2,84,000" delta="12 invoices" deltaTone="warning" icon={<Clock className="h-3.5 w-3.5" />} accent="amber" />
@@ -581,7 +581,7 @@ export function LandingPage() {
         <section id="features" className="relative py-20 lg:py-24 px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
             <p className="text-[13px] font-medium text-violet-600 dark:text-violet-300/90 tracking-wide">Key Features and Benefits</p>
-            <h2 className="mt-5 text-[34px] sm:text-[44px] lg:text-[52px] leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
+            <h2 className="mt-5 text-[28px] sm:text-[34px] md:text-[44px] lg:text-[52px] leading-[1.1] sm:leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
               Effortless billing,
               <br />
               audit-ready books
@@ -606,7 +606,7 @@ export function LandingPage() {
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="max-w-4xl mx-auto text-center">
               <p className="text-[13px] font-medium text-violet-600 dark:text-violet-300/90 tracking-wide">Loved by founders, trusted by CAs</p>
-              <h2 className="mt-5 text-[34px] sm:text-[44px] lg:text-[52px] leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
+              <h2 className="mt-5 text-[28px] sm:text-[34px] md:text-[44px] lg:text-[52px] leading-[1.1] sm:leading-[1.06] font-medium tracking-[-0.025em] text-slate-900 dark:text-white">
                 Experience the
                 <br />
                 Future of GST Invoicing
@@ -752,10 +752,10 @@ export function LandingPage() {
           {/* Giant brand wordmark */}
           <div className="relative mt-10 sm:mt-14 select-none">
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-[80%] bg-[radial-gradient(55%_70%_at_50%_100%,rgba(139,92,246,0.22),transparent_72%)] pointer-events-none" />
-            <div className="relative flex items-end justify-center overflow-hidden px-2 sm:px-4">
+            <div className="relative flex items-end justify-center overflow-hidden">
               <h2
                 aria-label="GSTInvoice Pro"
-                className="font-black tracking-[-0.06em] leading-[0.85] text-[clamp(72px,18vw,260px)] translate-y-[12%] whitespace-nowrap"
+                className="font-black tracking-[-0.06em] leading-[0.85] text-[14.4vw] translate-y-[14%] sm:translate-y-[12%] whitespace-nowrap"
               >
                 <span className="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-900/25 dark:from-white dark:via-white dark:to-white/15 bg-clip-text text-transparent">
                   GSTInvoice

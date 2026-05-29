@@ -301,32 +301,6 @@ export function ReceiptCreate() {
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setShowPreview(true)}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-[13px] font-medium text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60"
-          >
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-          <button
-            onClick={handleSaveDraft}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-[13px] font-medium text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60 disabled:cursor-wait"
-          >
-            <Save className="w-4 h-4" />
-            {isSaving ? 'Saving…' : 'Save Draft'}
-          </button>
-          <button
-            onClick={handleCreateAndSend}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
-          >
-            <Send className="w-4 h-4" />
-            {isSaving ? 'Saving…' : 'Create & Send'}
-          </button>
-        </div>
       </div>
 
       {/* STEPS 1 + 2 — Customer & Receipt Details */}
@@ -658,6 +632,39 @@ export function ReceiptCreate() {
               <li>• Cheque receipts default to Pending — switch to Cleared once the cheque clears.</li>
             </ul>
           </div>
+        </div>
+      </div>
+
+      {/* Sticky-feeling action bar */}
+      <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl px-4 md:px-6 py-3.5 shadow-[0_1px_2px_rgba(139,92,246,0.06)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="text-[13px] text-muted-foreground min-w-0 md:flex-1 md:pr-2">
+          Review the details above, then save or send this receipt.
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5 md:justify-end md:shrink-0">
+          <button
+            onClick={() => setShowPreview(true)}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Preview
+          </button>
+          <button
+            onClick={handleSaveDraft}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {isSaving ? 'Saving…' : 'Save Draft'}
+          </button>
+          <button
+            onClick={handleCreateAndSend}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {isSaving ? 'Saving…' : 'Create & Send'}
+          </button>
         </div>
       </div>
 

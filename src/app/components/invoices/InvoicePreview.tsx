@@ -284,34 +284,38 @@ export function InvoicePreview({
   };
 
   return (
-    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[96vh] sm:max-h-[90vh] flex flex-col">
         {/* Modal Header */}
-        <div className="invoice-preview-actions flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">Invoice Preview</h2>
-          <div className="flex items-center gap-2">
+        <div className="invoice-preview-actions flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 border-b border-border">
+          <h2 className="hidden sm:block text-lg font-semibold text-foreground shrink-0">Invoice Preview</h2>
+          <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">Preview</h2>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              title="Download PDF"
             >
               <Download className="w-4 h-4" />
-              <span className="text-sm">Download PDF</span>
+              <span className="hidden sm:inline text-sm">Download PDF</span>
             </button>
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              title="Print"
             >
               <Printer className="w-4 h-4" />
-              <span className="text-sm">Print</span>
+              <span className="hidden sm:inline text-sm">Print</span>
             </button>
             <button
               onClick={() => setShowSendOptions(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+              title="Send Invoice"
             >
               <Send className="w-4 h-4" />
-              <span className="text-sm">Send Invoice</span>
+              <span className="hidden sm:inline text-sm">Send Invoice</span>
             </button>
-            <button onClick={onClose} className="p-2 hover:bg-muted rounded transition-colors">
+            <button onClick={onClose} className="p-2 hover:bg-muted rounded transition-colors" title="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -396,7 +400,7 @@ export function InvoicePreview({
         )}
 
         {/* Invoice Content */}
-        <div className="invoice-print-area flex-1 overflow-y-auto p-6">
+        <div className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
           {invoiceCopies.map((copyLabel, copyIndex) => (
           <div
             key={copyLabel}

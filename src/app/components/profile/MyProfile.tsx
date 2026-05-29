@@ -306,24 +306,24 @@ export function MyProfile() {
         {!isEditing ? (
           <button
             onClick={() => setIsEditing(true)}
-            className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors"
+            className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
           >
             <Edit3 className="w-4 h-4" />
             Edit Profile
           </button>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-stretch gap-2">
             <button
               onClick={handleCancel}
               disabled={isSaving}
-              className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground text-[14px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-all disabled:opacity-60 flex-1 sm:flex-initial"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="inline-flex items-center gap-2 px-4 h-10 bg-violet-500 text-white rounded-lg text-[13px] font-semibold shadow-[0_2px_8px_-2px_rgba(139,92,246,0.5)] hover:bg-violet-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-60 disabled:cursor-wait flex-1 sm:flex-initial"
             >
               <Save className="w-4 h-4" />
               {isSaving ? 'Saving…' : 'Save Changes'}
