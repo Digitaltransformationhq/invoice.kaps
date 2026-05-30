@@ -29,12 +29,22 @@ interface AuthMetadata {
   gstin?: string;
 }
 
+interface AuditorCompany {
+  auditor_id: string;
+  company_id: string;
+  company_name: string;
+  company_logo: string | null;
+  full_name: string;
+}
+
 interface AuthContextType {
   user: User | null;
   permissions: Permission[];
   isAuthenticated: boolean;
   isOwner: boolean;
   login: (email: string, password: string, role?: 'owner' | 'auditor') => Promise<{ success: boolean; error?: string }>;
+  lookupAuditorCompanies: (email: string) => Promise<{ success: boolean; companies?: AuditorCompany[]; error?: string }>;
+  loginAuditorById: (auditorId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   hasPermission: (resource: string, action?: 'view' | 'create' | 'edit' | 'delete') => boolean;
 }
@@ -314,6 +324,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSession();
   };
 
+  const lookupAuditorCompanies = async (email: string) => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured.' };
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('auditor_list_companies', { p_email: email });
+      if (error || !data?.success) {
+        return { success: false, error: data?.error || error?.message || 'Could not look up auditor companies' };
+      }
+      return { success: true, companies: (data.companies || []) as AuditorCompany[] };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Lookup failed' };
+    }
+  };
+
+  const loginAuditorById = async (auditorId: string, password: string) => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured.' };
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('verify_auditor_login_by_id', {
+        p_auditor_id: auditorId,
+        p_password: password,
+      });
+
+      if (error || !data?.success) {
+        return { success: false, error: data?.error || error?.message || 'Invalid password' };
+      }
+
+      const auditor = data.auditor;
+      const auditorPermissions = (auditor.permissions || []).map((permission: Permission) => permission);
+
+      storeSession({
+        id: auditor.id,
+        email: auditor.email,
+        full_name: auditor.full_name,
+        role: 'auditor',
+        company_id: auditor.company_id,
+        company_name: auditor.company_name,
+        company_gstin: auditor.company_gstin,
+        company_logo: auditor.company_logo,
+        is_active: true,
+      }, auditorPermissions);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
+    }
+  };
+
   const hasPermission = (resource: string, action: 'view' | 'create' | 'edit' | 'delete' = 'view'): boolean => {
     if (user?.role === 'owner') {
       return true;
@@ -336,6 +398,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isOwner: user?.role === 'owner',
         login,
+        lookupAuditorCompanies,
+        loginAuditorById,
         logout,
         hasPermission,
       }}

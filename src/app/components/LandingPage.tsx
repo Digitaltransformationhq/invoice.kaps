@@ -46,6 +46,11 @@ export function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [loginRole, setLoginRole] = useState<'user' | 'auditor'>('user');
+  type AuditorCompanyOption = { auditor_id: string; company_id: string; company_name: string; company_logo: string | null; full_name: string };
+  const [auditorStage, setAuditorStage] = useState<'email' | 'pick' | 'password'>('email');
+  const [auditorCompanies, setAuditorCompanies] = useState<AuditorCompanyOption[]>([]);
+  const [selectedAuditor, setSelectedAuditor] = useState<AuditorCompanyOption | null>(null);
+  const [auditorLoading, setAuditorLoading] = useState(false);
 
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'light';
@@ -136,8 +141,66 @@ export function LandingPage() {
     companyLogo: ''
   });
 
-  const { login } = useAuth();
+  const { login, lookupAuditorCompanies, loginAuditorById } = useAuth();
   const navigate = useNavigate();
+
+  const resetAuditorFlow = () => {
+    setAuditorStage('email');
+    setAuditorCompanies([]);
+    setSelectedAuditor(null);
+    setAuditorLoading(false);
+  };
+
+  const handleAuditorLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail) {
+      toast.error('Enter your email to continue');
+      return;
+    }
+    setAuditorLoading(true);
+    const result = await lookupAuditorCompanies(loginEmail);
+    setAuditorLoading(false);
+
+    if (!result.success) {
+      toast.error(result.error || 'Lookup failed');
+      return;
+    }
+    const companies = result.companies || [];
+    if (companies.length === 0) {
+      toast.error('No auditor account found with this email');
+      return;
+    }
+    setAuditorCompanies(companies);
+    if (companies.length === 1) {
+      setSelectedAuditor(companies[0]);
+      setAuditorStage('password');
+    } else {
+      setAuditorStage('pick');
+    }
+  };
+
+  const handleAuditorPasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAuditor) return;
+    if (!loginPassword) {
+      toast.error('Enter your password');
+      return;
+    }
+    setAuditorLoading(true);
+    const result = await loginAuditorById(selectedAuditor.auditor_id, loginPassword);
+    setAuditorLoading(false);
+
+    if (result.success) {
+      toast.success(`Signed in to ${selectedAuditor.company_name}`);
+      setShowLoginModal(false);
+      resetAuditorFlow();
+      setLoginEmail('');
+      setLoginPassword('');
+      navigate('/app');
+    } else {
+      toast.error(result.error || 'Invalid password');
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +222,8 @@ export function LandingPage() {
     setLoginRole(role);
     setShowLoginModal(true);
     setMobileMenuOpen(false);
+    resetAuditorFlow();
+    setLoginPassword('');
   };
 
   const openSignupModal = () => {
@@ -791,6 +856,7 @@ export function LandingPage() {
                       setLoginEmail('');
                       setLoginPassword('');
                       setLoginRole('user');
+                      resetAuditorFlow();
                     }}
                     className="absolute right-5 top-5 p-1 rounded-md text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                   >
@@ -811,49 +877,49 @@ export function LandingPage() {
                   </p>
                 </div>
 
-                <form onSubmit={handleLogin} className="p-6 space-y-4">
-                  <div>
-                    <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
-                    <input
-                      type="email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      className="kaps-input"
-                      placeholder="you@company.com"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Password</label>
-                    <div className="relative">
+                {loginRole === 'user' ? (
+                  <form onSubmit={handleLogin} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
                       <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="kaps-input pr-11"
-                        placeholder="Enter your password"
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        className="kaps-input"
+                        placeholder="you@company.com"
                         required
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
                     </div>
-                  </div>
 
-                  <button
-                    type="submit"
-                    className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all"
-                  >
-                    Sign in
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-                  </button>
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          className="kaps-input pr-11"
+                          placeholder="Enter your password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
 
-                  {loginRole === 'user' && (
+                    <button
+                      type="submit"
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all"
+                    >
+                      Sign in
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                    </button>
+
                     <p className="text-[12px] text-center text-slate-500 dark:text-white/50 pt-1">
                       Don't have an account?{' '}
                       <button
@@ -867,8 +933,138 @@ export function LandingPage() {
                         Create one
                       </button>
                     </p>
-                  )}
-                </form>
+                  </form>
+                ) : auditorStage === 'email' ? (
+                  <form onSubmit={handleAuditorLookup} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
+                      <input
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        className="kaps-input"
+                        placeholder="you@company.com"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={auditorLoading}
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {auditorLoading ? 'Checking…' : 'Continue'}
+                      {!auditorLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
+                    </button>
+                  </form>
+                ) : auditorStage === 'pick' ? (
+                  <div className="p-6 space-y-3">
+                    <div className="text-[12px] text-slate-600 dark:text-white/55">
+                      You audit <span className="font-semibold text-slate-900 dark:text-white">{auditorCompanies.length}</span> workspaces. Pick the one you want to sign in to.
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {auditorCompanies.map((opt) => (
+                        <button
+                          key={opt.auditor_id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAuditor(opt);
+                            setAuditorStage('password');
+                            setLoginPassword('');
+                          }}
+                          className="w-full inline-flex items-center gap-3 px-3 py-3 border border-slate-200 dark:border-white/10 rounded-xl bg-white dark:bg-white/[0.03] hover:border-violet-400 dark:hover:border-violet-400/40 hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] transition-colors text-left"
+                        >
+                          <div className="h-10 w-10 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0 overflow-hidden">
+                            {opt.company_logo ? (
+                              <img src={opt.company_logo} alt={opt.company_name} className="w-full h-full object-contain" />
+                            ) : (
+                              <span className="text-[14px] font-semibold">{opt.company_name.slice(0, 1).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[14px] font-semibold text-slate-900 dark:text-white truncate">{opt.company_name}</div>
+                            <div className="text-[11.5px] text-slate-500 dark:text-white/55 truncate">Signed in as {opt.full_name}</div>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-slate-400 dark:text-white/40 shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditorStage('email');
+                        setAuditorCompanies([]);
+                      }}
+                      className="text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                    >
+                      ← Use a different email
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleAuditorPasswordLogin} className="p-6 space-y-4">
+                    {selectedAuditor && (
+                      <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-violet-50/60 dark:bg-violet-500/[0.06] border border-violet-200 dark:border-violet-400/25">
+                        <div className="h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0 overflow-hidden">
+                          {selectedAuditor.company_logo ? (
+                            <img src={selectedAuditor.company_logo} alt={selectedAuditor.company_name} className="w-full h-full object-contain" />
+                          ) : (
+                            <span className="text-[13px] font-semibold">{selectedAuditor.company_name.slice(0, 1).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-semibold text-slate-900 dark:text-white truncate">{selectedAuditor.company_name}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-white/55 truncate">{selectedAuditor.full_name}</div>
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          className="kaps-input pr-11"
+                          placeholder="Enter your password"
+                          autoFocus
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={auditorLoading}
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {auditorLoading ? 'Signing in…' : 'Sign in'}
+                      {!auditorLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (auditorCompanies.length > 1) {
+                          setAuditorStage('pick');
+                          setSelectedAuditor(null);
+                          setLoginPassword('');
+                        } else {
+                          setAuditorStage('email');
+                          setAuditorCompanies([]);
+                          setSelectedAuditor(null);
+                          setLoginPassword('');
+                        }
+                      }}
+                      className="text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                    >
+                      ← {auditorCompanies.length > 1 ? 'Pick a different workspace' : 'Use a different email'}
+                    </button>
+                  </form>
+                )}
               </div>
             </div>
           </div>
