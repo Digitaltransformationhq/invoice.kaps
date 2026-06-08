@@ -252,7 +252,7 @@ export function LandingPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupData.fullName || !signupData.email || !signupData.password ||
-        !signupData.phone || !signupData.companyName || !signupData.gstin ||
+        !signupData.phone || !signupData.companyName ||
         !signupData.address || !signupData.city || !signupData.state || !signupData.pinCode) {
       toast.error('Please fill in all required fields');
       return;
@@ -261,7 +261,7 @@ export function LandingPage() {
       toast.error('Password must be at least 8 characters');
       return;
     }
-    if (signupData.gstin.length !== 15) {
+    if (signupData.gstin && signupData.gstin.length !== 15) {
       toast.error('GSTIN must be 15 characters');
       return;
     }
@@ -1162,7 +1162,7 @@ export function LandingPage() {
                           </div>
                           <p className="text-[11px] text-slate-400 dark:text-white/40 mt-2">PNG, JPG, or SVG · under 1 MB.</p>
                         </Field>
-                        <Field label="GSTIN" required className="sm:col-span-2" hint="15-character GST identification number">
+                        <Field label="GSTIN" className="sm:col-span-2" hint="Optional — 15-character GST identification number">
                           <input
                             type="text"
                             value={signupData.gstin}
@@ -1173,7 +1173,6 @@ export function LandingPage() {
                             maxLength={15}
                             className="kaps-input font-mono"
                             placeholder="22AAAAA0000A1Z5"
-                            required
                           />
                         </Field>
                         <Field label="PAN number" className="sm:col-span-2">
