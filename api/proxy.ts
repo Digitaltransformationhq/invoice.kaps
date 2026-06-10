@@ -36,6 +36,8 @@ export default async function handler(req: Request): Promise<Response> {
   const upstream = await fetch(target, { method: req.method, headers, body, redirect: 'manual' });
 
   const respHeaders = new Headers(upstream.headers);
+  respHeaders.set('x-debug-requrl', req.url);
+  respHeaders.set('x-debug-target', target);
   respHeaders.delete('set-cookie');
   respHeaders.delete('content-encoding');
   respHeaders.delete('content-length');
