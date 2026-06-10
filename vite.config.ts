@@ -6,7 +6,8 @@ import react from '@vitejs/plugin-react'
 // Same-origin path the dev server uses to proxy Supabase. Keeping auth/data
 // requests first-party means ad-blockers / privacy extensions can never block
 // them (the cause of "TypeError: Failed to fetch" on login for some users).
-const SUPABASE_PROXY_PATH = '/supabase-api'
+// Matches the production edge proxy route (api/sb/[...path].ts).
+const SUPABASE_PROXY_PATH = '/api/sb'
 
 function figmaAssetResolver() {
   return {
