@@ -14,10 +14,15 @@ const SUPABASE_URL = 'https://ynqncdczpumsenjhcmxk.supabase.co';
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
 
+  // Vercel auto-injects the matched route group (:sbproxypath*) as a query
+  // param. Read it for the Supabase sub-path, then DELETE it so it is never
+  // forwarded — otherwise PostgREST reads it as a filter ("failed to parse
+  // filter"). Only this routing param is stripped; real query params pass through.
   const params = url.searchParams;
-  let path = params.get('__p');
-  params.delete('__p');
-  if (path === null) {
+  let path = params.get('sbproxypath') || '';
+  params.delete('sbproxypath');
+  params.delete('__p'); // legacy/defensive
+  if (!path) {
     path = url.pathname.replace(/^\/api\/(sb|proxy)\/?/, '');
   }
   path = path.replace(/^\/+/, '');
