@@ -315,7 +315,12 @@ export function LandingPage() {
       });
     } catch (error) {
       console.error('Signup error:', error);
-      toast.error('An error occurred during signup. Please try again.');
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (/failed to fetch|networkerror|load failed|fetch failed|err_/i.test(message)) {
+        toast.error('Could not reach the server. An ad-blocker/privacy extension, VPN/proxy, or your connection may be blocking the request. Disable the blocker for this site (allowlist *.supabase.co) or try an incognito window.');
+      } else {
+        toast.error('An error occurred during signup. Please try again.');
+      }
     }
   };
 

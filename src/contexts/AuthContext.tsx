@@ -109,6 +109,24 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
+const NETWORK_ERROR_MESSAGE =
+  'Could not reach the authentication server. This is usually caused by an ad-blocker or privacy extension (uBlock, Brave Shields, AdGuard) blocking the login request, a VPN/corporate proxy, or no internet connection. Disable the blocker for this site (allowlist *.supabase.co) or try an incognito window, then sign in again.';
+
+function isNetworkFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /failed to fetch|networkerror|load failed|fetch failed|err_/i.test(message);
+}
+
+function describeAuthError(error: unknown, fallback: string): string {
+  if (isNetworkFailure(error)) {
+    return NETWORK_ERROR_MESSAGE;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
 function buildOwnerUser(profile: any, metadata: AuthMetadata = {}): User {
   return {
     id: profile.id,
@@ -271,6 +289,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (error || !data?.success) {
+          if (isNetworkFailure(error)) {
+            return { success: false, error: NETWORK_ERROR_MESSAGE };
+          }
           return { success: false, error: data?.error || error?.message || 'Invalid auditor credentials' };
         }
 
@@ -294,11 +315,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        return { success: false, error: error.message };
+        return { success: false, error: describeAuthError(error, 'Login failed') };
       }
 
       const { data, error: profileError } = await supabase.rpc('get_current_profile');
       if (profileError || !data?.success) {
+        if (isNetworkFailure(profileError)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
         await supabase.auth.signOut();
         return { success: false, error: data?.error || profileError?.message || 'Profile not found' };
       }
@@ -313,7 +337,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { success: true };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
+      return { success: false, error: describeAuthError(error, 'Login failed') };
     }
   };
 
@@ -332,11 +356,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase.rpc('auditor_list_companies', { p_email: email });
       if (error || !data?.success) {
+        if (isNetworkFailure(error)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
         return { success: false, error: data?.error || error?.message || 'Could not look up auditor companies' };
       }
       return { success: true, companies: (data.companies || []) as AuditorCompany[] };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Lookup failed' };
+      return { success: false, error: describeAuthError(error, 'Lookup failed') };
     }
   };
 
@@ -352,6 +379,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error || !data?.success) {
+        if (isNetworkFailure(error)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
         return { success: false, error: data?.error || error?.message || 'Invalid password' };
       }
 
@@ -372,7 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { success: true };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
+      return { success: false, error: describeAuthError(error, 'Login failed') };
     }
   };
 

@@ -14,4 +14,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Missing Supabase environment variables. Using local development fallback credentials.');
 }
 
-export const supabase = createClient(effectiveSupabaseUrl, effectiveSupabaseAnonKey);
+// Route Supabase through a same-origin path so requests stay first-party and
+// can't be blocked by ad-blockers / privacy extensions (the cause of
+// "TypeError: Failed to fetch" on login for some users).
+// - Dev: the Vite proxy (see vite.config.ts) forwards "/supabase-api" to Supabase.
+// - Prod: the host rewrite (see vercel.json / PROXY_SETUP.md) forwards it.
+// Defaults to the first-party path everywhere. Set VITE_SUPABASE_PROXY_PATH to
+// "direct" to force a direct connection (e.g. a host without the rewrite), or to
+// a custom path if you proxy under a different route.
+const configuredProxy = import.meta.env.VITE_SUPABASE_PROXY_PATH;
+const proxyPath =
+  configuredProxy === 'direct' ? '' : (configuredProxy && configuredProxy.trim()) || '/supabase-api';
+
+const clientUrl =
+  proxyPath && typeof window !== 'undefined'
+    ? `${window.location.origin}${proxyPath}`
+    : effectiveSupabaseUrl;
+
+export const supabase = createClient(clientUrl, effectiveSupabaseAnonKey);
