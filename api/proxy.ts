@@ -6,9 +6,9 @@
 // Routed via vercel.json: /api/sb/<path>  ->  /api/proxy?__p=<path>
 export const config = { runtime: 'edge' };
 
-const SUPABASE_URL = (
-  process.env.VITE_SUPABASE_URL || 'https://ynqncdczpumsenjhcmxk.supabase.co'
-).replace(/\/$/, '');
+// Public Supabase project URL (same value as VITE_SUPABASE_URL / .env.example).
+// Hardcoded so the edge function needs no Node types (process.env) at build time.
+const SUPABASE_URL = 'https://ynqncdczpumsenjhcmxk.supabase.co';
 
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
