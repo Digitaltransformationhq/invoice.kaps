@@ -1,63 +1,34 @@
-# Keeping login from getting blocked (first-party Supabase proxy)
+# Supabase connection notes
 
-Some ad-blockers and privacy extensions (uBlock Origin, Brave Shields, AdGuard),
-as well as corporate proxies/VPNs and antivirus "web shields", block direct
-requests to `*.supabase.co`. Because the **sign-in** endpoint is
-`/auth/v1/token`, this shows up as `TypeError: Failed to fetch` on login while
-sign-up (`/auth/v1/signup`) often still works.
+The app connects **directly** to Supabase (`VITE_SUPABASE_URL`). This is the
+simplest, most reliable setup and is what `src/lib/supabase.ts` does.
 
-The fix is to make the browser talk to **your own domain** instead of
-`supabase.co`. Your server/host then forwards (reverse-proxies) those requests
-to Supabase. Because the request is now first-party, blockers leave it alone.
+## Background: why not a reverse proxy
 
-## Why an edge function (not a plain rewrite)
+We briefly routed Supabase through a same-origin path (`/api/sb` on Vercel) so
+that ad-blockers / privacy extensions couldn't block the request. On Vercel that
+backfired: Supabase sits behind Cloudflare, which sets a rotating `__cf_bm`
+cookie. Proxied through our own domain, those cookies became first-party and
+accumulated until Vercel rejected requests with `REQUEST_HEADER_TOO_LARGE`.
+A cookie-stripping edge function fixed *new* sessions but couldn't clear cookies
+already stored in a user's browser. So we reverted to a direct connection.
 
-A static `vercel.json` rewrite forwards Supabase's `Set-Cookie` responses to
-your domain, where they're stored first-party and re-sent on every request until
-the header exceeds Vercel's limit — `REQUEST_HEADER_TOO_LARGE`. The edge function
-at `api/sb/[...path].ts` strips the inbound `Cookie` and outbound `Set-Cookie`
-headers, so nothing accumulates.
+## If ad-blockers become a problem
 
-## Development — already done
+The correct first-party fix — without the cookie issue — is a **Supabase custom
+domain** (e.g. `api.yourdomain.com`). It's a real Supabase endpoint, so cookies
+are handled natively (no accumulation), and because it's your own domain,
+blockers leave it alone.
 
-`vite.config.ts` proxies `/api/sb` to your Supabase URL, and
-`src/lib/supabase.ts` automatically uses that path in dev. Just run:
+1. Enable the Custom Domains add-on in the Supabase dashboard.
+2. Point `VITE_SUPABASE_URL` at the custom domain and redeploy.
 
-```bash
-npm run dev
-```
+Docs: https://supabase.com/docs/guides/platform/custom-domains
 
-Login now goes to `http://localhost:5173/api/sb/auth/v1/token` — first-party,
-never blocked. No extra setup needed.
+## Diagnosing "Failed to fetch" on login
 
-## Production (Vercel) — already configured ✅
-
-The app defaults to the first-party `/api/sb` path in **every** environment, and
-the edge function `api/sb/[...path].ts` forwards it to Supabase while stripping
-cookies. Just push/redeploy — Vercel picks up the function automatically.
-
-Make sure your Supabase env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
-are set in the Vercel project settings as before. The function also reads
-`VITE_SUPABASE_URL` at runtime (falling back to the project URL).
-
-To force a direct connection instead (bypassing the proxy), set
-`VITE_SUPABASE_PROXY_PATH=direct`.
-
-### Other hosts
-
-The edge function is Vercel-specific. On other platforms, run an equivalent
-cookie-stripping proxy at `/api/sb/*`, or use a Supabase **custom domain**
-(below), which removes the need for any proxy.
-
-### The strongest option: a Supabase custom domain
-
-If you control DNS, Supabase's **Custom Domains** add-on lets the project live at
-e.g. `https://api.yourdomain.com`. Point `VITE_SUPABASE_URL` at it and the proxy
-above becomes unnecessary — everything is first-party by default. See
-https://supabase.com/docs/guides/platform/custom-domains
-
-## How to verify
-
-Open DevTools → Network, sign in, and confirm the request goes to
-`yourdomain.com/api/sb/auth/v1/token` and returns **200** — not to
-`supabase.co`, and not `(blocked:other)`.
+That error means the browser couldn't reach Supabase at all — almost always a
+local ad-blocker / privacy extension, VPN/proxy, or no connectivity. Check
+DevTools → Network: if the `auth/v1/token` request shows `(blocked:other)` or
+fails with no response, allowlist `*.supabase.co` (or use the custom domain
+above). `src/contexts/AuthContext.tsx` surfaces a clear message for this case.

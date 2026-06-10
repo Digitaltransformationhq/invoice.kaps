@@ -1,13 +1,8 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
-// Same-origin path the dev server uses to proxy Supabase. Keeping auth/data
-// requests first-party means ad-blockers / privacy extensions can never block
-// them (the cause of "TypeError: Failed to fetch" on login for some users).
-// Matches the production edge proxy route (api/sb/[...path].ts).
-const SUPABASE_PROXY_PATH = '/api/sb'
 
 function figmaAssetResolver() {
   return {
@@ -21,23 +16,10 @@ function figmaAssetResolver() {
   }
 }
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  const supabaseUrl = env.VITE_SUPABASE_URL || 'https://ynqncdczpumsenjhcmxk.supabase.co'
-
-  return {
+export default defineConfig({
   server: {
     headers: {
       'Cache-Control': 'no-store',
-    },
-    proxy: {
-      [SUPABASE_PROXY_PATH]: {
-        target: supabaseUrl,
-        changeOrigin: true,
-        secure: true,
-        ws: true,
-        rewrite: (p) => p.replace(new RegExp(`^${SUPABASE_PROXY_PATH}`), ''),
-      },
     },
   },
   plugins: [
@@ -56,5 +38,4 @@ export default defineConfig(({ mode }) => {
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
-  }
 })
