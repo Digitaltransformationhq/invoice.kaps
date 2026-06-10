@@ -14,9 +14,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Missing Supabase environment variables. Using local development fallback credentials.');
 }
 
-// Connect directly to Supabase. (A same-origin proxy was tried to dodge
-// ad-blockers, but on Vercel it made Cloudflare's cookies first-party and they
-// accumulated until requests were rejected with REQUEST_HEADER_TOO_LARGE.)
-// The proper first-party option without that downside is a Supabase custom
-// domain — see PROXY_SETUP.md.
-export const supabase = createClient(effectiveSupabaseUrl, effectiveSupabaseAnonKey);
+// Talk to Supabase through our own origin (/api/sb) instead of supabase.co
+// directly. Many users' networks/ISPs can't reach supabase.co (causing
+// "TypeError: Failed to fetch" on every device), but they CAN reach our Vercel
+// domain — and Vercel's servers reach Supabase fine. The /api/sb edge function
+// (api/proxy.ts) forwards the request and strips cookies.
+// Set VITE_SUPABASE_PROXY_PATH=direct to force a direct connection.
+const configuredProxy = import.meta.env.VITE_SUPABASE_PROXY_PATH;
+const proxyPath =
+  configuredProxy === 'direct' ? '' : (configuredProxy && configuredProxy.trim()) || '/api/sb';
+
+const clientUrl =
+  proxyPath && typeof window !== 'undefined'
+    ? `${window.location.origin}${proxyPath}`
+    : effectiveSupabaseUrl;
+
+export const supabase = createClient(clientUrl, effectiveSupabaseAnonKey);

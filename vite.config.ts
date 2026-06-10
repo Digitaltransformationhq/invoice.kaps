@@ -21,6 +21,16 @@ export default defineConfig({
     headers: {
       'Cache-Control': 'no-store',
     },
+    // Dev mirror of the production /api/sb edge proxy (see api/proxy.ts).
+    proxy: {
+      '/api/sb': {
+        target: 'https://ynqncdczpumsenjhcmxk.supabase.co',
+        changeOrigin: true,
+        secure: true,
+        ws: true,
+        rewrite: (p) => p.replace(/^\/api\/sb/, ''),
+      },
+    },
   },
   plugins: [
     figmaAssetResolver(),
