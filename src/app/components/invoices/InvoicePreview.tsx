@@ -35,6 +35,7 @@ interface Customer {
 interface InvoicePreviewProps {
   isOpen: boolean;
   onClose: () => void;
+  title?: string;
   lineItems: LineItem[];
   invoiceNumber: string;
   invoiceDate: string;
@@ -54,6 +55,7 @@ interface InvoicePreviewProps {
 export function InvoicePreview({
   isOpen,
   onClose,
+  title = 'Invoice Preview',
   lineItems,
   invoiceNumber,
   invoiceDate,
@@ -288,8 +290,8 @@ export function InvoicePreview({
       <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[96vh] sm:max-h-[90vh] flex flex-col">
         {/* Modal Header */}
         <div className="invoice-preview-actions flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 border-b border-border">
-          <h2 className="hidden sm:block text-lg font-semibold text-foreground shrink-0">Invoice Preview</h2>
-          <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">Preview</h2>
+          <h2 className="hidden sm:block text-lg font-semibold text-foreground shrink-0">{title}</h2>
+          <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">{title.replace(/^Invoice\s+/, '')}</h2>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button
               onClick={() => window.print()}

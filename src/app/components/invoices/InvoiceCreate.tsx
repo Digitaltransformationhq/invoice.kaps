@@ -1539,6 +1539,7 @@ export function InvoiceCreate() {
       <InvoicePreview
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
+        title={invoiceCreated ? 'Invoice Details' : 'Invoice Preview'}
         lineItems={previewLineItems}
         invoiceNumber={invoiceNumber}
         invoiceDate={invoiceDate}
@@ -1577,6 +1578,7 @@ export function InvoiceCreate() {
               <div className="space-y-3">
                 <button
                   onClick={() => {
+                    setShowSuccessModal(false);
                     setShowPreview(true);
                   }}
                   className="w-full px-4 py-2.5 bg-accent text-white rounded hover:bg-accent/90 transition-colors"

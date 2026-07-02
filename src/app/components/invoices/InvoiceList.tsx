@@ -1075,6 +1075,7 @@ export function InvoiceList() {
             setShowPreview(false);
             setSelectedInvoice(null);
           }}
+          title="Invoice Details"
           lineItems={selectedInvoice.lineItems}
           invoiceNumber={selectedInvoice.id}
           invoiceDate={selectedInvoice.rawDate}
