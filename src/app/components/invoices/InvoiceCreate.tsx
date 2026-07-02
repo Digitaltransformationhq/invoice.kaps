@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ArrowLeft, Plus, Trash2, Save, Eye, Calculator, CheckCircle, ChevronDown, ChevronUp, X, Package, Mail, MessageCircle } from 'lucide-react';
 import { InvoicePreview } from './InvoicePreview';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
-import { insertForUser, selectForUser } from '../../../lib/auditorData';
+import { insertForUser, selectForUser, updateForUser, deleteForUser } from '../../../lib/auditorData';
 import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
 
 interface LineItem {
@@ -57,6 +58,7 @@ export function InvoiceCreate() {
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [lineItemIdForNewItem, setLineItemIdForNewItem] = useState<string | null>(null);
+  const [newItemName, setNewItemName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
@@ -65,7 +67,7 @@ export function InvoiceCreate() {
   const [isSavingInvoice, setIsSavingInvoice] = useState(false);
   const [invoiceCreated, setInvoiceCreated] = useState(false);
   const [sellerState, setSellerState] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('INV-2026-157');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [isManualInvoiceNumber, setIsManualInvoiceNumber] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState('2026-05-12');
   const [placeOfSupply, setPlaceOfSupply] = useState('Auto from customer');
@@ -106,6 +108,12 @@ export function InvoiceCreate() {
     }
   ]);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('id');
+  const isEditMode = Boolean(editId);
+  const [editStatus, setEditStatus] = useState<string>('pending');
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [hasLoadedEdit, setHasLoadedEdit] = useState(false);
 
   const mapCustomerFromDatabase = (customer: any): Customer => ({
     id: customer.id,
@@ -185,6 +193,7 @@ export function InvoiceCreate() {
     }
 
     setIsLoadingItems(false);
+    setCatalogLoaded(true);
   };
 
   useEffect(() => {
@@ -212,6 +221,88 @@ export function InvoiceCreate() {
 
     loadSellerState();
   }, [user?.company_id, user?.company_gstin]);
+
+  const loadInvoiceForEdit = async (id: string) => {
+    const { data: invoiceRows, error } = await selectForUser<any[]>(user, 'invoices', 'invoices', () =>
+      supabase
+        .from('invoices')
+        .select('*')
+        .eq('id', id)
+        .limit(1)
+    );
+
+    if (error || !invoiceRows || invoiceRows.length === 0) {
+      toast.error('Could not load the invoice to edit.');
+      return;
+    }
+
+    const invoice = invoiceRows[0];
+
+    const { data: itemRows, error: itemsError } = await selectForUser<any[]>(user, 'invoices', 'invoice_items', () =>
+      supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', id)
+        .order('sort_order', { ascending: true })
+    );
+
+    if (itemsError) {
+      toast.error('Could not load the invoice line items.');
+    }
+
+    setSelectedCustomer(invoice.customer_id || '');
+    setInvoiceNumber(invoice.invoice_number || '');
+    setIsManualInvoiceNumber(true);
+    if (invoice.invoice_date) setInvoiceDate(invoice.invoice_date);
+    setPlaceOfSupply(invoice.place_of_supply || 'Auto from customer');
+    setReverseCharge(Boolean(invoice.reverse_charge));
+    setPoNumber(invoice.po_number || '');
+    setPoDate(invoice.po_date || '');
+    setVehicleNo(invoice.vehicle_number || '');
+    setTransportMode(invoice.transport_mode || '');
+    setRemarks(invoice.remarks || '');
+    setEditStatus(invoice.status || 'pending');
+
+    const mappedItems: LineItem[] = (itemRows || []).map((row, index) => {
+      const catalog = catalogItems.find((c) => c.id === row.item_id);
+      const qty = Number(row.quantity) || 0;
+      const rate = Number(row.rate) || 0;
+      const discount = Number(row.discount_percent) || 0;
+      const gst = Number(row.gst_rate) || 0;
+      const baseAmount = qty * rate;
+      const afterDiscount = baseAmount - (baseAmount * discount / 100);
+      const amount = afterDiscount + (afterDiscount * gst / 100);
+
+      return {
+        id: row.id ? String(row.id) : String(index + 1),
+        itemId: row.item_id || '',
+        type: catalog?.type,
+        item: row.item_name || catalog?.name || '',
+        description: row.description || '',
+        hsn: row.hsn || '',
+        qty,
+        unit: row.unit || 'Nos',
+        rate,
+        discount,
+        gst,
+        amount,
+      };
+    });
+
+    if (mappedItems.length > 0) {
+      setLineItems(mappedItems);
+      setExpandedItemId(mappedItems[0].id);
+    }
+  };
+
+  // Populate the form when editing an existing invoice. Waits for the catalog
+  // so each line can recover its product/service type, and runs only once.
+  useEffect(() => {
+    if (!isEditMode || hasLoadedEdit || !catalogLoaded || !user?.company_id) return;
+    setHasLoadedEdit(true);
+    loadInvoiceForEdit(editId as string);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, hasLoadedEdit, catalogLoaded, user?.company_id]);
 
   const addLineItem = () => {
     const newId = Date.now().toString();
@@ -246,9 +337,13 @@ export function InvoiceCreate() {
     setLineItems(lineItems.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
-        const baseAmount = updated.qty * updated.rate;
-        const afterDiscount = baseAmount - (baseAmount * updated.discount / 100);
-        const gstAmount = afterDiscount * updated.gst / 100;
+        const qty = Number(updated.qty) || 0;
+        const rate = Number(updated.rate) || 0;
+        const discount = Number(updated.discount) || 0;
+        const gst = Number(updated.gst) || 0;
+        const baseAmount = qty * rate;
+        const afterDiscount = baseAmount - (baseAmount * discount / 100);
+        const gstAmount = afterDiscount * gst / 100;
         updated.amount = afterDiscount + gstAmount;
         return updated;
       }
@@ -303,6 +398,26 @@ export function InvoiceCreate() {
     }
   };
 
+  // Free-text item entry: type any name (or pick a catalog suggestion). If the
+  // typed name exactly matches a catalog item, auto-fill its HSN/rate/GST;
+  // otherwise keep it as a one-off line with no catalog link.
+  const handleItemNameChange = (lineItemId: string, value: string) => {
+    const match = catalogItems.find(
+      (catalogItem) => catalogItem.name.trim().toLowerCase() === value.trim().toLowerCase()
+    );
+
+    if (match) {
+      applyCatalogItemToLine(lineItemId, match);
+      return;
+    }
+
+    setLineItems(lineItems.map((lineItem) => (
+      lineItem.id === lineItemId
+        ? { ...lineItem, item: value, itemId: '', type: undefined }
+        : lineItem
+    )));
+  };
+
   const subtotal = lineItems.reduce((sum, item) => {
     return sum + (item.qty * item.rate) - ((item.qty * item.rate) * item.discount / 100);
   }, 0);
@@ -314,6 +429,17 @@ export function InvoiceCreate() {
   }, 0);
 
   const totalAmount = subtotal + totalGST;
+  // Line item numeric fields are held as raw strings while editing (so the
+  // field can be cleared); coerce to numbers for the preview, which calls
+  // .toFixed()/formatting on them.
+  const previewLineItems = lineItems.map((item) => ({
+    ...item,
+    qty: Number(item.qty) || 0,
+    rate: Number(item.rate) || 0,
+    discount: Number(item.discount) || 0,
+    gst: Number(item.gst) || 0,
+    amount: Number(item.amount) || 0,
+  }));
   const selectedCustomerDetails = customers.find((customer) => customer.id === selectedCustomer) || null;
   const selectedCustomerType = selectedCustomerDetails?.customerType || 'B2B';
   const supplyState = placeOfSupply === 'Auto from customer'
@@ -369,11 +495,33 @@ export function InvoiceCreate() {
     return `${startYear}-${String(startYear + 1).slice(-2)}`;
   };
 
-  const getNextInvoiceNumber = async () => {
-    if (isManualInvoiceNumber && invoiceNumber.trim()) {
-      return invoiceNumber.trim();
+  // Read the invoice-defaults toggle + configured prefix/start number from
+  // company settings (stored in the DB so it syncs across devices).
+  const getInvoiceDefaults = async (): Promise<{ enabled: boolean; prefix: string; nextNumber: number }> => {
+    try {
+      const { data, error } = await supabase.rpc('get_company_settings', {
+        p_auditor_id: user?.role === 'auditor' ? user.id : null,
+      });
+      if (error || !data?.success) {
+        return { enabled: true, prefix: 'INV', nextNumber: 1 };
+      }
+      const s = data.settings || {};
+      return {
+        enabled: s.invoice_defaults_enabled !== false,
+        prefix: (s.invoice_prefix || 'INV').toString().trim() || 'INV',
+        nextNumber: Number(s.invoice_next_number) || 1,
+      };
+    } catch {
+      return { enabled: true, prefix: 'INV', nextNumber: 1 };
     }
+  };
 
+  // The number a brand-new invoice would get, based on the current settings.
+  const computeAutoInvoiceNumber = async () => {
+    const defaults = await getInvoiceDefaults();
+
+    // Count existing invoices for this company.
+    let existingCount = 0;
     if (user?.role === 'auditor') {
       const { data, error } = await selectForUser<any[]>(user, 'invoices', 'invoices', () =>
         supabase
@@ -381,22 +529,51 @@ export function InvoiceCreate() {
           .select('id')
           .eq('company_id', user?.company_id)
       );
-
       if (error) throw error;
-      return `INV-${getFinancialYear()}-${String(((data || []).length) + 1).padStart(4, '0')}`;
+      existingCount = (data || []).length;
+    } else {
+      const { count, error } = await supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', user?.company_id);
+      if (error) throw error;
+      existingCount = count || 0;
     }
 
-    const { count, error } = await supabase
-      .from('invoices')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', user?.company_id);
+    // Invoice Defaults off → plain sequence starting from 1.
+    if (!defaults.enabled) {
+      return String(existingCount + 1);
+    }
 
-    if (error) throw error;
-
-    return `INV-${getFinancialYear()}-${String((count || 0) + 1).padStart(4, '0')}`;
+    // Invoice Defaults on → configured prefix + (starting number offset by
+    // however many invoices already exist).
+    return `${defaults.prefix}-${existingCount + defaults.nextNumber}`;
   };
 
-  const saveInvoice = async (status: 'draft' | 'pending') => {
+  const getNextInvoiceNumber = async () => {
+    if (isManualInvoiceNumber && invoiceNumber.trim()) {
+      return invoiceNumber.trim();
+    }
+    return computeAutoInvoiceNumber();
+  };
+
+  // Show a live preview of the auto-generated number (reflecting the current
+  // Invoice Defaults) in the field and the preview, for new invoices.
+  useEffect(() => {
+    if (editId || isManualInvoiceNumber || !user?.company_id) return;
+    let cancelled = false;
+    computeAutoInvoiceNumber()
+      .then((number) => {
+        if (!cancelled) setInvoiceNumber(number);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId, isManualInvoiceNumber, user?.company_id]);
+
+  const saveInvoice = async (status: string) => {
     if (!user?.company_id) {
       toast.error('Company profile is not ready. Please refresh and try again.');
       return null;
@@ -407,8 +584,8 @@ export function InvoiceCreate() {
       return null;
     }
 
-    if (lineItems.some((item) => !item.itemId || !item.type)) {
-      toast.error('Select a product or service item for every invoice line.');
+    if (lineItems.some((item) => !item.itemId && !item.item.trim())) {
+      toast.error('Enter or select an item for every invoice line.');
       return null;
     }
 
@@ -442,24 +619,66 @@ export function InvoiceCreate() {
           created_by: user.id,
         };
 
-      const { data: invoice, error: invoiceError } = await insertForUser<any>(user, 'invoices', 'invoices', () =>
-        supabase
-          .from('invoices')
-          .insert(invoiceRecord)
-          .select('id, invoice_number')
-          .single(),
-        invoiceRecord,
-        nextInvoiceNumber
-      );
+      let invoice: any;
 
-      if (invoiceError) {
-        throw invoiceError;
+      if (isEditMode && editId) {
+        // Keep the original creator; only update the editable fields.
+        const { created_by, ...updateRecord } = invoiceRecord;
+        const { data, error: invoiceError } = await updateForUser<any>(user, 'invoices', 'invoices', () =>
+          supabase
+            .from('invoices')
+            .update(updateRecord)
+            .eq('id', editId)
+            .select('id, invoice_number')
+            .single(),
+          updateRecord,
+          { id: editId },
+          nextInvoiceNumber
+        );
+
+        if (invoiceError) {
+          throw invoiceError;
+        }
+        invoice = data;
+
+        // Replace the line items wholesale so removed/added rows are reflected.
+        const { error: deleteError } = await deleteForUser(user, 'invoices', 'invoice_items', () =>
+          supabase
+            .from('invoice_items')
+            .delete()
+            .eq('invoice_id', editId),
+          { invoice_id: editId },
+          nextInvoiceNumber
+        );
+
+        if (deleteError) {
+          throw deleteError;
+        }
+      } else {
+        const { data, error: invoiceError } = await insertForUser<any>(user, 'invoices', 'invoices', () =>
+          supabase
+            .from('invoices')
+            .insert(invoiceRecord)
+            .select('id, invoice_number')
+            .single(),
+          invoiceRecord,
+          nextInvoiceNumber
+        );
+
+        if (invoiceError) {
+          throw invoiceError;
+        }
+        invoice = data;
       }
 
       const invoiceItems = lineItems.map((item, index) => {
-        const baseAmount = item.qty * item.rate;
-        const taxableAmount = baseAmount - (baseAmount * item.discount / 100);
-        const taxAmount = taxableAmount * item.gst / 100;
+        const qty = Number(item.qty) || 0;
+        const rate = Number(item.rate) || 0;
+        const discount = Number(item.discount) || 0;
+        const gst = Number(item.gst) || 0;
+        const baseAmount = qty * rate;
+        const taxableAmount = baseAmount - (baseAmount * discount / 100);
+        const taxAmount = taxableAmount * gst / 100;
 
         return {
           invoice_id: invoice.id,
@@ -467,11 +686,11 @@ export function InvoiceCreate() {
           item_name: item.item || item.description || 'Line item',
           description: item.description || null,
           hsn: item.hsn || null,
-          quantity: item.qty,
+          quantity: qty,
           unit: item.unit,
-          rate: item.rate,
-          discount_percent: item.discount,
-          gst_rate: item.gst,
+          rate,
+          discount_percent: discount,
+          gst_rate: gst,
           taxable_amount: taxableAmount,
           tax_amount: taxAmount,
           total_amount: taxableAmount + taxAmount,
@@ -492,7 +711,7 @@ export function InvoiceCreate() {
       }
 
       setInvoiceNumber(invoice.invoice_number);
-      toast.success(status === 'draft' ? 'Invoice draft saved' : 'Invoice created');
+      toast.success(isEditMode ? 'Invoice updated' : (status === 'draft' ? 'Invoice draft saved' : 'Invoice created'));
       return invoice;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save invoice');
@@ -510,11 +729,16 @@ export function InvoiceCreate() {
   };
 
   const handleCreateInvoice = async () => {
-    const invoice = await saveInvoice('pending');
-    if (invoice) {
-      setInvoiceCreated(true);
-      setShowSuccessModal(true);
+    const invoice = await saveInvoice(isEditMode ? editStatus : 'pending');
+    if (!invoice) return;
+
+    if (isEditMode) {
+      navigate('/app/invoices');
+      return;
     }
+
+    setInvoiceCreated(true);
+    setShowSuccessModal(true);
   };
 
   const handleCustomerChange = (value: string) => {
@@ -630,6 +854,7 @@ export function InvoiceCreate() {
 
     setShowAddItemModal(false);
     setLineItemIdForNewItem(null);
+    setNewItemName('');
     toast.success('Item saved');
   };
 
@@ -646,7 +871,7 @@ export function InvoiceCreate() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="text-xl md:text-2xl font-semibold text-foreground">New Tax Invoice</h1>
+              <h1 className="text-xl md:text-2xl font-semibold text-foreground">{isEditMode ? 'Edit Tax Invoice' : 'New Tax Invoice'}</h1>
               <p className="text-xs md:text-sm text-muted-foreground mt-1">
                 FY 2026-27 - {isInterStateSupply ? 'Inter-state (IGST)' : 'Intra-state (CGST + SGST)'}
               </p>
@@ -669,7 +894,7 @@ export function InvoiceCreate() {
                 value={selectedCustomer}
                 onChange={(e) => handleCustomerChange(e.target.value)}
                 disabled={isLoadingCustomers}
-                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
               >
                 <option value="">{isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}</option>
                 {customers.map((customer) => (
@@ -713,7 +938,7 @@ export function InvoiceCreate() {
 
                   {/* Contact row — 3-col grid so name / phone / email each get their own labeled slot */}
                   {(selectedCustomerDetails.contactName || selectedCustomerDetails.email || selectedCustomerDetails.phone) && (
-                    <div className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2.5">
+                    <div className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15 grid grid-cols-1 sm:grid-cols-[auto_auto_minmax(0,1fr)] gap-x-6 gap-y-2.5">
                       {selectedCustomerDetails.contactName && (
                         <div className="min-w-0">
                           <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Contact</div>
@@ -729,7 +954,7 @@ export function InvoiceCreate() {
                       {selectedCustomerDetails.email && (
                         <div className="min-w-0">
                           <div className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">Email</div>
-                          <div className="text-[13.5px] text-foreground truncate" title={selectedCustomerDetails.email}>{selectedCustomerDetails.email}</div>
+                          <div className="text-[13.5px] text-foreground break-all" title={selectedCustomerDetails.email}>{selectedCustomerDetails.email}</div>
                         </div>
                       )}
                     </div>
@@ -764,10 +989,12 @@ export function InvoiceCreate() {
                   </label>
                 </div>
                 {!isManualInvoiceNumber ? (
-                  <div className="inline-flex items-center gap-2.5 w-full px-3.5 h-11 bg-violet-50/50 dark:bg-violet-500/[0.06] border border-violet-200 dark:border-violet-400/25 rounded-lg text-[14px] text-muted-foreground">
+                  <div className="inline-flex items-center gap-2.5 w-full px-3.5 h-11 bg-violet-50/50 dark:bg-violet-500/[0.06] border border-violet-200 dark:border-violet-400/25 rounded-lg text-[14px]">
                     <span className="h-2 w-2 rounded-full bg-violet-400 shrink-0" />
-                    <span className="flex-1 truncate">Auto-generated when you save</span>
-                    <span className="text-[10.5px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-300 shrink-0">Default series</span>
+                    <span className={`flex-1 truncate font-mono ${invoiceNumber ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      {invoiceNumber || 'Auto-generated when you save'}
+                    </span>
+                    <span className="text-[10.5px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-300 shrink-0">Auto</span>
                   </div>
                 ) : (
                   <input
@@ -796,7 +1023,7 @@ export function InvoiceCreate() {
                   <select
                     value={placeOfSupply}
                     onChange={(e) => setPlaceOfSupply(e.target.value)}
-                    className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                    className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                   >
                     <option>Auto from customer</option>
                     <option>Maharashtra</option>
@@ -866,20 +1093,20 @@ export function InvoiceCreate() {
                     <td className="px-3 py-5 text-sm text-muted-foreground text-center align-top">{index + 1}</td>
                     <td className="px-3 py-5 align-top">
                       <div className="space-y-3">
-                        <select
-                          value={item.itemId || ''}
-                          onChange={(e) => handleLineItemSelection(item.id, e.target.value)}
+                        <ItemCombobox
+                          value={item.item}
+                          options={catalogItems}
+                          onType={(value) => handleItemNameChange(item.id, value)}
+                          onSelect={(catalogItem) => applyCatalogItemToLine(item.id, catalogItem)}
+                          onAddNew={(typed) => {
+                            setLineItemIdForNewItem(item.id);
+                            setNewItemName(typed);
+                            setShowAddItemModal(true);
+                          }}
                           disabled={isLoadingItems}
-                          className="w-full px-4 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                        >
-                          <option value="">{isLoadingItems ? 'Loading items...' : 'Select item...'}</option>
-                          {catalogItems.map((catalogItem) => (
-                            <option key={catalogItem.id} value={catalogItem.id}>
-                              {catalogItem.name}
-                            </option>
-                          ))}
-                          <option value="add-new" className="text-accent font-medium">+ Add Item</option>
-                        </select>
+                          placeholder={isLoadingItems ? 'Loading items...' : 'Type or select an item...'}
+                          inputClassName="w-full pl-4 pr-9 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        />
                         <textarea
                           rows={2}
                           value={item.description}
@@ -902,7 +1129,8 @@ export function InvoiceCreate() {
                       <input
                         type="number"
                         value={item.qty}
-                        onChange={(e) => updateLineItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
+                        onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
                         className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
@@ -910,7 +1138,7 @@ export function InvoiceCreate() {
                       <select
                         value={item.unit}
                         onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                        className="w-full min-w-[100px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        className="kaps-compact-select w-full min-w-[84px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       >
                         <option>JOB</option>
                         <option>Hrs</option>
@@ -925,8 +1153,8 @@ export function InvoiceCreate() {
                       <input
                         type="number"
                         value={item.rate}
-                        onChange={(e) => updateLineItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                        placeholder="0"
+                        onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
                         className="w-full min-w-[100px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
@@ -934,8 +1162,8 @@ export function InvoiceCreate() {
                       <input
                         type="number"
                         value={item.discount}
-                        onChange={(e) => updateLineItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
-                        placeholder="0"
+                        onChange={(e) => updateLineItem(item.id, 'discount', e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
                         className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
@@ -943,7 +1171,7 @@ export function InvoiceCreate() {
                       <select
                         value={item.gst}
                         onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                        className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        className="kaps-compact-select w-full min-w-[64px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       >
                         <option value="0">0</option>
                         <option value="5">5</option>
@@ -1026,20 +1254,20 @@ export function InvoiceCreate() {
                         <label className="block text-sm font-medium text-foreground mb-2">
                           Item
                         </label>
-                        <select
-                          value={item.itemId || ''}
-                          onChange={(e) => handleLineItemSelection(item.id, e.target.value)}
+                        <ItemCombobox
+                          value={item.item}
+                          options={catalogItems}
+                          onType={(value) => handleItemNameChange(item.id, value)}
+                          onSelect={(catalogItem) => applyCatalogItemToLine(item.id, catalogItem)}
+                          onAddNew={(typed) => {
+                            setLineItemIdForNewItem(item.id);
+                            setNewItemName(typed);
+                            setShowAddItemModal(true);
+                          }}
                           disabled={isLoadingItems}
-                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                        >
-                          <option value="">{isLoadingItems ? 'Loading items...' : 'Select item...'}</option>
-                          {catalogItems.map((catalogItem) => (
-                            <option key={catalogItem.id} value={catalogItem.id}>
-                              {catalogItem.name}
-                            </option>
-                          ))}
-                          <option value="add-new" className="text-accent font-medium">+ Add Item</option>
-                        </select>
+                          placeholder={isLoadingItems ? 'Loading items...' : 'Type or select an item...'}
+                          inputClassName="w-full pl-4 pr-9 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        />
                       </div>
 
                       {/* Description */}
@@ -1079,7 +1307,8 @@ export function InvoiceCreate() {
                           <input
                             type="number"
                             value={item.qty}
-                            onChange={(e) => updateLineItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
+                            onFocus={(e) => e.currentTarget.select()}
                             className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
@@ -1090,7 +1319,7 @@ export function InvoiceCreate() {
                           <select
                             value={item.unit}
                             onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                            className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                            className="kaps-compact-select w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           >
                             <option>JOB</option>
                             <option>Hrs</option>
@@ -1112,8 +1341,8 @@ export function InvoiceCreate() {
                           <input
                             type="number"
                             value={item.rate}
-                            onChange={(e) => updateLineItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                            placeholder="0"
+                            onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
+                            onFocus={(e) => e.currentTarget.select()}
                             className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
@@ -1124,8 +1353,8 @@ export function InvoiceCreate() {
                           <input
                             type="number"
                             value={item.discount}
-                            onChange={(e) => updateLineItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
-                            placeholder="0"
+                            onChange={(e) => updateLineItem(item.id, 'discount', e.target.value)}
+                            onFocus={(e) => e.currentTarget.select()}
                             className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
@@ -1139,7 +1368,7 @@ export function InvoiceCreate() {
                         <select
                           value={item.gst}
                           onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                          className="kaps-compact-select w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                         >
                           <option value="0">0</option>
                           <option value="5">5</option>
@@ -1275,7 +1504,7 @@ export function InvoiceCreate() {
         {/* Sticky-feeling action bar */}
         <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl px-4 md:px-6 py-3.5 shadow-[0_1px_2px_rgba(139,92,246,0.06)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="text-[13px] text-muted-foreground min-w-0 md:flex-1 md:pr-2">
-            {invoiceCreated ? 'Invoice created — review and send to your customer.' : 'Review the details above, then create the invoice.'}
+            {invoiceCreated ? 'Invoice created — review and send to your customer.' : isEditMode ? 'Review the details above, then update the invoice.' : 'Review the details above, then create the invoice.'}
           </div>
           <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5 md:justify-end md:shrink-0">
             <button
@@ -1300,7 +1529,7 @@ export function InvoiceCreate() {
               disabled={isSavingInvoice}
               className="inline-flex items-center justify-center h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
             >
-              {isSavingInvoice ? 'Saving…' : invoiceCreated ? 'View Invoice' : 'Create Invoice →'}
+              {isSavingInvoice ? 'Saving…' : invoiceCreated ? 'View Invoice' : isEditMode ? 'Update Invoice →' : 'Create Invoice →'}
             </button>
           </div>
         </div>
@@ -1310,7 +1539,7 @@ export function InvoiceCreate() {
       <InvoicePreview
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
-        lineItems={lineItems}
+        lineItems={previewLineItems}
         invoiceNumber={invoiceNumber}
         invoiceDate={invoiceDate}
         customer={selectedCustomerDetails}
@@ -1386,9 +1615,11 @@ export function InvoiceCreate() {
       {showAddItemModal && (
         <InvoiceItemModal
           isSaving={isSavingCatalogItem}
+          initialName={newItemName}
           onClose={() => {
             setShowAddItemModal(false);
             setLineItemIdForNewItem(null);
+            setNewItemName('');
           }}
           onSave={handleAddCatalogItem}
         />
@@ -1613,16 +1844,18 @@ export function InvoiceCreate() {
 
 function InvoiceItemModal({
   isSaving,
+  initialName = '',
   onClose,
   onSave
 }: {
   isSaving: boolean;
+  initialName?: string;
   onClose: () => void;
   onSave: (item: CatalogItem) => void;
 }) {
   const [formData, setFormData] = useState<CatalogItem>({
     id: '',
-    name: '',
+    name: initialName,
     type: 'product',
     description: '',
     hsn: '',
@@ -1783,6 +2016,177 @@ function InvoiceItemModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+interface ItemComboboxProps {
+  value: string;
+  options: CatalogItem[];
+  onType: (value: string) => void;
+  onSelect: (item: CatalogItem) => void;
+  onAddNew?: (typedValue: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  inputClassName?: string;
+}
+
+// A dropdown that's also typeable: shows the styled catalog list (like the old
+// <select>) but lets you type any item name. Filtered as you type; the panel is
+// portalled to <body> so the scrollable items table can't clip it.
+function ItemCombobox({ value, options, onType, onSelect, onAddNew, disabled, placeholder, inputClassName }: ItemComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const query = value.trim().toLowerCase();
+  const filtered = query ? options.filter((o) => o.name.toLowerCase().includes(query)) : options;
+  // Offer "Add to items" unless the typed name is already a catalog item.
+  const exactMatch = query !== '' && options.some((o) => o.name.trim().toLowerCase() === query);
+  const canAddNew = Boolean(onAddNew) && !exactMatch;
+
+  const updateRect = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+  };
+
+  const openMenu = () => {
+    updateRect();
+    setHighlight(-1);
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => updateRect();
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    document.addEventListener('mousedown', onDocDown);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+      document.removeEventListener('mousedown', onDocDown);
+    };
+  }, [open]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!open) openMenu();
+      setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+      return;
+    }
+    if (e.key === 'Enter' && open && highlight >= 0 && filtered[highlight]) {
+      e.preventDefault();
+      onSelect(filtered[highlight]);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(e) => {
+          onType(e.target.value);
+          setHighlight(-1);
+          if (!open) openMenu();
+          else updateRect();
+        }}
+        onFocus={openMenu}
+        onKeyDown={handleKeyDown}
+        className={inputClassName}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        disabled={disabled}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          if (open) {
+            setOpen(false);
+          } else {
+            inputRef.current?.focus();
+            openMenu();
+          }
+        }}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-700 dark:text-slate-200"
+      >
+        <ChevronDown className="w-4 h-4" />
+      </button>
+
+      {open && rect && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 60 }}
+          className="max-h-60 overflow-auto rounded-lg border border-violet-200 dark:border-violet-400/30 bg-white dark:bg-[#0d0d2a] shadow-xl py-1"
+        >
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              No matches — keep “{value}” as a custom item
+            </div>
+          ) : (
+            filtered.map((option, index) => (
+              <button
+                key={option.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(option);
+                  setOpen(false);
+                }}
+                onMouseEnter={() => setHighlight(index)}
+                className={`block w-full text-left px-3 py-2 text-sm text-foreground transition-colors ${
+                  index === highlight ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10'
+                }`}
+              >
+                {option.name}
+              </button>
+            ))
+          )}
+
+          {canAddNew && (
+            <div className="sticky bottom-0 border-t border-violet-100 dark:border-violet-400/15 bg-white dark:bg-[#0d0d2a]">
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onAddNew?.(value);
+                  setOpen(false);
+                }}
+                className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                {value.trim() ? `Add “${value.trim()}” to items` : 'Add new item to catalog'}
+              </button>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

@@ -33,6 +33,7 @@ interface SettingsForm {
   default_gst_rate: number;
   default_place_of_supply: string;
   enable_reverse_charge: boolean;
+  invoice_defaults_enabled: boolean;
 }
 
 const emptyCompany: CompanyForm = {
@@ -63,6 +64,7 @@ const defaultSettings: SettingsForm = {
   default_gst_rate: 18,
   default_place_of_supply: '',
   enable_reverse_charge: false,
+  invoice_defaults_enabled: true,
 };
 
 const SETTINGS_REQUEST_TIMEOUT_MS = 12000;
@@ -78,6 +80,7 @@ function mapSettings(row: any): SettingsForm {
     default_gst_rate: Number(row?.default_gst_rate || defaultSettings.default_gst_rate),
     default_place_of_supply: row?.default_place_of_supply || '',
     enable_reverse_charge: Boolean(row?.enable_reverse_charge),
+    invoice_defaults_enabled: row?.invoice_defaults_enabled !== false,
   };
 }
 
@@ -432,6 +435,7 @@ export function Settings() {
       default_gst_rate: Number(settings.default_gst_rate) || 0,
       default_place_of_supply: settings.default_place_of_supply.trim() || null,
       enable_reverse_charge: settings.enable_reverse_charge,
+      invoice_defaults_enabled: settings.invoice_defaults_enabled,
     };
 
     setIsSaving(true);
@@ -447,6 +451,7 @@ export function Settings() {
           p_default_gst_rate: payload.default_gst_rate,
           p_default_place_of_supply: payload.default_place_of_supply,
           p_enable_reverse_charge: payload.enable_reverse_charge,
+          p_invoice_defaults_enabled: payload.invoice_defaults_enabled,
         }),
         `Saving ${section} settings`
       );
@@ -534,6 +539,8 @@ export function Settings() {
               setSettings={setSettings}
               canEdit={isOwner}
               isSaving={isSaving}
+              enabled={settings.invoice_defaults_enabled}
+              onToggleEnabled={(enabled) => setSettings({ ...settings, invoice_defaults_enabled: enabled })}
               onSave={() => saveAppSettings('invoice')}
             />
           )}
@@ -812,29 +819,61 @@ function InvoiceSettings({
   setSettings,
   canEdit,
   isSaving,
+  enabled,
+  onToggleEnabled,
   onSave,
 }: {
   settings: SettingsForm;
   setSettings: (settings: SettingsForm) => void;
   canEdit: boolean;
   isSaving: boolean;
+  enabled: boolean;
+  onToggleEnabled: (enabled: boolean) => void;
   onSave: () => void;
 }) {
+  const fieldsDisabled = !canEdit || !enabled;
+
   return (
     <div className="space-y-6">
       {!canEdit && <ViewOnlyNotice />}
 
       <SectionCard icon={Receipt} title="Invoice Defaults" subtitle="The starting values whenever you create a new invoice.">
+        <div className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-violet-200 dark:border-violet-400/25 bg-violet-50/50 dark:bg-violet-500/[0.06] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-[14px] font-semibold text-foreground">Use these invoice defaults</div>
+            <p className="text-[12.5px] text-muted-foreground mt-0.5">
+              When on, new invoices use the prefix and next number below. When off, auto-generated
+              numbers are a plain sequence starting from 1.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            disabled={!canEdit}
+            onClick={() => onToggleEnabled(!enabled)}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              enabled ? 'bg-violet-500' : 'bg-slate-300 dark:bg-white/20'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                enabled ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={!canEdit} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
-          <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={!canEdit} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />
-          <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={!canEdit} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
+          <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={fieldsDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
+          <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />
+          <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
           <div>
             <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Currency</label>
             <select
               value={settings.currency}
               onChange={(event) => setSettings({ ...settings, currency: event.target.value })}
-              disabled={!canEdit}
+              disabled={fieldsDisabled}
               className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="INR">INR (₹)</option>
@@ -842,7 +881,7 @@ function InvoiceSettings({
               <option value="EUR">EUR (€)</option>
             </select>
           </div>
-          <SettingsTextarea label="Terms &amp; Conditions" value={settings.terms} disabled={!canEdit} className="md:col-span-2" onChange={(terms) => setSettings({ ...settings, terms })} />
+          <SettingsTextarea label="Terms &amp; Conditions" value={settings.terms} disabled={fieldsDisabled} className="md:col-span-2" onChange={(terms) => setSettings({ ...settings, terms })} />
         </div>
         {canEdit && (
           <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">

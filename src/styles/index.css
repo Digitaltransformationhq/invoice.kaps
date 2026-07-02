@@ -3,6 +3,46 @@
 @import './theme.css';
 @import './globals.css';
 
+/* Compact dropdowns: replace the native arrow with a custom chevron tucked a
+ * little further inside, and trim the right padding so the select reads
+ * narrower than the default control. */
+.kaps-compact-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 0.85rem;
+  padding-right: 1.5rem !important;
+}
+
+/* Keep the chevron visible (light) on dark surfaces. */
+.dark .kaps-compact-select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+}
+
+/* Combobox (typeable dropdown): a text input backed by a <datalist>. Replace
+ * the small native picker glyph with the same dark chevron the selects use, so
+ * it reads like a dropdown while still accepting free text. Clicking the
+ * chevron opens the full suggestion list. */
+.kaps-combo-input::-webkit-calendar-picker-indicator {
+  -webkit-appearance: none;
+  appearance: none;
+  opacity: 1;
+  cursor: pointer;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: 0.25rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 0.95rem;
+}
+.dark .kaps-combo-input::-webkit-calendar-picker-indicator {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+}
+
 @media print {
   @page {
     size: A4;
@@ -25,6 +65,34 @@
   .invoice-print-area,
   .invoice-print-area * {
     visibility: visible;
+  }
+
+  /* Print backgrounds (header shading, totals tint) and borders faithfully
+   * instead of letting the browser drop them. */
+  .invoice-print-area,
+  .invoice-print-area * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force opaque black borders so the theme's `--foreground` variable (which is
+   * near-white in dark mode) can never render the invoice rules invisible on
+   * paper. */
+  .invoice-print-page,
+  .invoice-print-page * {
+    border-color: #000 !important;
+  }
+
+  /* Chromium's print path can drop borders that are set only on individual
+   * cells of a collapsed-border table. Redraw the line-items grid and the
+   * totals row separators explicitly so every rule prints. */
+  .invoice-print-page .print-grid th,
+  .invoice-print-page .print-grid td {
+    border: 1px solid #000 !important;
+  }
+
+  .invoice-print-page .print-rows td {
+    border-bottom: 1px solid #000 !important;
   }
 
   .invoice-preview-modal {
@@ -88,6 +156,15 @@
     page-break-inside: avoid;
   }
 
+  .invoice-print-page .p-6 {
+    padding: 2.6mm 3mm !important;
+  }
+
+  .invoice-print-page .py-3 {
+    padding-top: 1.4mm !important;
+    padding-bottom: 1.4mm !important;
+  }
+
   .invoice-print-page .p-4 {
     padding: 3mm !important;
   }
@@ -117,6 +194,13 @@
   .invoice-print-page {
     zoom: 1 !important;
     transform: none !important;
+  }
+
+  /* The receipt stacks ~9 full-width sections, which runs slightly taller than
+   * one A4 page. Scale the whole receipt down on print so it always fits on a
+   * single page. Scoped to receipts only — invoices print at full scale. */
+  .invoice-print-page.receipt-print-page {
+    zoom: 0.78 !important;
   }
 
   .invoice-print-page .py-1 {

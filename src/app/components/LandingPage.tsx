@@ -27,12 +27,18 @@ import {
   TrendingUp,
   Bell,
   Sun,
-  Moon
+  Moon,
+  Store,
+  Truck,
+  Factory,
+  Briefcase,
+  ShoppingCart
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast, Toaster } from 'sonner';
 import { supabase } from '../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../lib/gstin';
+import { saveMpinVault, unlockWithMpin, hasMpinVault, getVaultEmail, markReturningUser, isValidMpin, DEFAULT_MPIN } from '../../lib/mpin';
 
 type Theme = 'dark' | 'light';
 const THEME_KEY = 'kaps-landing-theme';
@@ -46,6 +52,12 @@ export function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [loginRole, setLoginRole] = useState<'user' | 'auditor'>('user');
+  // Owner login can be done by 4-digit MPIN (quick) or email + password.
+  const [userLoginMode, setUserLoginMode] = useState<'mpin' | 'password'>('mpin');
+  const [mpinDigits, setMpinDigits] = useState<string[]>(['', '', '', '']);
+  const [mpinLoading, setMpinLoading] = useState(false);
+  const [mpinError, setMpinError] = useState('');
+  const mpinInputsRef = useRef<Array<HTMLInputElement | null>>([]);
   type AuditorCompanyOption = { auditor_id: string; company_id: string; company_name: string; company_logo: string | null; full_name: string };
   const [auditorStage, setAuditorStage] = useState<'email' | 'pick' | 'password'>('email');
   const [auditorCompanies, setAuditorCompanies] = useState<AuditorCompanyOption[]>([]);
@@ -138,11 +150,39 @@ export function LandingPage() {
     city: '',
     state: '',
     pinCode: '',
-    companyLogo: ''
+    companyLogo: '',
+    mpin: '',
+    confirmMpin: ''
   });
 
-  const { login, lookupAuditorCompanies, loginAuditorById } = useAuth();
+  const { login, lookupAuditorCompanies, loginAuditorById, user } = useAuth();
   const navigate = useNavigate();
+
+  // Existing users (a saved MPIN exists on this device) never get dropped on
+  // the marketing page. If they still have an active session, send them into
+  // the app; otherwise open the sign-in modal straight to the MPIN screen.
+  // Reacts to `user` so logging out (which lands back here) reopens the modal.
+  // It won't re-trigger while a modal is already open, so closing it to browse
+  // the page is fine.
+  useEffect(() => {
+    if (!hasMpinVault()) {
+      return; // brand-new visitor → show the marketing page
+    }
+    if (user) {
+      navigate('/app', { replace: true });
+      return;
+    }
+    if (!showLoginModal && !showSignupModal) {
+      setLoginRole('user');
+      setUserLoginMode('mpin');
+      setMpinDigits(['', '', '', '']);
+      setMpinError('');
+      setLoginEmail(getVaultEmail() || '');
+      setShowLoginModal(true);
+      setTimeout(() => mpinInputsRef.current[0]?.focus(), 50);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const resetAuditorFlow = () => {
     setAuditorStage('email');
@@ -207,6 +247,16 @@ export function LandingPage() {
     try {
       const result = await login(loginEmail, loginPassword, loginRole === 'auditor' ? 'auditor' : 'owner');
       if (result.success) {
+        // Remember this device for owners and provision a default MPIN (9999)
+        // for existing users so they can use quick sign-in next time.
+        if (loginRole === 'user') {
+          markReturningUser();
+          if (!hasMpinVault()) {
+            try {
+              await saveMpinVault(loginEmail, loginPassword, DEFAULT_MPIN);
+            } catch {}
+          }
+        }
         toast.success('Login successful!');
         setShowLoginModal(false);
         navigate('/app');
@@ -218,12 +268,89 @@ export function LandingPage() {
     }
   };
 
+  const resetMpin = () => {
+    setMpinDigits(['', '', '', '']);
+    setMpinError('');
+    setTimeout(() => mpinInputsRef.current[0]?.focus(), 0);
+  };
+
+  const submitMpin = async (mpin: string) => {
+    setMpinLoading(true);
+    setMpinError('');
+
+    const creds = await unlockWithMpin(mpin);
+    if (!creds) {
+      setMpinLoading(false);
+      setMpinError('Incorrect MPIN. Try again or use email & password below.');
+      resetMpin();
+      return;
+    }
+
+    const result = await login(creds.email, creds.password, 'owner');
+    setMpinLoading(false);
+
+    if (result.success) {
+      markReturningUser();
+      toast.success('Login successful!');
+      setShowLoginModal(false);
+      navigate('/app');
+    } else {
+      setMpinError(result.error || 'Could not sign in. Use email & password below.');
+      resetMpin();
+    }
+  };
+
+  const handleMpinChange = (index: number, raw: string) => {
+    setMpinError('');
+    const value = raw.replace(/\D/g, '');
+
+    if (!value) {
+      const next = [...mpinDigits];
+      next[index] = '';
+      setMpinDigits(next);
+      return;
+    }
+
+    const next = [...mpinDigits];
+    let cursor = index;
+    for (const char of value.split('')) {
+      if (cursor >= 4) break;
+      next[cursor] = char;
+      cursor++;
+    }
+    setMpinDigits(next);
+    mpinInputsRef.current[Math.min(cursor, 3)]?.focus();
+
+    if (next.every((d) => d !== '')) {
+      submitMpin(next.join(''));
+    }
+  };
+
+  const handleMpinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !mpinDigits[index] && index > 0) {
+      e.preventDefault();
+      const next = [...mpinDigits];
+      next[index - 1] = '';
+      setMpinDigits(next);
+      mpinInputsRef.current[index - 1]?.focus();
+    }
+  };
+
   const openLoginModal = (role: 'user' | 'auditor' = 'user') => {
     setLoginRole(role);
     setShowLoginModal(true);
     setMobileMenuOpen(false);
     resetAuditorFlow();
     setLoginPassword('');
+    // Owners with a saved MPIN start on the quick MPIN screen; everyone else
+    // starts on email + password.
+    const vaultExists = hasMpinVault();
+    setUserLoginMode(role === 'user' && vaultExists ? 'mpin' : 'password');
+    setMpinDigits(['', '', '', '']);
+    setMpinError('');
+    if (role === 'user' && vaultExists) {
+      setLoginEmail(getVaultEmail() || '');
+    }
   };
 
   const openSignupModal = () => {
@@ -274,6 +401,14 @@ export function LandingPage() {
       toast.error('Phone number must be 10 digits');
       return;
     }
+    if (!isValidMpin(signupData.mpin)) {
+      toast.error('MPIN must be exactly 4 digits');
+      return;
+    }
+    if (signupData.mpin !== signupData.confirmMpin) {
+      toast.error('MPIN and confirmation do not match');
+      return;
+    }
     try {
       const { data, error } = await supabase.auth.signUp({
         email: signupData.email,
@@ -306,12 +441,19 @@ export function LandingPage() {
         toast.error('Signup failed. Please try again.');
         return;
       }
+      // Provision the MPIN vault on this device so quick sign-in works right
+      // after the user logs in. Falls back to the default 9999 if left blank.
+      try {
+        await saveMpinVault(signupData.email, signupData.password, signupData.mpin || DEFAULT_MPIN);
+        markReturningUser();
+      } catch {}
       toast.success('Account created successfully! Please login to continue.');
       setShowSignupModal(false);
       setShowLoginModal(true);
+      setLoginEmail(signupData.email);
       setSignupData({
         fullName: '', email: '', password: '', phone: '', companyName: '',
-        gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: ''
+        gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: '', mpin: '', confirmMpin: ''
       });
     } catch (error) {
       console.error('Signup error:', error);
@@ -596,52 +738,68 @@ export function LandingPage() {
         {/* ============================== BENTO ============================== */}
         <section className="relative pb-20 lg:pb-24 px-4 sm:px-6 lg:px-8">
           <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-5 lg:gap-6">
-            <div className="kaps-card relative rounded-2xl p-7 lg:p-8 min-h-[360px]">
+            <div className="kaps-card relative rounded-2xl p-7 lg:p-8 min-h-[360px] overflow-hidden flex flex-col">
               <div className="kaps-card-glow" aria-hidden />
-              <p className="relative text-[17px] sm:text-[18px] font-medium leading-snug text-slate-900 dark:text-white">
-                Built for the way<br />
-                Indian businesses bill
-              </p>
-              <ul className="relative mt-7 space-y-4">
-                {[
-                  'GSTIN with auto-derived PAN',
-                  'HSN / SAC code lookup',
-                  'Place-of-supply CGST · SGST · IGST',
-                  'Reverse charge & e-Invoice ready',
-                  'Audit-trail for every revision'
-                ].map((item) => (
-                  <li key={item} className="flex items-center gap-3.5">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/15 ring-1 ring-violet-400/30 dark:ring-violet-400/30">
-                      <Zap className="h-3 w-3 text-violet-600 dark:text-violet-300" fill="currentColor" />
-                    </span>
-                    <span className="text-[13.5px] text-slate-700 dark:text-white/75">{item}</span>
-                  </li>
-                ))}
-              </ul>
+              <h3 className="relative text-[17px] sm:text-[18px] font-medium leading-snug text-slate-900 dark:text-white">
+                Trusted across every<br />
+                kind of business
+              </h3>
+              <div className="relative flex-1 flex items-center justify-center">
+                <OrbitVisual />
+              </div>
             </div>
 
             <div className="grid grid-rows-[auto_1fr] gap-5 lg:gap-6">
               <div className="kaps-card relative rounded-2xl p-7 lg:p-8">
                 <div className="kaps-card-glow" aria-hidden />
-                <div className="relative flex items-center gap-2 mb-5">
-                  <span className="h-7 w-7 rounded-md border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] flex items-center justify-center">
+                <div className="relative flex items-center gap-3 mb-5">
+                  <span className="shrink-0 h-7 w-7 rounded-md border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] flex items-center justify-center">
                     <Receipt className="h-3.5 w-3.5 text-slate-500 dark:text-white/70" />
                   </span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
-                  <span className="ml-1 h-7 w-7 rounded-md border border-violet-400/40 bg-violet-500/15 flex items-center justify-center">
+                  <div className="flex-1 flex items-center justify-between px-1">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <span key={i} className="relative h-1.5 w-1.5">
+                        <span className="absolute inset-0 rounded-full bg-slate-300 dark:bg-white/20" />
+                        <span
+                          className="kaps-pulse absolute inset-0 rounded-full bg-violet-500 shadow-[0_0_6px_1px_rgba(139,92,246,0.75)]"
+                          style={{ animationDelay: `${i * 0.2}s` }}
+                        />
+                      </span>
+                    ))}
+                  </div>
+                  <span className="shrink-0 h-7 w-7 rounded-md border border-violet-400/40 bg-violet-500/15 flex items-center justify-center">
                     <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" />
                   </span>
                 </div>
+
                 <h3 className="relative text-[17px] sm:text-[18px] font-medium leading-snug text-slate-900 dark:text-white">
                   Compliant invoicing,<br />
                   in a single workspace
                 </h3>
               </div>
 
-              <div className="kaps-card relative rounded-2xl p-7 lg:p-8 overflow-hidden">
+              <div className="kaps-card relative rounded-2xl p-7 lg:p-8">
                 <div className="kaps-card-glow" aria-hidden />
-                <OrbitVisual />
+                <p className="relative text-[17px] sm:text-[18px] font-medium leading-snug text-slate-900 dark:text-white">
+                  Built for the way<br />
+                  Indian businesses bill
+                </p>
+                <ul className="relative mt-7 space-y-4">
+                  {[
+                    'GSTIN with auto-derived PAN',
+                    'HSN / SAC code lookup',
+                    'Place-of-supply CGST · SGST · IGST',
+                    'Reverse charge & e-Invoice ready',
+                    'Audit-trail for every revision'
+                  ].map((item) => (
+                    <li key={item} className="flex items-center gap-3.5">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/15 ring-1 ring-violet-400/30 dark:ring-violet-400/30">
+                        <Zap className="h-3 w-3 text-violet-600 dark:text-violet-300" fill="currentColor" />
+                      </span>
+                      <span className="text-[13.5px] text-slate-700 dark:text-white/75">{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>
@@ -809,7 +967,7 @@ export function LandingPage() {
             </div>
 
             <div className="mt-12 pt-6 border-t border-slate-200 dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <p className="text-[12px] text-slate-500 dark:text-white/40">© 2026 GSTInvoice Pro · Crafted in Mumbai · All rights reserved.</p>
+              <p className="text-[12px] text-slate-500 dark:text-white/40">© 2026 GSTInvoice Pro · Crafted in Vadodara · All rights reserved.</p>
               <button
                 onClick={() => openLoginModal('auditor')}
                 className="text-[12px] text-slate-600 dark:text-white/55 hover:text-slate-900 dark:hover:text-white transition-colors"
@@ -882,7 +1040,62 @@ export function LandingPage() {
                   </p>
                 </div>
 
-                {loginRole === 'user' ? (
+                {loginRole === 'user' && userLoginMode === 'mpin' ? (
+                  <div className="p-6 space-y-5">
+                    <div className="text-center">
+                      <p className="text-[12px] font-medium text-slate-700 dark:text-white/70 mb-3">Enter your 4-digit MPIN</p>
+                      <div className="flex justify-center gap-3">
+                        {mpinDigits.map((digit, index) => (
+                          <input
+                            key={index}
+                            ref={(el) => { mpinInputsRef.current[index] = el; }}
+                            type="password"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            maxLength={1}
+                            value={digit}
+                            disabled={mpinLoading}
+                            onChange={(e) => handleMpinChange(index, e.target.value)}
+                            onKeyDown={(e) => handleMpinKeyDown(index, e)}
+                            className="w-12 h-14 text-center text-2xl font-semibold rounded-xl border border-violet-300/50 dark:border-white/10 bg-white dark:bg-white/[0.03] text-slate-900 dark:text-white focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50 transition"
+                          />
+                        ))}
+                      </div>
+                      {mpinError ? (
+                        <p className="mt-3 text-[12px] text-red-500">{mpinError}</p>
+                      ) : (
+                        <p className="mt-3 text-[12px] text-slate-500 dark:text-white/50">
+                          {mpinLoading ? 'Signing in…' : 'Quick sign-in with your PIN'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                      <span className="text-[11px] text-slate-400 dark:text-white/40">or</span>
+                      <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => { setUserLoginMode('password'); setMpinError(''); setLoginPassword(''); }}
+                      className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-full border border-violet-300/60 dark:border-white/12 text-violet-700 dark:text-violet-200 text-[13px] font-semibold hover:bg-violet-50 dark:hover:bg-white/[0.04] transition-colors"
+                    >
+                      Sign in with email &amp; password
+                    </button>
+
+                    <p className="text-[12px] text-center text-slate-500 dark:text-white/50">
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        Create one
+                      </button>
+                    </p>
+                  </div>
+                ) : loginRole === 'user' ? (
                   <form onSubmit={handleLogin} className="p-6 space-y-4">
                     <div>
                       <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
@@ -924,6 +1137,23 @@ export function LandingPage() {
                       Sign in
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
                     </button>
+
+                    {hasMpinVault() && (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                          <span className="text-[11px] text-slate-400 dark:text-white/40">or</span>
+                          <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setUserLoginMode('mpin'); resetMpin(); }}
+                          className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-full border border-violet-300/60 dark:border-white/12 text-violet-700 dark:text-violet-200 text-[13px] font-semibold hover:bg-violet-50 dark:hover:bg-white/[0.04] transition-colors"
+                        >
+                          Sign in with MPIN
+                        </button>
+                      </>
+                    )}
 
                     <p className="text-[12px] text-center text-slate-500 dark:text-white/50 pt-1">
                       Don't have an account?{' '}
@@ -1083,7 +1313,7 @@ export function LandingPage() {
               setShowSignupModal(false);
               setSignupData({
                 fullName: '', email: '', password: '', phone: '', companyName: '',
-                gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: ''
+                gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: '', mpin: '', confirmMpin: ''
               });
             }}
           >
@@ -1098,7 +1328,7 @@ export function LandingPage() {
                       setShowSignupModal(false);
                       setSignupData({
                         fullName: '', email: '', password: '', phone: '', companyName: '',
-                        gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: ''
+                        gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: '', mpin: '', confirmMpin: ''
                       });
                     }}
                     className="absolute right-5 top-5 p-1 rounded-md text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
@@ -1136,6 +1366,30 @@ export function LandingPage() {
                               {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                           </div>
+                        </Field>
+                        <Field label="MPIN" required hint="4-digit PIN for quick sign-in next time">
+                          <input
+                            type="password"
+                            inputMode="numeric"
+                            value={signupData.mpin}
+                            onChange={(e) => setSignupData({ ...signupData, mpin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                            maxLength={4}
+                            className="kaps-input font-mono tracking-[0.5em]"
+                            placeholder="••••"
+                            required
+                          />
+                        </Field>
+                        <Field label="Confirm MPIN" required hint="Re-enter the same 4 digits">
+                          <input
+                            type="password"
+                            inputMode="numeric"
+                            value={signupData.confirmMpin}
+                            onChange={(e) => setSignupData({ ...signupData, confirmMpin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                            maxLength={4}
+                            className="kaps-input font-mono tracking-[0.5em]"
+                            placeholder="••••"
+                            required
+                          />
                         </Field>
                       </div>
                     </FormSection>
@@ -1447,6 +1701,41 @@ export function LandingPage() {
         .kaps-float { animation: kaps-float 5s ease-in-out infinite; }
         .kaps-float-slow { animation: kaps-float 7s ease-in-out infinite; }
 
+        /* Purple pulse travelling across the dotted connector between two icons.
+         * Each dot's violet overlay fades in on a staggered delay, so the glow
+         * appears to flow from the left icon to the right one. */
+        .kaps-pulse {
+          opacity: 0;
+          animation: kaps-pulse 1.6s ease-in-out infinite;
+          will-change: opacity, transform;
+        }
+        @keyframes kaps-pulse {
+          0%, 100% { opacity: 0; transform: scale(0.8); }
+          45%      { opacity: 1; transform: scale(1.5); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .kaps-pulse { animation: none; }
+        }
+
+        /* Orbital revolution around the hub. The trailing counter-rotation keeps
+         * each node upright while it travels the ring. Radius/start/duration are
+         * supplied per node via CSS variables. */
+        @keyframes kaps-orbit {
+          from { transform: rotate(var(--start)) translateX(var(--radius)) rotate(calc(-1 * var(--start))); }
+          to   { transform: rotate(calc(var(--start) + 360deg)) translateX(var(--radius)) rotate(calc(-1 * (var(--start) + 360deg))); }
+        }
+        .kaps-orbiter {
+          top: 50%;
+          left: 50%;
+          margin-top: -14px;
+          margin-left: -14px;
+          animation: kaps-orbit var(--dur, 30s) linear infinite;
+          will-change: transform;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .kaps-orbiter { animation: none; transform: rotate(var(--start)) translateX(var(--radius)) rotate(calc(-1 * var(--start))); }
+        }
+
         /* Testimonials marquee */
         .kaps-marquee-mask {
           -webkit-mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
@@ -1618,25 +1907,37 @@ function InvoiceRow({
 /* ===== Bento orbit ===== */
 
 function OrbitVisual() {
+  // Each node gets its OWN ring (no two share a radius) and every node spins at
+  // a different speed. Because the rings are spaced a full node-width apart,
+  // even when two nodes line up at the same angle their bubbles never touch —
+  // so independent speeds can never cause an overlap or cut-through.
   const orbiters = [
-    { initials: 'PS', g: 'from-orange-400 to-rose-500', style: { top: '8%', right: '14%' }, anim: 'kaps-float' },
-    { initials: 'AM', g: 'from-fuchsia-400 to-pink-500', style: { bottom: '12%', right: '8%' }, anim: 'kaps-float-slow' },
-    { initials: 'AI', g: 'from-emerald-400 to-teal-500', style: { bottom: '6%', left: '36%' }, anim: 'kaps-float' },
-    { initials: 'RM', g: 'from-sky-400 to-indigo-500', style: { top: '14%', left: '10%' }, anim: 'kaps-float-slow' }
+    { Icon: Briefcase, label: 'Services', g: 'from-sky-400 to-indigo-500', radius: 44, start: 30, dur: 22 },
+    { Icon: Truck, label: 'Logistics', g: 'from-fuchsia-400 to-pink-500', radius: 72, start: 150, dur: 30 },
+    { Icon: Store, label: 'Retail', g: 'from-orange-400 to-rose-500', radius: 100, start: 260, dur: 38 },
+    { Icon: Factory, label: 'Manufacturing', g: 'from-emerald-400 to-teal-500', radius: 128, start: 70, dur: 26 },
+    { Icon: ShoppingCart, label: 'E-commerce', g: 'from-amber-400 to-orange-500', radius: 156, start: 200, dur: 34 }
   ];
+  const rings = [312, 256, 200, 144, 88];
   return (
-    <div className="relative w-full h-[180px] flex items-center justify-center">
-      <div className="absolute h-[180px] w-[180px] rounded-full border border-slate-200 dark:border-white/[0.07]" />
-      <div className="absolute h-[130px] w-[130px] rounded-full border border-dashed border-slate-200 dark:border-white/[0.07]" />
-      <div className="absolute h-[80px] w-[80px] rounded-full border border-slate-200 dark:border-white/[0.08]" />
+    <div className="relative w-full h-[350px] flex items-center justify-center">
+      {rings.map((d, i) => (
+        <div
+          key={d}
+          className={`absolute rounded-full border ${i % 2 === 1 ? 'border-dashed' : ''} border-slate-200 dark:border-white/[0.07]`}
+          style={{ height: d, width: d }}
+        />
+      ))}
 
       {orbiters.map((o, i) => (
         <div
           key={i}
-          className={`absolute h-7 w-7 rounded-full bg-gradient-to-br ${o.g} ring-2 ring-white dark:ring-[#0a0a26] flex items-center justify-center text-[10px] font-bold text-white ${o.anim}`}
-          style={o.style}
+          className={`kaps-orbiter absolute h-7 w-7 rounded-full bg-gradient-to-br ${o.g} ring-2 ring-white dark:ring-[#0a0a26] flex items-center justify-center text-white`}
+          style={{ '--radius': `${o.radius}px`, '--start': `${o.start}deg`, '--dur': `${o.dur}s` } as React.CSSProperties}
+          title={o.label}
+          aria-label={o.label}
         >
-          {o.initials}
+          <o.Icon className="h-3.5 w-3.5" strokeWidth={2.4} />
         </div>
       ))}
 

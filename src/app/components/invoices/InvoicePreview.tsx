@@ -419,15 +419,15 @@ export function InvoicePreview({
             {/* Company & Invoice Details */}
             <div className="grid grid-cols-2 border-b border-foreground">
               <div className="p-4 border-r border-foreground">
-                <div className="flex gap-3">
-                  <div className="w-16 h-16 bg-primary/10 border border-border rounded flex items-center justify-center flex-shrink-0">
+                <div className="flex gap-4 items-start">
+                  <div className={`w-28 h-28 flex items-center justify-center flex-shrink-0 ${companyLogo ? '' : 'bg-primary/10 border border-border rounded'}`}>
                     {companyLogo ? (
                       <img src={companyLogo} alt={`${companyName} logo`} className="w-full h-full object-contain" />
                     ) : (
                       <span className="text-xs text-muted-foreground">LOGO</span>
                     )}
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <h2 className="font-bold text-sm mb-1">{companyName}</h2>
                     <div className="text-xs leading-relaxed">
                       {companyAddress.length > 0 ? (
@@ -511,7 +511,7 @@ export function InvoicePreview({
             </div>
 
             {/* Line Items Table */}
-            <table className="w-full text-xs border-b border-foreground">
+            <table className="print-grid w-full text-xs border-b border-foreground">
               <thead>
                 <tr className="border-b border-foreground bg-muted/30">
                   <th className="p-2 text-left border-r border-foreground w-8">Sr.</th>
@@ -571,7 +571,7 @@ export function InvoicePreview({
 
             {/* Totals */}
             <div className="border-b border-foreground">
-              <table className="w-full text-xs">
+              <table className="print-rows w-full text-xs">
                 <tbody>
                   <tr className="border-b border-foreground">
                     <td className="p-2 font-semibold">Sub-Total (Taxable)</td>

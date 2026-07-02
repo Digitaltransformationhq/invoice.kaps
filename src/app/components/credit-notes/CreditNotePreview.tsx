@@ -384,7 +384,7 @@ export function CreditNotePreview({
             </div>
 
             {/* Line Items Table */}
-            <table className="w-full text-xs border-b-2 border-foreground">
+            <table className="print-grid w-full text-xs border-b-2 border-foreground">
               <thead>
                 <tr className="border-b-2 border-foreground bg-muted/30">
                   <th className="p-2 text-left border-r border-foreground w-8">Sr.</th>
@@ -458,7 +458,7 @@ export function CreditNotePreview({
 
             {/* Totals */}
             <div className="border-b-2 border-foreground">
-              <table className="w-full text-xs">
+              <table className="print-rows w-full text-xs">
                 <tbody>
                   <tr className="border-b border-foreground">
                     <td className="p-2 font-semibold">Sub-Total (Taxable)</td>

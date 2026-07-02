@@ -225,7 +225,7 @@ export function InvoiceList() {
   };
 
   const handleEdit = (invoiceId: string) => {
-    navigate('/app/invoices/new');
+    navigate(`/app/invoices/new?id=${invoiceId}`);
   };
 
   const handleSend = (invoice: any) => {
@@ -953,7 +953,7 @@ export function InvoiceList() {
                         <Eye className="w-4 h-4 text-muted-foreground" />
                       </button>
                       <button
-                        onClick={() => handleEdit(invoice.id)}
+                        onClick={() => handleEdit(invoice.dbId)}
                         className="p-1.5 hover:bg-muted rounded transition-colors"
                         title="Edit"
                       >

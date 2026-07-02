@@ -226,7 +226,7 @@ export function ReceiptPreview({
 
         {/* Receipt Content */}
         <div className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-          <div className="invoice-print-page bg-white border-2 border-foreground mx-auto max-w-[210mm]" style={{ fontFamily: 'Arial, sans-serif' }}>
+          <div className="invoice-print-page receipt-print-page bg-white border-2 border-foreground mx-auto max-w-[210mm]" style={{ fontFamily: 'Arial, sans-serif' }}>
             {/* Header */}
             <div className="text-right px-4 pt-2 text-xs">
               <div className="font-semibold">PAYMENT RECEIPT</div>
@@ -240,7 +240,7 @@ export function ReceiptPreview({
             <div className="grid grid-cols-2 border-b-2 border-foreground">
               <div className="p-6 border-r-2 border-foreground">
                 <div className="flex gap-3">
-                  <div className="w-16 h-16 bg-primary/10 border border-border rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className={`w-28 h-28 flex items-center justify-center flex-shrink-0 overflow-hidden ${companyDetails.logo ? '' : 'bg-primary/10 border border-border rounded'}`}>
                     {companyDetails.logo ? (
                       <img src={companyDetails.logo} alt="Company logo" className="w-full h-full object-contain" />
                     ) : (
@@ -313,7 +313,7 @@ export function ReceiptPreview({
 
             {/* Payment Details */}
             <div className="p-6 border-b-2 border-foreground">
-              <table className="w-full">
+              <table className="print-rows w-full">
                 <thead>
                   <tr className="border-b-2 border-foreground bg-muted/20">
                     <th className="p-3 text-left text-sm font-semibold">Description</th>
