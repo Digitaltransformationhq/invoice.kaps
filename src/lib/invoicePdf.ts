@@ -31,30 +31,49 @@ export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob
   ]);
 
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-  const margin = 6;
-  const maxW = pageW - margin * 2;
-  const maxH = pageH - margin * 2;
+  const pageWmm = pdf.internal.pageSize.getWidth();  // 210
+  const pageHmm = pdf.internal.pageSize.getHeight(); // 297
+
+  // Render each copy in an off-screen clone forced to a fixed A4 pixel width, so
+  // the export always matches the full (desktop) invoice layout regardless of
+  // the device's screen width — otherwise a phone captures the invoice at its
+  // narrow on-screen size and the result looks distorted.
+  const A4_WIDTH_PX = 794; // 210mm @ 96dpi
 
   for (let i = 0; i < pages.length; i++) {
-    const canvas = await html2canvas(pages[i], {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-    });
+    const holder = document.createElement('div');
+    holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${A4_WIDTH_PX}px;background:#ffffff;z-index:-1;`;
+    const clone = pages[i].cloneNode(true) as HTMLElement;
+    clone.style.width = `${A4_WIDTH_PX}px`;
+    clone.style.maxWidth = 'none';
+    clone.style.margin = '0';
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    let w = maxW;
-    let h = (canvas.height * w) / canvas.width;
-    if (h > maxH) {
-      h = maxH;
-      w = (canvas.width * h) / canvas.height;
+    try {
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: A4_WIDTH_PX,
+        windowWidth: A4_WIDTH_PX,
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      // Fit the whole copy onto one A4 page, preserving aspect ratio (no stretch).
+      let w = pageWmm;
+      let h = (canvas.height * w) / canvas.width;
+      if (h > pageHmm) {
+        h = pageHmm;
+        w = (canvas.width * h) / canvas.height;
+      }
+
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', (pageWmm - w) / 2, 0, w, h);
+    } finally {
+      document.body.removeChild(holder);
     }
-
-    if (i > 0) pdf.addPage();
-    pdf.addImage(imgData, 'JPEG', (pageW - w) / 2, margin, w, h);
   }
 
   return pdf.output('blob');

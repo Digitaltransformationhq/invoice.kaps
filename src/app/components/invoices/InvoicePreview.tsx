@@ -160,7 +160,7 @@ export function InvoicePreview({
     let cancelled = false;
     pdfBlobRef.current = null;
     setPdfPreparing(true);
-    generateInvoicePdfBlob([pages[0]])
+    generateInvoicePdfBlob(pages)
       .then((blob) => {
         if (!cancelled) pdfBlobRef.current = blob;
       })
