@@ -77,9 +77,10 @@ export function InvoicePreview({
 }: InvoicePreviewProps) {
   const { user } = useAuth();
   const [showSendOptions, setShowSendOptions] = useState(false);
-  const [pdfPreparing, setPdfPreparing] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const pdfBlobRef = useRef<Blob | null>(null);
+  const pdfPromiseRef = useRef<Promise<Blob> | null>(null);
   // Composition dealers issue a "Bill of Supply" with no tax breakup.
   const { isComposition } = useTaxpayerType();
   const [companyDetails, setCompanyDetails] = useState({
@@ -142,14 +143,14 @@ export function InvoicePreview({
     if (isOpen && autoOpenSend) setShowSendOptions(true);
   }, [isOpen, autoOpenSend]);
 
-  // Pre-build the invoice PDF as soon as the send sheet opens, so tapping
-  // WhatsApp can call navigator.share() immediately inside the tap. Web Share
-  // requires the share() call to stay within the user gesture; html2canvas is
-  // too slow to run *after* the tap, which is why sharing was falling back to
-  // text. Only the buyer's copy is rendered, to keep it fast.
+  // Start building the invoice PDF quietly in the background the moment the send
+  // sheet opens — no blocking spinner, the button stays tappable. By the time
+  // the user taps WhatsApp it's usually ready, so sharing is instant; if they
+  // tap early, the handler awaits this same in-flight promise.
   useEffect(() => {
     if (!showSendOptions) {
       pdfBlobRef.current = null;
+      pdfPromiseRef.current = null;
       return;
     }
     const pages = Array.from(
@@ -159,15 +160,13 @@ export function InvoicePreview({
 
     let cancelled = false;
     pdfBlobRef.current = null;
-    setPdfPreparing(true);
-    generateInvoicePdfBlob(pages)
+    const promise = generateInvoicePdfBlob(pages);
+    pdfPromiseRef.current = promise;
+    promise
       .then((blob) => {
         if (!cancelled) pdfBlobRef.current = blob;
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setPdfPreparing(false);
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -281,12 +280,25 @@ export function InvoicePreview({
   };
 
   const handleWhatsAppInvoice = async () => {
+    if (isSharing) return;
+
+    // Use the background-built PDF if ready; otherwise wait on the same in-flight
+    // build (only if the user tapped before it finished). Web Share only needs
+    // share() to fire within ~5s of the tap, which the head-start keeps us under.
+    let blob = pdfBlobRef.current;
+    if (!blob && pdfPromiseRef.current) {
+      setIsSharing(true);
+      try {
+        blob = await pdfPromiseRef.current;
+      } catch {
+        blob = null;
+      }
+      setIsSharing(false);
+    }
+
     const fileName = `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
-    const blob = pdfBlobRef.current;
     const file = blob ? new File([blob], fileName, { type: 'application/pdf' }) : null;
 
-    // The PDF is pre-built (see the send-sheet effect), so this runs straight
-    // inside the tap — required for Web Share to accept it on mobile.
     if (file && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
@@ -437,19 +449,19 @@ export function InvoicePreview({
               <div className="px-6 py-5 space-y-2.5">
                 <button
                   onClick={handleWhatsAppInvoice}
-                  disabled={isSendingMail || pdfPreparing}
+                  disabled={isSendingMail || isSharing}
                   className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                    {pdfPreparing ? (
+                    {isSharing ? (
                       <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
                     ) : (
                       <MessageCircle className="w-4 h-4" strokeWidth={2.25} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-semibold text-foreground">{pdfPreparing ? 'Preparing PDF…' : 'WhatsApp the Invoice'}</div>
-                    <div className="text-[11.5px] text-muted-foreground">{pdfPreparing ? 'Building the invoice PDF' : 'Share the PDF via WhatsApp'}</div>
+                    <div className="text-[14px] font-semibold text-foreground">{isSharing ? 'Preparing PDF…' : 'WhatsApp the Invoice'}</div>
+                    <div className="text-[11.5px] text-muted-foreground">{isSharing ? 'Building the invoice PDF' : 'Share the PDF via WhatsApp'}</div>
                   </div>
                 </button>
                 <button

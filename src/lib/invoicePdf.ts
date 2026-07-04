@@ -61,16 +61,20 @@ export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      // Fit the whole copy onto one A4 page, preserving aspect ratio (no stretch).
-      let w = pageWmm;
+      // Leave a margin around the invoice (matching the padding shown in the
+      // app) and fit the copy inside it, preserving aspect ratio (no stretch).
+      const margin = 8; // mm
+      const maxW = pageWmm - margin * 2;
+      const maxH = pageHmm - margin * 2;
+      let w = maxW;
       let h = (canvas.height * w) / canvas.width;
-      if (h > pageHmm) {
-        h = pageHmm;
+      if (h > maxH) {
+        h = maxH;
         w = (canvas.width * h) / canvas.height;
       }
 
       if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', (pageWmm - w) / 2, 0, w, h);
+      pdf.addImage(imgData, 'JPEG', (pageWmm - w) / 2, margin, w, h);
     } finally {
       document.body.removeChild(holder);
     }
