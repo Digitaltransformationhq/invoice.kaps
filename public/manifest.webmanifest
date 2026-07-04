@@ -1,0 +1,26 @@
+{
+  "name": "GSTInvoice Pro",
+  "short_name": "GSTInvoice",
+  "description": "Create compliant GST invoices, receipts and GSTR-1 reports for your Indian business.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#0B0F1C",
+  "theme_color": "#7c3aed",
+  "categories": ["business", "finance", "productivity"],
+  "lang": "en-IN",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New Invoice", "short_name": "New Invoice", "url": "/app/invoices/new?source=pwa", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Dashboard", "short_name": "Dashboard", "url": "/app/dashboard?source=pwa", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

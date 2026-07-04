@@ -52,3 +52,14 @@ if (!rootElement) {
     })
     .catch(showBootError);
 }
+
+// Register the service worker so the app is installable ("Add to Home Screen")
+// and works offline. Only in production builds — a SW in dev interferes with
+// Vite's HMR. Fails silently on unsupported browsers.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {
+      /* installability is a progressive enhancement — ignore failures */
+    });
+  });
+}

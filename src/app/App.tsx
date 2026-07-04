@@ -20,6 +20,7 @@ import { HelpSupport } from './components/support/HelpSupport';
 import { AuditorManagement } from './components/auditor/AuditorManagement';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
+import { InstallPrompt } from './components/common/InstallPrompt';
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
               <Route path="help" element={<HelpSupport />} />
             </Route>
           </Routes>
+          <InstallPrompt />
           <Toaster position="top-right" richColors />
         </BrowserRouter>
       </AuthProvider>
