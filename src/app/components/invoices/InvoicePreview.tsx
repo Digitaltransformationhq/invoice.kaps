@@ -6,7 +6,7 @@ import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
-import { canSharePdfFile, generateInvoicePdfBlob, sharePdf } from '../../../lib/invoicePdf';
+import { generateInvoicePdfBlob } from '../../../lib/invoicePdf';
 
 interface LineItem {
   id: string;
@@ -77,8 +77,9 @@ export function InvoicePreview({
 }: InvoicePreviewProps) {
   const { user } = useAuth();
   const [showSendOptions, setShowSendOptions] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
+  const [pdfPreparing, setPdfPreparing] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const pdfBlobRef = useRef<Blob | null>(null);
   // Composition dealers issue a "Bill of Supply" with no tax breakup.
   const { isComposition } = useTaxpayerType();
   const [companyDetails, setCompanyDetails] = useState({
@@ -140,6 +141,38 @@ export function InvoicePreview({
   useEffect(() => {
     if (isOpen && autoOpenSend) setShowSendOptions(true);
   }, [isOpen, autoOpenSend]);
+
+  // Pre-build the invoice PDF as soon as the send sheet opens, so tapping
+  // WhatsApp can call navigator.share() immediately inside the tap. Web Share
+  // requires the share() call to stay within the user gesture; html2canvas is
+  // too slow to run *after* the tap, which is why sharing was falling back to
+  // text. Only the buyer's copy is rendered, to keep it fast.
+  useEffect(() => {
+    if (!showSendOptions) {
+      pdfBlobRef.current = null;
+      return;
+    }
+    const pages = Array.from(
+      printAreaRef.current?.querySelectorAll('.invoice-print-page') ?? []
+    ) as HTMLElement[];
+    if (!pages.length) return;
+
+    let cancelled = false;
+    pdfBlobRef.current = null;
+    setPdfPreparing(true);
+    generateInvoicePdfBlob([pages[0]])
+      .then((blob) => {
+        if (!cancelled) pdfBlobRef.current = blob;
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPdfPreparing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showSendOptions]);
 
   const [isSendingMail, setIsSendingMail] = useState(false);
 
@@ -248,46 +281,36 @@ export function InvoicePreview({
   };
 
   const handleWhatsAppInvoice = async () => {
-    if (isSharing) return;
+    const fileName = `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
+    const blob = pdfBlobRef.current;
+    const file = blob ? new File([blob], fileName, { type: 'application/pdf' }) : null;
 
-    const pages = Array.from(
-      printAreaRef.current?.querySelectorAll('.invoice-print-page') ?? []
-    ) as HTMLElement[];
-
-    // Attaching a PDF to WhatsApp only works where the browser supports sharing
-    // files (mobile). On desktop this isn't available — proper desktop delivery
-    // needs the WhatsApp Business API — so just send the text link there.
-    if (!pages.length || !canSharePdfFile()) {
-      openWhatsappText();
-      setShowSendOptions(false);
-      return;
-    }
-
-    setIsSharing(true);
-    const buildingToast = toast.loading('Preparing invoice PDF…');
-    try {
-      // Only the buyer's copy — keeps generation fast so the share sheet's
-      // user-gesture window doesn't expire.
-      const blob = await generateInvoicePdfBlob([pages[0]]);
-      toast.dismiss(buildingToast);
-      const fileName = `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
-
-      // The user picks WhatsApp from the native share sheet and the real PDF
-      // attaches. Falls back to a local download if the sheet can't be reached.
-      const result = await sharePdf(blob, fileName, getInvoiceShareMessage(), `Invoice ${displayInvoiceNumber}`);
-      if (result === 'downloaded') {
-        toast.success('Invoice PDF downloaded — attach it in WhatsApp.');
-        openWhatsappText();
+    // The PDF is pre-built (see the send-sheet effect), so this runs straight
+    // inside the tap — required for Web Share to accept it on mobile.
+    if (file && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Invoice ${displayInvoiceNumber}`,
+          text: getInvoiceShareMessage(),
+        });
+        setShowSendOptions(false);
+        return;
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') {
+          setShowSendOptions(false);
+          return; // user dismissed the share sheet
+        }
+        // any other error → fall through to the text link
       }
-      setShowSendOptions(false);
-    } catch {
-      toast.dismiss(buildingToast);
-      toast.error('Could not prepare the PDF. Sending text only.');
-      openWhatsappText();
-      setShowSendOptions(false);
-    } finally {
-      setIsSharing(false);
+    } else {
+      // Browser can't attach a file (most desktops) — proper desktop delivery
+      // needs the WhatsApp Business API.
+      toast.message("This browser can't attach the PDF — sending a text message. Use a phone to share the PDF.");
     }
+
+    openWhatsappText();
+    setShowSendOptions(false);
   };
 
   const handleMailInvoice = async () => {
@@ -414,19 +437,19 @@ export function InvoicePreview({
               <div className="px-6 py-5 space-y-2.5">
                 <button
                   onClick={handleWhatsAppInvoice}
-                  disabled={isSendingMail || isSharing}
+                  disabled={isSendingMail || pdfPreparing}
                   className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                    {isSharing ? (
+                    {pdfPreparing ? (
                       <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
                     ) : (
                       <MessageCircle className="w-4 h-4" strokeWidth={2.25} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-semibold text-foreground">{isSharing ? 'Preparing PDF…' : 'WhatsApp the Invoice'}</div>
-                    <div className="text-[11.5px] text-muted-foreground">{isSharing ? 'Opening share sheet' : 'Share the PDF via WhatsApp'}</div>
+                    <div className="text-[14px] font-semibold text-foreground">{pdfPreparing ? 'Preparing PDF…' : 'WhatsApp the Invoice'}</div>
+                    <div className="text-[11.5px] text-muted-foreground">{pdfPreparing ? 'Building the invoice PDF' : 'Share the PDF via WhatsApp'}</div>
                   </div>
                 </button>
                 <button
