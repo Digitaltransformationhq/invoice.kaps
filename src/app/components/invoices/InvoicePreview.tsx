@@ -5,6 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface LineItem {
   id: string;
@@ -73,6 +74,8 @@ export function InvoicePreview({
 }: InvoicePreviewProps) {
   const { user } = useAuth();
   const [showSendOptions, setShowSendOptions] = useState(false);
+  // Composition dealers issue a "Bill of Supply" with no tax breakup.
+  const { isComposition } = useTaxpayerType();
   const [companyDetails, setCompanyDetails] = useState({
     name: user?.company_name || 'Your Company',
     gstin: user?.company_gstin || '-',
@@ -217,7 +220,8 @@ export function InvoicePreview({
   const cgstTotal = isInterStateSupply ? 0 : totalTax / 2;
   const sgstTotal = isInterStateSupply ? 0 : totalTax / 2;
   const igstTotal = isInterStateSupply ? totalTax : 0;
-  const grandTotal = subtotal + totalTax;
+  // A composition dealer cannot collect tax, so the total is the taxable value.
+  const grandTotal = subtotal + (isComposition ? 0 : totalTax);
 
   const getInvoiceShareMessage = () => (
     `Invoice ${displayInvoiceNumber} for ${buyerName} is ready. Total amount: Rs. ${grandTotal.toFixed(2)}.`
@@ -415,7 +419,7 @@ export function InvoicePreview({
             </div>
 
             <div className="text-center py-2 border-b border-foreground">
-              <h1 className="text-xl font-bold">TAX INVOICE</h1>
+              <h1 className="text-xl font-bold">{isComposition ? 'BILL OF SUPPLY' : 'TAX INVOICE'}</h1>
             </div>
 
             {/* Company & Invoice Details */}
@@ -522,13 +526,17 @@ export function InvoicePreview({
                   <th className="p-2 text-right border-r border-foreground w-12">Qty</th>
                   <th className="p-2 text-left border-r border-foreground w-12">Unit</th>
                   <th className="p-2 text-right border-r border-foreground w-20">Rate</th>
-                  <th className="p-2 text-right border-r border-foreground w-24">Taxable</th>
-                  {isInterStateSupply ? (
-                    <th className="p-2 text-right border-r border-foreground w-20">IGST</th>
-                  ) : (
+                  {!isComposition && (
                     <>
-                      <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
-                      <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
+                      <th className="p-2 text-right border-r border-foreground w-24">Taxable</th>
+                      {isInterStateSupply ? (
+                        <th className="p-2 text-right border-r border-foreground w-20">IGST</th>
+                      ) : (
+                        <>
+                          <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
+                          <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
+                        </>
+                      )}
                     </>
                   )}
                   <th className="p-2 text-right w-24">Amount</th>
@@ -555,16 +563,20 @@ export function InvoicePreview({
                       <td className="p-2 text-right border-r border-foreground">{item.qty.toFixed(2)}</td>
                       <td className="p-2 border-r border-foreground">{item.unit}</td>
                       <td className="p-2 text-right border-r border-foreground">{formatCurrency(item.rate)}</td>
-                      <td className="p-2 text-right border-r border-foreground">{formatCurrency(afterDiscount)}</td>
-                      {isInterStateSupply ? (
-                        <td className="p-2 text-right border-r border-foreground">{formatCurrency(igst)}</td>
-                      ) : (
+                      {!isComposition && (
                         <>
-                          <td className="p-2 text-right border-r border-foreground">{formatCurrency(cgst)}</td>
-                          <td className="p-2 text-right border-r border-foreground">{formatCurrency(sgst)}</td>
+                          <td className="p-2 text-right border-r border-foreground">{formatCurrency(afterDiscount)}</td>
+                          {isInterStateSupply ? (
+                            <td className="p-2 text-right border-r border-foreground">{formatCurrency(igst)}</td>
+                          ) : (
+                            <>
+                              <td className="p-2 text-right border-r border-foreground">{formatCurrency(cgst)}</td>
+                              <td className="p-2 text-right border-r border-foreground">{formatCurrency(sgst)}</td>
+                            </>
+                          )}
                         </>
                       )}
-                      <td className="p-2 text-right">{formatCurrency(afterDiscount + tax)}</td>
+                      <td className="p-2 text-right">{formatCurrency(isComposition ? afterDiscount : afterDiscount + tax)}</td>
                     </tr>
                   );
                 })}
@@ -575,31 +587,45 @@ export function InvoicePreview({
             <div className="border-b border-foreground">
               <table className="print-rows w-full text-xs">
                 <tbody>
-                  <tr className="border-b border-foreground">
-                    <td className="p-2 font-semibold">Sub-Total (Taxable)</td>
-                    <td className="p-2 text-right font-semibold">₹{formatCurrency(subtotal)}</td>
-                  </tr>
-                  {isInterStateSupply ? (
-                    <tr className="border-b border-foreground">
-                      <td className="p-2">Add: IGST</td>
-                      <td className="p-2 text-right">₹{formatCurrency(igstTotal)}</td>
-                    </tr>
-                  ) : (
+                  {!isComposition && (
                     <>
                       <tr className="border-b border-foreground">
-                        <td className="p-2">Add: CGST</td>
-                        <td className="p-2 text-right">₹{formatCurrency(cgstTotal)}</td>
+                        <td className="p-2 font-semibold">Sub-Total (Taxable)</td>
+                        <td className="p-2 text-right font-semibold">₹{formatCurrency(subtotal)}</td>
                       </tr>
-                      <tr className="border-b border-foreground">
-                        <td className="p-2">Add: SGST</td>
-                        <td className="p-2 text-right">₹{formatCurrency(sgstTotal)}</td>
-                      </tr>
+                      {isInterStateSupply ? (
+                        <tr className="border-b border-foreground">
+                          <td className="p-2">Add: IGST</td>
+                          <td className="p-2 text-right">₹{formatCurrency(igstTotal)}</td>
+                        </tr>
+                      ) : (
+                        <>
+                          <tr className="border-b border-foreground">
+                            <td className="p-2">Add: CGST</td>
+                            <td className="p-2 text-right">₹{formatCurrency(cgstTotal)}</td>
+                          </tr>
+                          <tr className="border-b border-foreground">
+                            <td className="p-2">Add: SGST</td>
+                            <td className="p-2 text-right">₹{formatCurrency(sgstTotal)}</td>
+                          </tr>
+                        </>
+                      )}
                     </>
                   )}
                   <tr className="border-b border-foreground bg-muted/20">
                     <td className="p-2 font-bold">GRAND TOTAL</td>
                     <td className="p-2 text-right font-bold">₹{formatCurrency(grandTotal)}</td>
                   </tr>
+                  {isComposition && (
+                    <>
+                      <tr className="border-b border-foreground">
+                        <td className="p-2 font-semibold" colSpan={2}>Tax Amount (in words) : NIL</td>
+                      </tr>
+                      <tr className="border-b border-foreground">
+                        <td className="p-2 font-semibold" colSpan={2}>Composition taxable person. Not eligible to collect tax on supplies.</td>
+                      </tr>
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>

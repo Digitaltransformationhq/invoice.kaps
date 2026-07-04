@@ -34,6 +34,7 @@ interface SettingsForm {
   default_place_of_supply: string;
   enable_reverse_charge: boolean;
   invoice_defaults_enabled: boolean;
+  taxpayer_type: string;
 }
 
 const emptyCompany: CompanyForm = {
@@ -65,6 +66,7 @@ const defaultSettings: SettingsForm = {
   default_place_of_supply: '',
   enable_reverse_charge: false,
   invoice_defaults_enabled: true,
+  taxpayer_type: 'regular',
 };
 
 const SETTINGS_REQUEST_TIMEOUT_MS = 12000;
@@ -81,6 +83,7 @@ function mapSettings(row: any): SettingsForm {
     default_place_of_supply: row?.default_place_of_supply || '',
     enable_reverse_charge: Boolean(row?.enable_reverse_charge),
     invoice_defaults_enabled: row?.invoice_defaults_enabled !== false,
+    taxpayer_type: row?.taxpayer_type || 'regular',
   };
 }
 
@@ -436,6 +439,7 @@ export function Settings() {
       default_place_of_supply: settings.default_place_of_supply.trim() || null,
       enable_reverse_charge: settings.enable_reverse_charge,
       invoice_defaults_enabled: settings.invoice_defaults_enabled,
+      taxpayer_type: settings.taxpayer_type,
     };
 
     setIsSaving(true);
@@ -452,6 +456,7 @@ export function Settings() {
           p_default_place_of_supply: payload.default_place_of_supply,
           p_enable_reverse_charge: payload.enable_reverse_charge,
           p_invoice_defaults_enabled: payload.invoice_defaults_enabled,
+          p_taxpayer_type: payload.taxpayer_type,
         }),
         `Saving ${section} settings`
       );
@@ -461,6 +466,9 @@ export function Settings() {
       }
 
       setSettings(mapSettings(data.settings));
+      // Let live consumers (sidebar labels, invoice/document naming via
+      // useTaxpayerType) refresh immediately instead of waiting for a reload.
+      window.dispatchEvent(new Event('company-settings-updated'));
       toast.success(section === 'invoice' ? 'Invoice settings saved' : 'Tax settings saved');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `Could not save ${section} settings`);
@@ -865,6 +873,19 @@ function InvoiceSettings({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Taxpayer Type</label>
+            <select
+              value={settings.taxpayer_type}
+              onChange={(event) => setSettings({ ...settings, taxpayer_type: event.target.value })}
+              disabled={!canEdit}
+              className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <option value="regular">Regular taxpayer</option>
+              <option value="composition">Composition scheme</option>
+            </select>
+            <p className="text-[11.5px] text-muted-foreground mt-1.5">Choose Composition if you are registered under the GST Composition Scheme.</p>
+          </div>
           <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={fieldsDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
           <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />
           <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
@@ -874,7 +895,7 @@ function InvoiceSettings({
               value={settings.currency}
               onChange={(event) => setSettings({ ...settings, currency: event.target.value })}
               disabled={fieldsDisabled}
-              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+              className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="INR">INR (₹)</option>
               <option value="USD">USD ($)</option>
@@ -918,7 +939,7 @@ function TaxSettings({
               value={settings.default_gst_rate}
               onChange={(event) => setSettings({ ...settings, default_gst_rate: Number(event.target.value) })}
               disabled={!canEdit}
-              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+              className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="0">0%</option>
               <option value="5">5%</option>

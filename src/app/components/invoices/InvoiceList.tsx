@@ -9,6 +9,7 @@ import ExcelJS from 'exceljs';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { deleteForUser, logAuditorAction, selectForUser, updateForUser } from '../../../lib/auditorData';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface InvoiceRow {
   dbId: string;
@@ -34,6 +35,7 @@ interface InvoiceRow {
 
 export function InvoiceList() {
   const { user } = useAuth();
+  const { isComposition } = useTaxpayerType();
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -414,7 +416,7 @@ export function InvoiceList() {
     // Add title
     worksheet.mergeCells('A1:AH1');
     const titleCell = worksheet.getCell('A1');
-    titleCell.value = 'Tax Invoices Report';
+    titleCell.value = isComposition ? 'Bills of Supply Report' : 'Tax Invoices Report';
     titleCell.font = { size: 16, bold: true, color: { argb: 'FF1F4E78' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.getRow(1).height = 30;
@@ -769,22 +771,22 @@ export function InvoiceList() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Invoices</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage and track all your invoices</p>
+          <h1 className="text-2xl font-semibold text-foreground">{isComposition ? 'Bills of Supply' : 'Invoices'}</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage and track all your {isComposition ? 'bills of supply' : 'invoices'}</p>
         </div>
         <Link
           to="/app/invoices/new"
           className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
         >
           <Plus className="w-4 h-4" />
-          Create Invoice
+          {isComposition ? 'Create Bill of Supply' : 'Create Invoice'}
         </Link>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          label="All Invoices"
+          label={isComposition ? 'All Bills' : 'All Invoices'}
           value={stats.all}
           active={statusFilter === 'all'}
           onClick={() => setStatusFilter('all')}

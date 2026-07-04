@@ -103,9 +103,15 @@ begin
     is_active = true
   returning id into v_user_id;
 
-  insert into public.company_settings (company_id)
-  values (v_company_id)
-  on conflict (company_id) do nothing;
+  insert into public.company_settings (company_id, taxpayer_type)
+  values (
+    v_company_id,
+    case when new.raw_user_meta_data->>'taxpayer_type' in ('regular', 'composition')
+         then new.raw_user_meta_data->>'taxpayer_type'
+         else 'regular' end
+  )
+  on conflict (company_id) do update
+  set taxpayer_type = excluded.taxpayer_type;
 
   -- Keep the (large, base64) logo OUT of the JWT. It now lives in
   -- public.companies; strip it from auth metadata so the access token stays small.

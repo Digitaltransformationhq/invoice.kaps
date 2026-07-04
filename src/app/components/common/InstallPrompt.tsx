@@ -7,8 +7,6 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const DISMISS_KEY = 'kaps-pwa-install-dismissed';
-
 function isStandalone() {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -33,7 +31,6 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (isStandalone()) return; // already installed — nothing to offer
-    if (localStorage.getItem(DISMISS_KEY)) return; // user dismissed before
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault(); // stop the mini-infobar; we show our own button
@@ -57,14 +54,12 @@ export function InstallPrompt() {
     };
   }, [ios]);
 
+  // Hide for the current page load only — do NOT persist. The prompt should
+  // reappear on every fresh visit until the app is actually installed, and
+  // again if the user later uninstalls it (isStandalone() goes back to false).
   const dismiss = () => {
     setVisible(false);
     setIosHint(false);
-    try {
-      localStorage.setItem(DISMISS_KEY, '1');
-    } catch {
-      /* private mode — fine, it just re-shows next visit */
-    }
   };
 
   const install = async () => {

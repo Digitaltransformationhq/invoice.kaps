@@ -626,7 +626,8 @@ begin
       'terms',                   v_settings.terms,
       'default_gst_rate',        v_settings.default_gst_rate,
       'default_place_of_supply', v_settings.default_place_of_supply,
-      'enable_reverse_charge',   v_settings.enable_reverse_charge
+      'enable_reverse_charge',   v_settings.enable_reverse_charge,
+      'invoice_defaults_enabled', v_settings.invoice_defaults_enabled
     )
   );
 end;
@@ -837,7 +838,8 @@ begin
     insert into public.invoices (
       company_id, customer_id, invoice_number, invoice_date, customer_type, bill_type,
       place_of_supply, reverse_charge, po_number, po_date, vehicle_number, transport_mode,
-      remarks, subtotal, cgst, sgst, igst, total_tax, total_amount, paid_amount, status, created_by
+      remarks, subtotal, cgst, sgst, igst, total_tax, total_amount, paid_amount, status,
+      is_manual_number, created_by
     ) values (
       v_auditor.company_id,
       nullif(v_record->>'customer_id', '')::uuid,
@@ -860,6 +862,7 @@ begin
       coalesce((v_record->>'total_amount')::numeric, 0),
       coalesce((v_record->>'paid_amount')::numeric, 0),
       coalesce(v_record->>'status', 'draft'),
+      coalesce((v_record->>'is_manual_number')::boolean, false),
       v_auditor.id
     )
     returning id into v_id;

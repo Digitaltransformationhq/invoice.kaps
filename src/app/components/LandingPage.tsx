@@ -144,6 +144,7 @@ export function LandingPage() {
     password: '',
     phone: '',
     companyName: '',
+    taxpayerType: 'regular',
     gstin: '',
     pan: '',
     address: '',
@@ -418,6 +419,7 @@ export function LandingPage() {
             full_name: signupData.fullName,
             phone: signupData.phone,
             company_name: signupData.companyName,
+            taxpayer_type: signupData.taxpayerType,
             gstin: signupData.gstin,
             pan: signupData.pan,
             address: signupData.address,
@@ -452,7 +454,7 @@ export function LandingPage() {
       setShowLoginModal(true);
       setLoginEmail(signupData.email);
       setSignupData({
-        fullName: '', email: '', password: '', phone: '', companyName: '',
+        fullName: '', email: '', password: '', phone: '', companyName: '', taxpayerType: 'regular',
         gstin: '', pan: '', address: '', city: '', state: '', pinCode: '', companyLogo: '', mpin: '', confirmMpin: ''
       });
     } catch (error) {
@@ -1398,6 +1400,12 @@ export function LandingPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Company name" required className="sm:col-span-2">
                           <input type="text" value={signupData.companyName} onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })} className="kaps-input" placeholder="Your Company Pvt Ltd" required />
+                        </Field>
+                        <Field label="Taxpayer type" required className="sm:col-span-2" hint="Choose Composition if you are registered under the GST Composition Scheme">
+                          <select value={signupData.taxpayerType} onChange={(e) => setSignupData({ ...signupData, taxpayerType: e.target.value })} className="kaps-input" required>
+                            <option value="regular">Regular taxpayer</option>
+                            <option value="composition">Composition scheme</option>
+                          </select>
                         </Field>
                         <Field label="Company logo" className="sm:col-span-2">
                           <div className="flex items-center gap-4">

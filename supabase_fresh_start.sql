@@ -185,6 +185,7 @@ create table public.invoices (
   total_amount numeric(14,2) not null default 0,
   paid_amount numeric(14,2) not null default 0,
   status text not null default 'draft' check (status in ('draft', 'sent', 'pending', 'paid', 'overdue', 'cancelled')),
+  is_manual_number boolean not null default false,
   created_by uuid references public.app_users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

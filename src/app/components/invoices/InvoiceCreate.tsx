@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { insertForUser, selectForUser, updateForUser, deleteForUser } from '../../../lib/auditorData';
 import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface LineItem {
   id: string;
@@ -53,6 +54,8 @@ interface CatalogItem {
 
 export function InvoiceCreate() {
   const { user } = useAuth();
+  // Composition dealers issue a "Bill of Supply" with no tax.
+  const { isComposition } = useTaxpayerType();
   const [showPreview, setShowPreview] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -422,7 +425,8 @@ export function InvoiceCreate() {
     return sum + (item.qty * item.rate) - ((item.qty * item.rate) * item.discount / 100);
   }, 0);
 
-  const totalGST = lineItems.reduce((sum, item) => {
+  // Composition dealers cannot collect tax, so all GST is treated as zero.
+  const totalGST = isComposition ? 0 : lineItems.reduce((sum, item) => {
     const baseAmount = item.qty * item.rate;
     const afterDiscount = baseAmount - (baseAmount * item.discount / 100);
     return sum + (afterDiscount * item.gst / 100);
@@ -520,7 +524,9 @@ export function InvoiceCreate() {
   const computeAutoInvoiceNumber = async () => {
     const defaults = await getInvoiceDefaults();
 
-    // Count existing invoices for this company.
+    // Count only the auto-numbered invoices for this company. Manually-numbered
+    // invoices are excluded so they never push the automatic sequence forward —
+    // the next auto number always continues from the last *automatic* invoice.
     let existingCount = 0;
     if (user?.role === 'auditor') {
       const { data, error } = await selectForUser<any[]>(user, 'invoices', 'invoices', () =>
@@ -530,12 +536,13 @@ export function InvoiceCreate() {
           .eq('company_id', user?.company_id)
       );
       if (error) throw error;
-      existingCount = (data || []).length;
+      existingCount = (data || []).filter((row: any) => !row?.is_manual_number).length;
     } else {
       const { count, error } = await supabase
         .from('invoices')
         .select('id', { count: 'exact', head: true })
-        .eq('company_id', user?.company_id);
+        .eq('company_id', user?.company_id)
+        .eq('is_manual_number', false);
       if (error) throw error;
       existingCount = count || 0;
     }
@@ -546,7 +553,7 @@ export function InvoiceCreate() {
     }
 
     // Invoice Defaults on → configured prefix + (starting number offset by
-    // however many invoices already exist).
+    // however many auto-numbered invoices already exist).
     return `${defaults.prefix}-${existingCount + defaults.nextNumber}`;
   };
 
@@ -616,14 +623,16 @@ export function InvoiceCreate() {
           total_amount: totalAmount,
           paid_amount: 0,
           status,
+          is_manual_number: isManualInvoiceNumber,
           created_by: user.id,
         };
 
       let invoice: any;
 
       if (isEditMode && editId) {
-        // Keep the original creator; only update the editable fields.
-        const { created_by, ...updateRecord } = invoiceRecord;
+        // Keep the original creator and the original manual/auto flag (edit mode
+        // force-enables the manual field for editability); only update the rest.
+        const { created_by, is_manual_number, ...updateRecord } = invoiceRecord;
         const { data, error: invoiceError } = await updateForUser<any>(user, 'invoices', 'invoices', () =>
           supabase
             .from('invoices')
@@ -675,7 +684,8 @@ export function InvoiceCreate() {
         const qty = Number(item.qty) || 0;
         const rate = Number(item.rate) || 0;
         const discount = Number(item.discount) || 0;
-        const gst = Number(item.gst) || 0;
+        // Composition dealers cannot charge GST — store zero tax on every line.
+        const gst = isComposition ? 0 : (Number(item.gst) || 0);
         const baseAmount = qty * rate;
         const taxableAmount = baseAmount - (baseAmount * discount / 100);
         const taxAmount = taxableAmount * gst / 100;
@@ -739,6 +749,48 @@ export function InvoiceCreate() {
 
     setInvoiceCreated(true);
     setShowSuccessModal(true);
+  };
+
+  // Clear the form back to a fresh "New Tax Invoice" once the user is done with
+  // the just-created invoice (dismissing the success modal / closing its
+  // preview). The send/view actions read live form state, so we only reset
+  // after those surfaces are closed. The next auto number is recomputed so it
+  // reflects the invoice that was just created.
+  const resetInvoiceForm = () => {
+    setInvoiceCreated(false);
+    setSelectedCustomer('');
+    setIsManualInvoiceNumber(false);
+    setInvoiceNumber('');
+    setInvoiceDate('2026-05-12');
+    setPlaceOfSupply('Auto from customer');
+    setReverseCharge(false);
+    setPoNumber('');
+    setPoDate('');
+    setVehicleNo('');
+    setTransportMode('');
+    setRemarks('');
+    setExpandedItemId('1');
+    setLineItems([
+      {
+        id: '1',
+        itemId: '',
+        item: '',
+        description: '',
+        hsn: '',
+        qty: 1,
+        unit: 'JOB',
+        rate: 0,
+        discount: 0,
+        gst: 18,
+        amount: 0,
+      },
+    ]);
+
+    if (user?.company_id) {
+      computeAutoInvoiceNumber()
+        .then((number) => setInvoiceNumber(number))
+        .catch(() => {});
+    }
   };
 
   const handleCustomerChange = (value: string) => {
@@ -871,9 +923,9 @@ export function InvoiceCreate() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="text-xl md:text-2xl font-semibold text-foreground">{isEditMode ? 'Edit Tax Invoice' : 'New Tax Invoice'}</h1>
+              <h1 className="text-xl md:text-2xl font-semibold text-foreground">{isEditMode ? (isComposition ? 'Edit Bill of Supply' : 'Edit Tax Invoice') : (isComposition ? 'New Bill of Supply' : 'New Tax Invoice')}</h1>
               <p className="text-xs md:text-sm text-muted-foreground mt-1">
-                FY 2026-27 - {isInterStateSupply ? 'Inter-state (IGST)' : 'Intra-state (CGST + SGST)'}
+                FY 2026-27 - {isComposition ? 'Composition (Bill of Supply)' : (isInterStateSupply ? 'Inter-state (IGST)' : 'Intra-state (CGST + SGST)')}
               </p>
             </div>
           </div>
@@ -1081,8 +1133,12 @@ export function InvoiceCreate() {
                   <th className="px-3 py-4 text-left text-xs font-semibold text-foreground w-36">Unit</th>
                   <th className="px-3 py-4 text-left text-xs font-semibold text-foreground w-36">Rate</th>
                   <th className="px-3 py-4 text-left text-xs font-semibold text-foreground w-28">Disc%</th>
-                  <th className="px-3 py-4 text-left text-xs font-semibold text-foreground w-28">GST%</th>
-                  <th className="px-3 py-4 text-right text-xs font-semibold text-foreground w-32">Taxable</th>
+                  {!isComposition && (
+                    <>
+                      <th className="px-3 py-4 text-left text-xs font-semibold text-foreground w-28">GST%</th>
+                      <th className="px-3 py-4 text-right text-xs font-semibold text-foreground w-32">Taxable</th>
+                    </>
+                  )}
                   <th className="px-3 py-4 text-right text-xs font-semibold text-foreground w-32">Total</th>
                   <th className="px-3 py-4 w-12"></th>
                 </tr>
@@ -1167,24 +1223,32 @@ export function InvoiceCreate() {
                         className="w-full min-w-[80px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       />
                     </td>
-                    <td className="px-3 py-5 align-top">
-                      <select
-                        value={item.gst}
-                        onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                        className="kaps-compact-select w-full min-w-[64px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                      >
-                        <option value="0">0</option>
-                        <option value="5">5</option>
-                        <option value="12">12</option>
-                        <option value="18">18</option>
-                        <option value="28">28</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-5 text-sm font-medium text-foreground text-right align-top">
-                      ₹{subtotal > 0 ? (item.qty * item.rate * (1 - item.discount / 100)).toFixed(2) : '0.00'}
-                    </td>
+                    {!isComposition && (
+                      <>
+                        <td className="px-3 py-5 align-top">
+                          <select
+                            value={item.gst}
+                            onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
+                            className="kaps-compact-select w-full min-w-[64px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                          >
+                            <option value="0">0</option>
+                            <option value="5">5</option>
+                            <option value="12">12</option>
+                            <option value="18">18</option>
+                            <option value="28">28</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-5 text-sm font-medium text-foreground text-right align-top">
+                          ₹{subtotal > 0 ? (item.qty * item.rate * (1 - item.discount / 100)).toFixed(2) : '0.00'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-3 py-5 text-sm font-semibold text-foreground text-right align-top">
-                      ₹{item.amount > 0 ? item.amount.toFixed(2) : '0.00'}
+                      ₹{(() => {
+                        const taxable = item.qty * item.rate * (1 - item.discount / 100);
+                        const total = isComposition ? taxable : item.amount;
+                        return total > 0 ? total.toFixed(2) : '0.00';
+                      })()}
                     </td>
                     <td className="px-3 py-5 align-top">
                       {lineItems.length > 1 && (
@@ -1361,35 +1425,43 @@ export function InvoiceCreate() {
                       </div>
 
                       {/* GST */}
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">
-                          GST %
-                        </label>
-                        <select
-                          value={item.gst}
-                          onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
-                          className="kaps-compact-select w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                        >
-                          <option value="0">0</option>
-                          <option value="5">5</option>
-                          <option value="12">12</option>
-                          <option value="18">18</option>
-                          <option value="28">28</option>
-                        </select>
-                      </div>
+                      {!isComposition && (
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            GST %
+                          </label>
+                          <select
+                            value={item.gst}
+                            onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
+                            className="kaps-compact-select w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                          >
+                            <option value="0">0</option>
+                            <option value="5">5</option>
+                            <option value="12">12</option>
+                            <option value="18">18</option>
+                            <option value="28">28</option>
+                          </select>
+                        </div>
+                      )}
 
                       {/* Calculated Amounts */}
                       <div className="pt-3 border-t border-border space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Taxable Amount</span>
-                          <span className="font-medium text-foreground">
-                            ₹{subtotal > 0 ? (item.qty * item.rate * (1 - item.discount / 100)).toFixed(2) : '0.00'}
-                          </span>
-                        </div>
+                        {!isComposition && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Taxable Amount</span>
+                            <span className="font-medium text-foreground">
+                              ₹{subtotal > 0 ? (item.qty * item.rate * (1 - item.discount / 100)).toFixed(2) : '0.00'}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground font-semibold">Total Amount</span>
                           <span className="font-semibold text-foreground">
-                            ₹{item.amount > 0 ? item.amount.toFixed(2) : '0.00'}
+                            ₹{(() => {
+                              const taxable = item.qty * item.rate * (1 - item.discount / 100);
+                              const total = isComposition ? taxable : item.amount;
+                              return total > 0 ? total.toFixed(2) : '0.00';
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -1478,17 +1550,26 @@ export function InvoiceCreate() {
             </div>
             <div className="space-y-2.5">
               <div className="flex items-center justify-between text-[14px]">
-                <span className="text-muted-foreground">Sub-total (taxable)</span>
+                <span className="text-muted-foreground">{isComposition ? 'Sub-total' : 'Sub-total (taxable)'}</span>
                 <span className="font-semibold text-foreground tabular-nums">₹{subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between text-[14px]">
-                <span className="text-muted-foreground">{isInterStateSupply ? 'IGST @ 18%' : 'CGST @ 9%'}</span>
-                <span className="font-medium text-foreground tabular-nums">₹{(isInterStateSupply ? igst : cgst).toFixed(2)}</span>
-              </div>
-              {!isInterStateSupply && (
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-muted-foreground">SGST @ 9%</span>
-                  <span className="font-medium text-foreground tabular-nums">₹{sgst.toFixed(2)}</span>
+              {!isComposition && (
+                <>
+                  <div className="flex items-center justify-between text-[14px]">
+                    <span className="text-muted-foreground">{isInterStateSupply ? 'IGST @ 18%' : 'CGST @ 9%'}</span>
+                    <span className="font-medium text-foreground tabular-nums">₹{(isInterStateSupply ? igst : cgst).toFixed(2)}</span>
+                  </div>
+                  {!isInterStateSupply && (
+                    <div className="flex items-center justify-between text-[14px]">
+                      <span className="text-muted-foreground">SGST @ 9%</span>
+                      <span className="font-medium text-foreground tabular-nums">₹{sgst.toFixed(2)}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {isComposition && (
+                <div className="text-[12px] text-muted-foreground italic">
+                  Composition taxable person. Not eligible to collect tax on supplies.
                 </div>
               )}
               <div className="pt-3.5 mt-2 border-t border-violet-200 dark:border-violet-400/20">
@@ -1538,7 +1619,11 @@ export function InvoiceCreate() {
       {/* Invoice Preview Modal */}
       <InvoicePreview
         isOpen={showPreview}
-        onClose={() => setShowPreview(false)}
+        onClose={() => {
+          setShowPreview(false);
+          // After viewing a freshly-created invoice, return to a blank form.
+          if (invoiceCreated) resetInvoiceForm();
+        }}
         title={invoiceCreated ? 'Invoice Details' : 'Invoice Preview'}
         lineItems={previewLineItems}
         invoiceNumber={invoiceNumber}
@@ -1561,7 +1646,10 @@ export function InvoiceCreate() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <button
-              onClick={() => setShowSuccessModal(false)}
+              onClick={() => {
+                setShowSuccessModal(false);
+                resetInvoiceForm();
+              }}
               className="absolute right-3 top-3 p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
               aria-label="Close"
             >
@@ -1587,6 +1675,8 @@ export function InvoiceCreate() {
                 </button>
                 <button
                   onClick={() => {
+                    // Opens WhatsApp in a new tab; leave the modal open so the
+                    // user returns to it. The form resets when they dismiss it.
                     handleWhatsAppInvoice();
                   }}
                   className="w-full px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
@@ -1598,6 +1688,8 @@ export function InvoiceCreate() {
                 </button>
                 <button
                   onClick={() => {
+                    // Opens the mail client; leave the modal open so the user
+                    // returns to it. The form resets when they dismiss it.
                     handleMailInvoice();
                   }}
                   className="w-full px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"

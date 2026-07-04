@@ -532,7 +532,8 @@ begin
     insert into public.invoices (
       company_id, customer_id, invoice_number, invoice_date, customer_type, bill_type,
       place_of_supply, reverse_charge, po_number, po_date, vehicle_number, transport_mode,
-      remarks, subtotal, cgst, sgst, igst, total_tax, total_amount, paid_amount, status, created_by
+      remarks, subtotal, cgst, sgst, igst, total_tax, total_amount, paid_amount, status,
+      is_manual_number, created_by
     ) values (
       v_auditor.company_id,
       nullif(v_record->>'customer_id', '')::uuid,
@@ -555,6 +556,7 @@ begin
       coalesce((v_record->>'total_amount')::numeric, 0),
       coalesce((v_record->>'paid_amount')::numeric, 0),
       coalesce(v_record->>'status', 'draft'),
+      coalesce((v_record->>'is_manual_number')::boolean, false),
       v_auditor.id
     )
     returning id into v_id;
@@ -804,6 +806,15 @@ grant execute on function public.get_auditor_profile(uuid) to anon, authenticate
 grant execute on function public.update_auditor_profile(uuid, text, text) to anon, authenticated;
 grant execute on function public.update_auditor_password(uuid, text, text) to anon, authenticated;
 
+-- Ensure the Invoice Defaults toggle column exists before (re)creating the
+-- functions that read/write it, so re-running this file can never resurrect a
+-- version that ignores the flag.
+alter table public.company_settings
+  add column if not exists invoice_defaults_enabled boolean not null default true;
+
+-- Drop the legacy 8-arg signature so only the toggle-aware 9-arg version remains.
+drop function if exists public.save_company_settings(text, integer, integer, text, text, numeric, text, boolean);
+
 create or replace function public.save_company_settings(
   p_invoice_prefix text,
   p_invoice_next_number integer,
@@ -812,7 +823,8 @@ create or replace function public.save_company_settings(
   p_terms text,
   p_default_gst_rate numeric,
   p_default_place_of_supply text,
-  p_enable_reverse_charge boolean
+  p_enable_reverse_charge boolean,
+  p_invoice_defaults_enabled boolean
 )
 returns jsonb
 language plpgsql
@@ -838,7 +850,8 @@ begin
     terms,
     default_gst_rate,
     default_place_of_supply,
-    enable_reverse_charge
+    enable_reverse_charge,
+    invoice_defaults_enabled
   ) values (
     v_company_id,
     coalesce(nullif(trim(p_invoice_prefix), ''), 'INV'),
@@ -848,7 +861,8 @@ begin
     nullif(trim(coalesce(p_terms, '')), ''),
     coalesce(p_default_gst_rate, 0),
     nullif(trim(coalesce(p_default_place_of_supply, '')), ''),
-    coalesce(p_enable_reverse_charge, false)
+    coalesce(p_enable_reverse_charge, false),
+    coalesce(p_invoice_defaults_enabled, true)
   )
   on conflict (company_id) do update
   set
@@ -859,7 +873,8 @@ begin
     terms = excluded.terms,
     default_gst_rate = excluded.default_gst_rate,
     default_place_of_supply = excluded.default_place_of_supply,
-    enable_reverse_charge = excluded.enable_reverse_charge
+    enable_reverse_charge = excluded.enable_reverse_charge,
+    invoice_defaults_enabled = excluded.invoice_defaults_enabled
   returning * into v_settings;
 
   return jsonb_build_object(
@@ -872,13 +887,14 @@ begin
       'terms', v_settings.terms,
       'default_gst_rate', v_settings.default_gst_rate,
       'default_place_of_supply', v_settings.default_place_of_supply,
-      'enable_reverse_charge', v_settings.enable_reverse_charge
+      'enable_reverse_charge', v_settings.enable_reverse_charge,
+      'invoice_defaults_enabled', v_settings.invoice_defaults_enabled
     )
   );
 end;
 $$;
 
-grant execute on function public.save_company_settings(text, integer, integer, text, text, numeric, text, boolean) to authenticated;
+grant execute on function public.save_company_settings(text, integer, integer, text, text, numeric, text, boolean, boolean) to authenticated;
 
 create or replace function public.get_company_settings(p_auditor_id uuid default null)
 returns jsonb
@@ -926,7 +942,8 @@ begin
       'terms', v_settings.terms,
       'default_gst_rate', v_settings.default_gst_rate,
       'default_place_of_supply', v_settings.default_place_of_supply,
-      'enable_reverse_charge', v_settings.enable_reverse_charge
+      'enable_reverse_charge', v_settings.enable_reverse_charge,
+      'invoice_defaults_enabled', v_settings.invoice_defaults_enabled
     )
   );
 end;

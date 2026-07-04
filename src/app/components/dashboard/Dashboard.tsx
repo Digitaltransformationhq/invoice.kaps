@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { selectForUser } from '../../../lib/auditorData';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface DashboardInvoice {
   id: string;
@@ -19,6 +20,7 @@ interface DashboardInvoice {
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { isComposition } = useTaxpayerType();
   const [recentInvoices, setRecentInvoices] = useState<DashboardInvoice[]>([]);
   const [allInvoices, setAllInvoices] = useState<DashboardInvoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,7 +122,7 @@ export function Dashboard() {
           className="inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-full bg-accent text-white text-[13px] font-semibold shadow-[0_8px_24px_-8px_rgba(139,92,246,0.65)] hover:bg-accent/90 transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
-          Create Invoice
+          {isComposition ? 'Create Bill of Supply' : 'Create Invoice'}
         </Link>
       </div>
 
@@ -134,7 +136,7 @@ export function Dashboard() {
           tone="violet"
         />
         <KPICard
-          title="Total Invoices"
+          title={isComposition ? 'Total Bills of Supply' : 'Total Invoices'}
           value={isLoading ? 'Loading...' : allInvoices.length.toLocaleString('en-IN')}
           change={`${thisMonthInvoiceCount} this month`}
           trend="up"
@@ -153,7 +155,7 @@ export function Dashboard() {
 
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-[15px] font-semibold text-foreground tracking-tight">Recent Invoices</h3>
+          <h3 className="text-[15px] font-semibold text-foreground tracking-tight">{isComposition ? 'Recent Bills of Supply' : 'Recent Invoices'}</h3>
           <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wider uppercase bg-violet-100 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300">Last 5</span>
         </div>
         <Link to="/app/invoices" className="text-[12.5px] font-medium text-accent hover:text-accent/80 transition-colors">

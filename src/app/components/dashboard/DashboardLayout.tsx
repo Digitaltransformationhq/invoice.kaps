@@ -26,6 +26,7 @@ import { Toaster } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { selectForUser } from '../../../lib/auditorData';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 const PAYMENT_VOUCHERS_ENABLED = false;
 
@@ -59,6 +60,7 @@ export function DashboardLayout() {
   const searchRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, hasPermission, logout, isAuthenticated } = useAuth();
+  const { isComposition } = useTaxpayerType();
   const [companyBranding, setCompanyBranding] = useState({
     name: user?.company_name || 'Your Company',
     gstin: user?.company_gstin || 'GSTIN not set',
@@ -121,7 +123,7 @@ export function DashboardLayout() {
     { name: 'Dashboard', href: '/app', icon: LayoutDashboard, permission: 'dashboard' },
     { name: 'Customers', href: '/app/customers', icon: Users, permission: 'customers' },
     { name: 'Items & Services', href: '/app/items', icon: Package, permission: 'items' },
-    { name: 'Tax Invoices', href: '/app/invoices', icon: FileText, permission: 'invoices' },
+    { name: isComposition ? 'Bills of Supply' : 'Tax Invoices', href: '/app/invoices', icon: FileText, permission: 'invoices' },
     { name: 'Credit / Debit Notes', href: '/app/credit-notes', icon: FileEdit, permission: 'credit-notes' },
     { name: 'Receipts', href: '/app/receipts', icon: Receipt, permission: 'receipts' },
     { name: 'Outstanding', href: '/app/outstanding', icon: TrendingUp, permission: 'outstanding' },
@@ -399,7 +401,7 @@ export function DashboardLayout() {
                       {searchResults.invoices.length > 0 && (
                         <div>
                           <div className="px-4 py-2 text-[11px] font-semibold tracking-wider uppercase text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-500/15">
-                            Invoices
+                            {isComposition ? 'Bills of Supply' : 'Invoices'}
                           </div>
                           <div className="p-2">
                             {searchResults.invoices.map((invoice) => (
