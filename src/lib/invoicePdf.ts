@@ -22,8 +22,11 @@ export function canSharePdfFile(): boolean {
 
 // Rasterise each invoice "page" element into an A4 PDF (one copy per page).
 export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob> {
+  // html2canvas-pro (not the original html2canvas) because this app uses
+  // Tailwind v4, whose CSS uses oklch()/color-mix() colours that the original
+  // html2canvas can't parse — it throws and no PDF is produced.
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import('html2canvas'),
+    import('html2canvas-pro'),
     import('jspdf'),
   ]);
 
