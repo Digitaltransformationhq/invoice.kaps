@@ -789,8 +789,8 @@ function ImageUploadField({
   return (
     <div>
       <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">{title}</label>
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="w-32 h-20 rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/40 dark:bg-violet-500/[0.05] flex items-center justify-center overflow-hidden">
+      <div className="flex items-start gap-4">
+        <div className="w-32 h-20 shrink-0 rounded-lg border border-violet-200 dark:border-violet-400/25 bg-violet-50/40 dark:bg-violet-500/[0.05] flex items-center justify-center overflow-hidden">
           {image ? (
             <img src={image} alt={title} className="w-full h-full object-contain" />
           ) : EmptyIcon ? (
@@ -800,7 +800,7 @@ function ImageUploadField({
           )}
         </div>
         {canEdit && (
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex flex-col items-start gap-2">
             <label className="inline-flex items-center gap-2 px-4 h-10 border border-violet-200 dark:border-violet-400/25 bg-card text-foreground rounded-lg text-[13px] font-medium hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors cursor-pointer">
               <Upload className="w-4 h-4" />
               <span>{uploadLabel}</span>
@@ -810,7 +810,7 @@ function ImageUploadField({
               <button
                 type="button"
                 onClick={onRemove}
-                className="text-[12.5px] text-muted-foreground hover:text-destructive transition-colors"
+                className="text-[12.5px] font-medium text-destructive hover:text-destructive/80 transition-colors"
               >
                 Remove
               </button>

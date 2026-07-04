@@ -1,11 +1,12 @@
 import { X, Download, Send, Printer, Mail, MessageCircle, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
+import { canSharePdfFile, generateInvoicePdfBlob, sharePdf } from '../../../lib/invoicePdf';
 
 interface LineItem {
   id: string;
@@ -51,6 +52,7 @@ interface InvoicePreviewProps {
   vehicleNo?: string;
   transportMode?: string;
   remarks?: string;
+  autoOpenSend?: boolean;
 }
 
 export function InvoicePreview({
@@ -71,9 +73,12 @@ export function InvoicePreview({
   vehicleNo,
   transportMode,
   remarks,
+  autoOpenSend = false,
 }: InvoicePreviewProps) {
   const { user } = useAuth();
   const [showSendOptions, setShowSendOptions] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const printAreaRef = useRef<HTMLDivElement>(null);
   // Composition dealers issue a "Bill of Supply" with no tax breakup.
   const { isComposition } = useTaxpayerType();
   const [companyDetails, setCompanyDetails] = useState({
@@ -129,6 +134,12 @@ export function InvoicePreview({
 
     loadCompanyDetails();
   }, [isOpen, sellerState, user?.company_id, user?.company_name, user?.company_gstin, user?.company_logo, user?.email]);
+
+  // When opened straight from the "share" flow (e.g. the create success modal),
+  // surface the send sheet immediately.
+  useEffect(() => {
+    if (isOpen && autoOpenSend) setShowSendOptions(true);
+  }, [isOpen, autoOpenSend]);
 
   const [isSendingMail, setIsSendingMail] = useState(false);
 
@@ -227,15 +238,56 @@ export function InvoicePreview({
     `Invoice ${displayInvoiceNumber} for ${buyerName} is ready. Total amount: Rs. ${grandTotal.toFixed(2)}.`
   );
 
-  const handleWhatsAppInvoice = () => {
+  const openWhatsappText = () => {
     const phone = buyerPhone.replace(/\D/g, '');
     const message = encodeURIComponent(getInvoiceShareMessage());
     const whatsappUrl = phone
       ? `https://wa.me/${phone}?text=${message}`
       : `https://wa.me/?text=${message}`;
-
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-    setShowSendOptions(false);
+  };
+
+  const handleWhatsAppInvoice = async () => {
+    if (isSharing) return;
+
+    const pages = Array.from(
+      printAreaRef.current?.querySelectorAll('.invoice-print-page') ?? []
+    ) as HTMLElement[];
+
+    // Attaching a PDF to WhatsApp only works where the browser supports sharing
+    // files (mobile). On desktop this isn't available — proper desktop delivery
+    // needs the WhatsApp Business API — so just send the text link there.
+    if (!pages.length || !canSharePdfFile()) {
+      openWhatsappText();
+      setShowSendOptions(false);
+      return;
+    }
+
+    setIsSharing(true);
+    const buildingToast = toast.loading('Preparing invoice PDF…');
+    try {
+      // Only the buyer's copy — keeps generation fast so the share sheet's
+      // user-gesture window doesn't expire.
+      const blob = await generateInvoicePdfBlob([pages[0]]);
+      toast.dismiss(buildingToast);
+      const fileName = `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
+
+      // The user picks WhatsApp from the native share sheet and the real PDF
+      // attaches. Falls back to a local download if the sheet can't be reached.
+      const result = await sharePdf(blob, fileName, getInvoiceShareMessage(), `Invoice ${displayInvoiceNumber}`);
+      if (result === 'downloaded') {
+        toast.success('Invoice PDF downloaded — attach it in WhatsApp.');
+        openWhatsappText();
+      }
+      setShowSendOptions(false);
+    } catch {
+      toast.dismiss(buildingToast);
+      toast.error('Could not prepare the PDF. Sending text only.');
+      openWhatsappText();
+      setShowSendOptions(false);
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   const handleMailInvoice = async () => {
@@ -362,15 +414,19 @@ export function InvoicePreview({
               <div className="px-6 py-5 space-y-2.5">
                 <button
                   onClick={handleWhatsAppInvoice}
-                  disabled={isSendingMail}
+                  disabled={isSendingMail || isSharing}
                   className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                    <MessageCircle className="w-4 h-4" strokeWidth={2.25} />
+                    {isSharing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
+                    ) : (
+                      <MessageCircle className="w-4 h-4" strokeWidth={2.25} />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-semibold text-foreground">WhatsApp the Invoice</div>
-                    <div className="text-[11.5px] text-muted-foreground">Send via WhatsApp Business</div>
+                    <div className="text-[14px] font-semibold text-foreground">{isSharing ? 'Preparing PDF…' : 'WhatsApp the Invoice'}</div>
+                    <div className="text-[11.5px] text-muted-foreground">{isSharing ? 'Opening share sheet' : 'Share the PDF via WhatsApp'}</div>
                   </div>
                 </button>
                 <button
@@ -406,7 +462,7 @@ export function InvoicePreview({
         )}
 
         {/* Invoice Content */}
-        <div className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+        <div ref={printAreaRef} className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
           {invoiceCopies.map((copyLabel, copyIndex) => (
           <div
             key={copyLabel}

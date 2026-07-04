@@ -57,6 +57,7 @@ export function InvoiceCreate() {
   // Composition dealers issue a "Bill of Supply" with no tax.
   const { isComposition } = useTaxpayerType();
   const [showPreview, setShowPreview] = useState(false);
+  const [previewAutoSend, setPreviewAutoSend] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -1619,8 +1620,10 @@ export function InvoiceCreate() {
       {/* Invoice Preview Modal */}
       <InvoicePreview
         isOpen={showPreview}
+        autoOpenSend={previewAutoSend}
         onClose={() => {
           setShowPreview(false);
+          setPreviewAutoSend(false);
           // After viewing a freshly-created invoice, return to a blank form.
           if (invoiceCreated) resetInvoiceForm();
         }}
@@ -1675,9 +1678,12 @@ export function InvoiceCreate() {
                 </button>
                 <button
                   onClick={() => {
-                    // Opens WhatsApp in a new tab; leave the modal open so the
-                    // user returns to it. The form resets when they dismiss it.
-                    handleWhatsAppInvoice();
+                    // Open the invoice document with the share sheet ready, so
+                    // the actual PDF can be attached (wa.me text links can't
+                    // carry a file). The form resets when the preview closes.
+                    setShowSuccessModal(false);
+                    setPreviewAutoSend(true);
+                    setShowPreview(true);
                   }}
                   className="w-full px-4 py-2.5 border border-border rounded hover:bg-muted transition-colors"
                 >

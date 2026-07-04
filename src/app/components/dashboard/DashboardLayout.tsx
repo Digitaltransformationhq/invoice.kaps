@@ -486,11 +486,12 @@ export function DashboardLayout() {
                 {/* Mobile User Menu Button */}
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="sm:hidden p-2 hover:bg-muted rounded transition-colors"
+                  className="sm:hidden flex items-center gap-1.5 p-2 hover:bg-muted rounded transition-colors"
                 >
                   <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center">
                     <span className="text-sm text-white font-medium">{userInitials}</span>
                   </div>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 </button>
 
                 {/* User Dropdown Menu */}
