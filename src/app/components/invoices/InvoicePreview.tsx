@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
-import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 import { generateInvoicePdfBlob } from '../../../lib/invoicePdf';
 
@@ -173,8 +172,6 @@ export function InvoicePreview({
     };
   }, [showSendOptions]);
 
-  const [isSendingMail, setIsSendingMail] = useState(false);
-
   if (!isOpen) return null;
 
   const getBillTypeFromItems = () => {
@@ -270,6 +267,10 @@ export function InvoicePreview({
     `Invoice ${displayInvoiceNumber} for ${buyerName} is ready. Total amount: Rs. ${grandTotal.toFixed(2)}.`
   );
 
+  const getInvoiceMailBody = () => (
+    `Dear ${buyerName},\n\nPlease find attached invoice ${displayInvoiceNumber} for Rs. ${grandTotal.toFixed(2)}.\n\nRegards,\n${companyName}`
+  );
+
   const openWhatsappText = () => {
     const phone = buyerPhone.replace(/\D/g, '');
     const message = encodeURIComponent(getInvoiceShareMessage());
@@ -279,12 +280,21 @@ export function InvoicePreview({
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
-  const handleWhatsAppInvoice = async () => {
-    if (isSharing) return;
+  const downloadFile = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
 
-    // Use the background-built PDF if ready; otherwise wait on the same in-flight
-    // build (only if the user tapped before it finished). Web Share only needs
-    // share() to fire within ~5s of the tap, which the head-start keeps us under.
+  // Return the pre-built invoice PDF as a File (waiting on the in-flight build if
+  // the user acted before it finished). Web Share only needs share() to fire
+  // within ~5s of the tap, which the background head-start keeps us under.
+  const getInvoicePdfFile = async (): Promise<File | null> => {
     let blob = pdfBlobRef.current;
     if (!blob && pdfPromiseRef.current) {
       setIsSharing(true);
@@ -295,9 +305,14 @@ export function InvoicePreview({
       }
       setIsSharing(false);
     }
-
+    if (!blob) return null;
     const fileName = `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
-    const file = blob ? new File([blob], fileName, { type: 'application/pdf' }) : null;
+    return new File([blob], fileName, { type: 'application/pdf' });
+  };
+
+  const handleWhatsAppInvoice = async () => {
+    if (isSharing) return;
+    const file = await getInvoicePdfFile();
 
     if (file && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
@@ -326,33 +341,37 @@ export function InvoicePreview({
   };
 
   const handleMailInvoice = async () => {
-    if (!buyerEmail) {
-      toast.error('Customer email is not available.');
-      return;
+    if (isSharing) return;
+    const subject = `Invoice ${displayInvoiceNumber} from ${companyName}`;
+    const body = getInvoiceMailBody();
+    const file = await getInvoicePdfFile();
+
+    // Open the mail app with the PDF attached via the share sheet. Works even
+    // when the customer has no email on file — the user types/confirms the
+    // recipient in their mail app and sends.
+    if (file && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: subject, text: body });
+        setShowSendOptions(false);
+        return;
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') {
+          setShowSendOptions(false);
+          return; // user dismissed the share sheet
+        }
+        // any other error → fall through to the mail-composer path
+      }
     }
-    if (isSendingMail) return;
 
-    setIsSendingMail(true);
-    const sendingToast = toast.loading(`Sending invoice to ${buyerEmail}…`);
-
-    const result = await sendInvoiceEmail({
-      to: buyerEmail,
-      invoiceNumber: displayInvoiceNumber,
-      customerName: buyerName,
-      amount: grandTotal.toFixed(2),
-      fromName: companyName,
-      replyTo: companyEmail || undefined,
-    });
-
-    toast.dismiss(sendingToast);
-    setIsSendingMail(false);
-
-    if (result.success) {
-      toast.success(`Invoice ${displayInvoiceNumber} sent to ${buyerEmail}`);
-      setShowSendOptions(false);
-    } else {
-      toast.error(result.error || 'Could not send the invoice email.');
+    // Fallback (desktop / no file sharing): download the PDF to attach and open
+    // the mail composer with the message prefilled (mailto can't auto-attach).
+    if (file) {
+      downloadFile(file);
+      toast.message('Invoice PDF downloaded — attach it to the email that just opened.');
     }
+    const to = buyerEmail || '';
+    window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setShowSendOptions(false);
   };
 
   // Convert number to words (simplified version)
@@ -449,7 +468,7 @@ export function InvoicePreview({
               <div className="px-6 py-5 space-y-2.5">
                 <button
                   onClick={handleWhatsAppInvoice}
-                  disabled={isSendingMail || isSharing}
+                  disabled={isSharing}
                   className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
@@ -466,19 +485,15 @@ export function InvoicePreview({
                 </button>
                 <button
                   onClick={handleMailInvoice}
-                  disabled={isSendingMail}
-                  className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-60 disabled:cursor-wait"
+                  disabled={isSharing}
+                  className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <div className="h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0">
-                    {isSendingMail ? (
-                      <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
-                    ) : (
-                      <Mail className="w-4 h-4" strokeWidth={2.25} />
-                    )}
+                    <Mail className="w-4 h-4" strokeWidth={2.25} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-semibold text-foreground">{isSendingMail ? 'Sending…' : 'Mail Invoice'}</div>
-                    <div className="text-[11.5px] text-muted-foreground">{isSendingMail ? `Delivering to ${buyerEmail}` : 'Sent via Resend to the customer'}</div>
+                    <div className="text-[14px] font-semibold text-foreground">Mail Invoice</div>
+                    <div className="text-[11.5px] text-muted-foreground">Attach the PDF and send from your mail app</div>
                   </div>
                 </button>
               </div>
