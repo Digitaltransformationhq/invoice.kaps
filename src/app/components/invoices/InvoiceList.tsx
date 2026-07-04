@@ -44,8 +44,7 @@ export function InvoiceList() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [showSendModal, setShowSendModal] = useState(false);
-  const [isSendingMail, setIsSendingMail] = useState(false);
+  const [previewAutoSend, setPreviewAutoSend] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -230,56 +229,14 @@ export function InvoiceList() {
     navigate(`/app/invoices/new?id=${invoiceId}`);
   };
 
+  // "Send" opens the invoice document with its share sheet ready, so WhatsApp
+  // shares the actual PDF (and Mail goes out) through the shared InvoicePreview
+  // flow — the same one used after creating an invoice.
   const handleSend = (invoice: any) => {
     setSelectedInvoice(invoice);
-    setShowSendModal(true);
+    setPreviewAutoSend(true);
+    setShowPreview(true);
     setOpenMenuId(null);
-  };
-
-  const getInvoiceShareMessage = (invoice: InvoiceRow) => (
-    `Invoice ${invoice.id} for ${invoice.customer} is ready. Total amount: Rs. ${invoice.amount.toFixed(2)}.`
-  );
-
-  const handleWhatsAppInvoice = (invoice: InvoiceRow) => {
-    const phone = invoice.customerDetails?.phone?.replace(/\D/g, '') || '';
-    const message = encodeURIComponent(getInvoiceShareMessage(invoice));
-    const whatsappUrl = phone
-      ? `https://wa.me/${phone}?text=${message}`
-      : `https://wa.me/?text=${message}`;
-
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-    setShowSendModal(false);
-    setSelectedInvoice(null);
-  };
-
-  const handleMailInvoice = async (invoice: InvoiceRow) => {
-    const email = invoice.customerDetails?.email || '';
-    if (!email) {
-      toast.error('Customer email is not available');
-      return;
-    }
-    if (isSendingMail) return;
-
-    setIsSendingMail(true);
-    const sendingToast = toast.loading(`Sending invoice to ${email}…`);
-
-    const result = await sendInvoiceEmail({
-      to: email,
-      invoiceNumber: invoice.id,
-      customerName: invoice.customer,
-      amount: invoice.amount.toFixed(2),
-    });
-
-    toast.dismiss(sendingToast);
-    setIsSendingMail(false);
-
-    if (result.success) {
-      toast.success(`Invoice ${invoice.id} sent to ${email}`);
-      setShowSendModal(false);
-      setSelectedInvoice(null);
-    } else {
-      toast.error(result.error || 'Could not send the invoice email.');
-    }
   };
 
   const handleDownload = (invoice: any) => {
@@ -1073,8 +1030,10 @@ export function InvoiceList() {
       {selectedInvoice && (
         <InvoicePreview
           isOpen={showPreview}
+          autoOpenSend={previewAutoSend}
           onClose={() => {
             setShowPreview(false);
+            setPreviewAutoSend(false);
             setSelectedInvoice(null);
           }}
           title="Invoice Details"
@@ -1092,94 +1051,6 @@ export function InvoiceList() {
           transportMode={selectedInvoice.transportMode}
           remarks={selectedInvoice.remarks}
         />
-      )}
-
-      {/* Send Invoice Modal */}
-      {showSendModal && selectedInvoice && (
-        <div
-          className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => {
-            setShowSendModal(false);
-            setSelectedInvoice(null);
-          }}
-        >
-          <div
-            className="bg-card rounded-2xl border border-violet-200 dark:border-violet-400/30 max-w-md w-full overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="relative px-6 pt-6 pb-5 border-b border-violet-100 dark:border-violet-400/15">
-              <button
-                onClick={() => {
-                  setShowSendModal(false);
-                  setSelectedInvoice(null);
-                }}
-                className="absolute right-5 top-5 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-lg bg-violet-500 flex items-center justify-center shrink-0">
-                  <Send className="w-4 h-4 text-white" strokeWidth={2.25} />
-                </div>
-                <div className="min-w-0 pr-8">
-                  <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">Send Invoice</div>
-                  <h2 className="text-[16px] font-semibold tracking-tight text-foreground leading-tight truncate">
-                    {selectedInvoice.id} <span className="text-muted-foreground font-normal">to</span> {selectedInvoice.customer}
-                  </h2>
-                </div>
-              </div>
-            </div>
-
-            {/* Send options */}
-            <div className="px-6 py-5 space-y-2.5">
-              <button
-                onClick={() => handleWhatsAppInvoice(selectedInvoice)}
-                disabled={isSendingMail}
-                className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                  <MessageCircle className="w-4 h-4" strokeWidth={2.25} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold text-foreground">WhatsApp the Invoice</div>
-                  <div className="text-[11.5px] text-muted-foreground">Send via WhatsApp Business</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleMailInvoice(selectedInvoice)}
-                disabled={isSendingMail}
-                className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-60 disabled:cursor-wait"
-              >
-                <div className="h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0">
-                  {isSendingMail ? (
-                    <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
-                  ) : (
-                    <Mail className="w-4 h-4" strokeWidth={2.25} />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold text-foreground">{isSendingMail ? 'Sending…' : 'Mail Invoice'}</div>
-                  <div className="text-[11.5px] text-muted-foreground">{isSendingMail ? `Delivering to ${selectedInvoice.customerDetails?.email || ''}` : 'Sent via Resend to the customer'}</div>
-                </div>
-              </button>
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 bg-violet-50/40 dark:bg-violet-500/[0.04] flex items-center justify-end">
-              <button
-                onClick={() => {
-                  setShowSendModal(false);
-                  setSelectedInvoice(null);
-                }}
-                className="h-10 px-5 rounded-full text-[13px] font-medium text-foreground border border-violet-200 dark:border-violet-400/25 bg-card hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Delete Confirmation Modal */}

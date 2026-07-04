@@ -472,16 +472,6 @@ export function InvoiceCreate() {
     `Invoice ${invoiceNumber} for ${selectedCustomerDetails?.companyName || 'your company'} has been created. Total amount: Rs. ${totalAmount.toFixed(2)}.`
   );
 
-  const handleWhatsAppInvoice = () => {
-    const phone = selectedCustomerDetails?.phone.replace(/\D/g, '') || '';
-    const message = encodeURIComponent(getInvoiceShareMessage());
-    const whatsappUrl = phone
-      ? `https://wa.me/${phone}?text=${message}`
-      : `https://wa.me/?text=${message}`;
-
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  };
-
   const handleMailInvoice = () => {
     if (!selectedCustomerDetails?.email) {
       toast.error('Customer email is not available');
