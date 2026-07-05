@@ -10,6 +10,12 @@ import { insertForUser, selectForUser, updateForUser, deleteForUser } from '../.
 import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
+// Built-in line-item units. Users can add their own via the "+ Add unit…"
+// option in the Unit dropdown; a custom value is kept per line item.
+const LINE_UNIT_OPTIONS = ['JOB', 'Hrs', 'Nos', 'Kgs', 'Mtr', 'Bags'];
+const ITEM_UNIT_OPTIONS = ['Nos', 'JOB', 'HRS', 'Days', 'Kgs', 'MTR', 'SQFT', 'BAG', 'BOX', 'Pcs'];
+const ADD_UNIT_SENTINEL = '__add_unit__';
+
 interface LineItem {
   id: string;
   itemId?: string;
@@ -379,6 +385,29 @@ export function InvoiceCreate() {
       return updated;
     }));
   };
+
+  // Unit dropdown: picking "+ Add unit…" prompts for a custom unit and applies
+  // it to that line item. Any custom value is preserved and shown as an option.
+  const handleUnitChange = (id: string, value: string) => {
+    if (value === ADD_UNIT_SENTINEL) {
+      const custom = window.prompt('Enter the unit (e.g. Pcs, Ltr, Box, Set):')?.trim();
+      if (custom) updateLineItem(id, 'unit', custom);
+      return;
+    }
+    updateLineItem(id, 'unit', value);
+  };
+
+  const renderUnitOptions = (currentUnit: string) => (
+    <>
+      {currentUnit && !LINE_UNIT_OPTIONS.includes(currentUnit) && (
+        <option value={currentUnit}>{currentUnit}</option>
+      )}
+      {LINE_UNIT_OPTIONS.map((u) => (
+        <option key={u} value={u}>{u}</option>
+      ))}
+      <option value={ADD_UNIT_SENTINEL}>+ Add unit…</option>
+    </>
+  );
 
   const handleLineItemSelection = (lineItemId: string, value: string) => {
     if (value === 'add-new') {
@@ -1184,16 +1213,10 @@ export function InvoiceCreate() {
                     <td className="px-3 py-5 align-top">
                       <select
                         value={item.unit}
-                        onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                        onChange={(e) => handleUnitChange(item.id, e.target.value)}
                         className="kaps-compact-select w-full min-w-[84px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                       >
-                        <option>JOB</option>
-                        <option>Hrs</option>
-                        <option>Nos</option>
-                        <option>Kgs</option>
-                        <option>Mtr</option>
-                        <option>Bags</option>
-                        <option>Others</option>
+                        {renderUnitOptions(item.unit)}
                       </select>
                     </td>
                     <td className="px-3 py-5 align-top">
@@ -1373,16 +1396,10 @@ export function InvoiceCreate() {
                           </label>
                           <select
                             value={item.unit}
-                            onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                            onChange={(e) => handleUnitChange(item.id, e.target.value)}
                             className="kaps-compact-select w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           >
-                            <option>JOB</option>
-                            <option>Hrs</option>
-                            <option>Nos</option>
-                            <option>Kgs</option>
-                            <option>Mtr</option>
-                            <option>Bags</option>
-                            <option>Others</option>
+                            {renderUnitOptions(item.unit)}
                           </select>
                         </div>
                       </div>
@@ -2052,20 +2069,24 @@ function InvoiceItemModal({
                 </label>
                 <select
                   value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === ADD_UNIT_SENTINEL) {
+                      const custom = window.prompt('Enter the unit (e.g. Ltr, Set, Roll):')?.trim();
+                      if (custom) setFormData({ ...formData, unit: custom });
+                      return;
+                    }
+                    setFormData({ ...formData, unit: value });
+                  }}
                   className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <option>Nos</option>
-                  <option>JOB</option>
-                  <option>HRS</option>
-                  <option>Days</option>
-                  <option>Kgs</option>
-                  <option>MTR</option>
-                  <option>SQFT</option>
-                  <option>BAG</option>
-                  <option>BOX</option>
-                  <option>Pcs</option>
-                  <option>Others</option>
+                  {formData.unit && !ITEM_UNIT_OPTIONS.includes(formData.unit) && (
+                    <option value={formData.unit}>{formData.unit}</option>
+                  )}
+                  {ITEM_UNIT_OPTIONS.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                  <option value={ADD_UNIT_SENTINEL}>+ Add unit…</option>
                 </select>
               </div>
             </div>
