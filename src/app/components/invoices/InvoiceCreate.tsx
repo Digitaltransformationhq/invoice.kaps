@@ -15,6 +15,13 @@ import { AppSelect } from '../common/AppSelect';
 // option in the Unit dropdown; a custom value is kept per line item.
 const LINE_UNIT_OPTIONS = ['JOB', 'Hrs', 'Nos', 'Kgs', 'Mtr', 'Bags'];
 const ITEM_UNIT_OPTIONS = ['Nos', 'JOB', 'HRS', 'Days', 'Kgs', 'MTR', 'SQFT', 'BAG', 'BOX', 'Pcs'];
+const GST_RATE_OPTIONS = [
+  { value: '0', label: '0%' },
+  { value: '5', label: '5%' },
+  { value: '12', label: '12%' },
+  { value: '18', label: '18%' },
+  { value: '28', label: '28%' },
+];
 
 interface LineItem {
   id: string;
@@ -1224,7 +1231,7 @@ export function InvoiceCreate() {
                           <AppSelect
                             value={String(item.gst)}
                             onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
-                            options={['0', '5', '12', '18', '28']}
+                            options={GST_RATE_OPTIONS}
                             className="w-full min-w-[64px] px-3 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </td>
@@ -1418,7 +1425,7 @@ export function InvoiceCreate() {
                           <AppSelect
                             value={String(item.gst)}
                             onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
-                            options={['0', '5', '12', '18', '28']}
+                            options={GST_RATE_OPTIONS}
                             className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                           />
                         </div>
