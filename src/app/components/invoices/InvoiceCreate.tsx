@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { ArrowLeft, Plus, Trash2, Save, Eye, Calculator, CheckCircle, ChevronDown, ChevronUp, X, Package, Mail, MessageCircle, ScanLine, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Eye, Calculator, CheckCircle, ChevronDown, ChevronUp, X, Package, Mail, MessageCircle } from 'lucide-react';
 import { InvoicePreview } from './InvoicePreview';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
@@ -9,7 +9,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { insertForUser, selectForUser, updateForUser, deleteForUser } from '../../../lib/auditorData';
 import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
-import { extractBillFromFile, ExtractedBill } from '../../../lib/extractBill';
 
 interface LineItem {
   id: string;
@@ -66,8 +65,6 @@ export function InvoiceCreate() {
   const [newItemName, setNewItemName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
-  const [isScanningBill, setIsScanningBill] = useState(false);
-  const billInputRef = useRef<HTMLInputElement>(null);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
   const [isSavingCatalogItem, setIsSavingCatalogItem] = useState(false);
@@ -381,122 +378,6 @@ export function InvoiceCreate() {
       updated.amount = afterDiscount + gstAmount;
       return updated;
     }));
-  };
-
-  const readFileAsDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(new Error('Could not read file'));
-      reader.readAsDataURL(file);
-    });
-
-  // Map the AI-extracted fields onto the form. Everything is left editable so
-  // the auditor reviews before saving — nothing is auto-submitted.
-  const applyExtractedBill = (bill: ExtractedBill) => {
-    const isoDate = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
-
-    if (bill.invoiceNumber?.trim()) {
-      setIsManualInvoiceNumber(true);
-      setInvoiceNumber(bill.invoiceNumber.trim());
-    }
-    const invDate = isoDate(bill.invoiceDate);
-    if (invDate) setInvoiceDate(invDate);
-    if (bill.placeOfSupply?.trim()) setPlaceOfSupply(bill.placeOfSupply.trim());
-    if (bill.poNumber?.trim()) setPoNumber(bill.poNumber.trim());
-    const poDateIso = isoDate(bill.poDate);
-    if (poDateIso) setPoDate(poDateIso);
-    if (bill.transportMode?.trim()) setTransportMode(bill.transportMode.trim());
-    if (bill.vehicleNo?.trim()) setVehicleNo(bill.vehicleNo.trim());
-    if (bill.remarks?.trim()) setRemarks(bill.remarks.trim());
-
-    // Line items — keep only rows that have some content.
-    const rows = (bill.lineItems || []).filter((li) => (li.item || li.description || li.hsn || li.rate));
-    if (rows.length) {
-      const mapped: LineItem[] = rows.map((li, i) => {
-        const qty = Number(li.qty) || 0;
-        const rate = Number(li.rate) || 0;
-        const discount = Number(li.discount) || 0;
-        const gst = isComposition ? 0 : (Number(li.gst) || 0);
-        const base = qty * rate;
-        const afterDiscount = base - (base * discount / 100);
-        return {
-          id: `${Date.now()}-${i}`,
-          itemId: '',
-          item: (li.item || '').trim(),
-          description: (li.description || '').trim(),
-          hsn: (li.hsn || '').trim(),
-          qty: qty || 1,
-          unit: (li.unit || '').trim() || 'JOB',
-          rate,
-          discount,
-          gst,
-          amount: afterDiscount + (afterDiscount * gst / 100),
-        };
-      });
-      setLineItems(mapped);
-      setExpandedItemId(mapped[0].id);
-    }
-
-    // Customer — select an existing one if it matches by GSTIN or name, else
-    // open the Add Customer modal pre-filled for the auditor to confirm & save.
-    const gstin = (bill.customerGstin || '').trim().toUpperCase();
-    const nameLower = (bill.customerName || '').trim().toLowerCase();
-    const match = customers.find((c) =>
-      (gstin && (c.gstin || '').toUpperCase() === gstin) ||
-      (nameLower && (c.companyName || '').toLowerCase() === nameLower)
-    );
-    if (match) {
-      setSelectedCustomer(match.id);
-    } else if (bill.customerName?.trim() || gstin) {
-      setNewCustomer({
-        companyName: bill.customerName?.trim() || '',
-        customerType: 'B2B',
-        gstin,
-        pan: extractPanFromGstin(gstin),
-        contactName: '',
-        email: bill.customerEmail?.trim() || '',
-        phone: bill.customerPhone?.trim() || '',
-        city: '',
-        state: bill.placeOfSupply?.trim() || getGstinStateName(gstin) || '',
-        address: bill.customerAddress?.trim() || '',
-      });
-      setShowAddCustomerModal(true);
-    }
-  };
-
-  const handleScanBill = async (file?: File) => {
-    if (!file || isScanningBill) return;
-    const okType = file.type.startsWith('image/') || file.type === 'application/pdf';
-    if (!okType) {
-      toast.error('Upload a JPG, PNG or PDF bill.');
-      return;
-    }
-    if (file.size > 7 * 1024 * 1024) {
-      toast.error('Please upload a bill under 7 MB.');
-      return;
-    }
-
-    setIsScanningBill(true);
-    const scanningToast = toast.loading('Scanning bill…');
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const base64 = dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl;
-      const result = await extractBillFromFile(base64, file.type);
-      toast.dismiss(scanningToast);
-      if (!result.success || !result.data) {
-        toast.error(result.error || 'Could not scan the bill.');
-        return;
-      }
-      applyExtractedBill(result.data);
-      toast.success('Bill scanned — please review every field before saving.');
-    } catch {
-      toast.dismiss(scanningToast);
-      toast.error('Could not scan the bill.');
-    } finally {
-      setIsScanningBill(false);
-      if (billInputRef.current) billInputRef.current.value = '';
-    }
   };
 
   const handleLineItemSelection = (lineItemId: string, value: string) => {
@@ -1024,7 +905,7 @@ export function InvoiceCreate() {
     <div className="pb-8 bg-muted/30 min-h-screen">
       {/* Header */}
       <div className="bg-white border-b border-border px-4 md:px-8 py-4 md:py-6 sticky top-0 z-10">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center">
           <div className="flex items-center gap-4">
             <Link
               to="/app/invoices"
@@ -1039,28 +920,6 @@ export function InvoiceCreate() {
               </p>
             </div>
           </div>
-
-          {!isEditMode && (
-            <div className="shrink-0">
-              <input
-                ref={billInputRef}
-                type="file"
-                accept="image/*,application/pdf"
-                className="hidden"
-                onChange={(e) => handleScanBill(e.target.files?.[0])}
-              />
-              <button
-                type="button"
-                onClick={() => billInputRef.current?.click()}
-                disabled={isScanningBill}
-                title="Upload a bill photo or PDF to auto-fill this invoice"
-                className="inline-flex items-center gap-2 h-10 px-3 sm:px-4 rounded-full border border-violet-300 dark:border-violet-400/40 bg-card text-[13px] font-semibold text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isScanningBill ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanLine className="w-4 h-4" />}
-                <span className="hidden sm:inline">{isScanningBill ? 'Scanning…' : 'Scan Bill'}</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
