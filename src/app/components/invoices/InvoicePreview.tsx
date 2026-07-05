@@ -263,6 +263,30 @@ export function InvoicePreview({
   // A composition dealer cannot collect tax, so the total is the taxable value.
   const grandTotal = subtotal + (isComposition ? 0 : totalTax);
 
+  // HSN/SAC-wise tax bifurcation summary (regular / non-composition invoices).
+  // Rows are grouped by HSN code + GST rate.
+  const taxSummaryRows = (() => {
+    const map = new Map<string, { hsn: string; rate: number; taxable: number; tax: number }>();
+    for (const item of lineItems) {
+      const base = item.qty * item.rate;
+      const taxable = base - (base * item.discount / 100);
+      const tax = taxable * item.gst / 100;
+      const key = `${item.hsn || '-'}|${item.gst}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.taxable += taxable;
+        existing.tax += tax;
+      } else {
+        map.set(key, { hsn: item.hsn || '-', rate: item.gst, taxable, tax });
+      }
+    }
+    return Array.from(map.values());
+  })();
+  const taxSummaryTotals = taxSummaryRows.reduce(
+    (acc, r) => ({ taxable: acc.taxable + r.taxable, tax: acc.tax + r.tax }),
+    { taxable: 0, tax: 0 },
+  );
+
   const getInvoiceShareMessage = () => (
     `Invoice ${displayInvoiceNumber} for ${buyerName} is ready. Total amount: Rs. ${grandTotal.toFixed(2)}.`
   );
@@ -741,6 +765,87 @@ export function InvoicePreview({
               <span className="font-semibold">Invoice Amount in Words:</span> {numberToWords(grandTotal)}
               <div className="text-right mt-2">E. & O.E.</div>
             </div>
+
+            {/* HSN/SAC-wise Tax Bifurcation (regular / non-composition only) */}
+            {!isComposition && taxSummaryRows.length > 0 && (
+              <div className="border-b border-foreground">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-foreground bg-muted/30">
+                      <th rowSpan={2} className="p-2 border-r border-foreground text-left align-bottom">HSN/SAC</th>
+                      <th rowSpan={2} className="p-2 border-r border-foreground text-right align-bottom">Taxable<br />Value</th>
+                      {isInterStateSupply ? (
+                        <th colSpan={2} className="p-2 border-r border-foreground text-center">Integrated Tax</th>
+                      ) : (
+                        <>
+                          <th colSpan={2} className="p-2 border-r border-foreground text-center">Central Tax</th>
+                          <th colSpan={2} className="p-2 border-r border-foreground text-center">State Tax</th>
+                        </>
+                      )}
+                      <th rowSpan={2} className="p-2 text-right align-bottom">Total<br />Tax Amount</th>
+                    </tr>
+                    <tr className="border-b border-foreground bg-muted/30">
+                      {isInterStateSupply ? (
+                        <>
+                          <th className="p-2 border-r border-foreground text-right">Rate</th>
+                          <th className="p-2 border-r border-foreground text-right">Amount</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="p-2 border-r border-foreground text-right">Rate</th>
+                          <th className="p-2 border-r border-foreground text-right">Amount</th>
+                          <th className="p-2 border-r border-foreground text-right">Rate</th>
+                          <th className="p-2 border-r border-foreground text-right">Amount</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {taxSummaryRows.map((row, index) => (
+                      <tr key={index} className="border-b border-foreground">
+                        <td className="p-2 border-r border-foreground">{row.hsn}</td>
+                        <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.taxable)}</td>
+                        {isInterStateSupply ? (
+                          <>
+                            <td className="p-2 border-r border-foreground text-right">{row.rate}%</td>
+                            <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.tax)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="p-2 border-r border-foreground text-right">{row.rate / 2}%</td>
+                            <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.tax / 2)}</td>
+                            <td className="p-2 border-r border-foreground text-right">{row.rate / 2}%</td>
+                            <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.tax / 2)}</td>
+                          </>
+                        )}
+                        <td className="p-2 text-right">{formatCurrency(row.tax)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-foreground bg-muted/20 font-semibold">
+                      <td className="p-2 border-r border-foreground text-right">Total</td>
+                      <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.taxable)}</td>
+                      {isInterStateSupply ? (
+                        <>
+                          <td className="p-2 border-r border-foreground"></td>
+                          <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.tax)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="p-2 border-r border-foreground"></td>
+                          <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.tax / 2)}</td>
+                          <td className="p-2 border-r border-foreground"></td>
+                          <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.tax / 2)}</td>
+                        </>
+                      )}
+                      <td className="p-2 text-right">{formatCurrency(taxSummaryTotals.tax)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div className="p-2 border-t border-foreground">
+                  <span className="font-semibold">Tax Amount (in words) :</span> {numberToWords(taxSummaryTotals.tax)}
+                </div>
+              </div>
+            )}
 
             {remarks && (
               <div className="border-b border-foreground p-3 text-xs">
