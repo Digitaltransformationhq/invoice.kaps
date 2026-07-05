@@ -912,20 +912,20 @@ export function CreditNoteCreate() {
         </div>
         <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-2.5 md:justify-end md:shrink-0">
           <button
-            onClick={() => setShowPreview(true)}
-            disabled={isSaving}
-            className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            Preview
-          </button>
-          <button
             onClick={handleSaveDraft}
             disabled={isSaving}
             className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
           >
             <Save className="w-3.5 h-3.5" />
             {isSaving ? 'Saving…' : 'Save Draft'}
+          </button>
+          <button
+            onClick={() => setShowPreview(true)}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-full border border-violet-200 dark:border-violet-400/25 bg-card text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-[14px] font-medium disabled:opacity-50 whitespace-nowrap sm:flex-1 md:flex-initial md:shrink-0"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Preview
           </button>
           <button
             onClick={handleCreateAndSend}
