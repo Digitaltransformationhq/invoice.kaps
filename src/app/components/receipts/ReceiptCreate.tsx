@@ -7,6 +7,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { insertForUser, selectForUser } from '../../../lib/auditorData';
 import { AppSelect } from '../common/AppSelect';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface CustomerRow {
   id: string;
@@ -45,6 +46,10 @@ const todayIso = () => new Date().toISOString().split('T')[0];
 
 export function ReceiptCreate() {
   const { user } = useAuth();
+  const { isComposition } = useTaxpayerType();
+  const docLabel = isComposition ? 'Bill of Supply' : 'Invoice';
+  const docLabelLower = isComposition ? 'bill of supply' : 'invoice';
+  const docLabelLowerPlural = isComposition ? 'bills of supply' : 'invoices';
   const navigate = useNavigate();
 
   const [showPreview, setShowPreview] = useState(false);
@@ -379,7 +384,7 @@ export function ReceiptCreate() {
                 </div>
               ) : (
                 <p className="text-[12.5px] text-muted-foreground px-1">
-                  Pick the customer who sent this payment. Their outstanding invoices appear in step 3.
+                  Pick the customer who sent this payment. Their outstanding {docLabelLowerPlural} appear in step 3.
                 </p>
               )}
             </div>
@@ -453,11 +458,11 @@ export function ReceiptCreate() {
         </div>
       </div>
 
-      {/* STEP 3 — Linked Invoice */}
+      {/* STEP 3 — Linked Invoice / Bill of Supply */}
       <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
         <div className="flex items-center gap-2 mb-5">
           <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">3</div>
-          <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Linked Invoice <span className="text-muted-foreground font-normal text-[13px]">(optional)</span></h3>
+          <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Linked {docLabel} <span className="text-muted-foreground font-normal text-[13px]">(optional)</span></h3>
         </div>
         <AppSelect
           value={selectedInvoiceId}
@@ -470,7 +475,7 @@ export function ReceiptCreate() {
             }
           }}
           options={[
-            { value: '', label: selectedCustomerId ? 'Not linked to any invoice (advance payment)' : 'Pick a customer first to filter invoices' },
+            { value: '', label: selectedCustomerId ? `Not linked to any ${docLabelLower} (advance payment)` : `Pick a customer first to filter ${docLabelLowerPlural}` },
             ...filteredInvoices.map((inv) => {
               const due = Math.max(0, inv.total_amount - inv.paid_amount);
               return { value: inv.id, label: `${inv.invoice_number} — ₹${inv.total_amount.toLocaleString('en-IN')} (${inv.status}, due ₹${due.toLocaleString('en-IN')})` };
@@ -485,7 +490,7 @@ export function ReceiptCreate() {
           </div>
         )}
         <p className="mt-2 text-[11.5px] text-muted-foreground px-1">
-          Link this receipt to an invoice to auto-credit the paid amount. Leave blank for an advance payment.
+          Link this receipt to a {docLabelLower} to auto-credit the paid amount. Leave blank for an advance payment.
         </p>
       </div>
 
@@ -599,7 +604,7 @@ export function ReceiptCreate() {
             </div>
             {selectedInvoice && (
               <div className="flex items-center justify-between text-[13.5px]">
-                <span className="text-muted-foreground">Linked Invoice</span>
+                <span className="text-muted-foreground">Linked {docLabel}</span>
                 <span className="font-medium text-foreground font-mono">{selectedInvoice.invoice_number}</span>
               </div>
             )}
@@ -621,7 +626,7 @@ export function ReceiptCreate() {
             <div className="text-[10.5px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-300 mb-0.5">Tips</div>
             <ul className="text-[11.5px] text-muted-foreground leading-snug space-y-0.5">
               <li>• Always get reference number for digital payments.</li>
-              <li>• Link the receipt to an invoice to auto-bump its paid amount.</li>
+              <li>• Link the receipt to a {docLabelLower} to auto-bump its paid amount.</li>
               <li>• Cheque receipts default to Pending — switch to Cleared once the cheque clears.</li>
             </ul>
           </div>

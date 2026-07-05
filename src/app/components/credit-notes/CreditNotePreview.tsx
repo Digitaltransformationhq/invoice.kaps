@@ -5,6 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface LineItem {
   id: string;
@@ -55,6 +56,7 @@ export function CreditNotePreview({
   customer,
 }: CreditNotePreviewProps) {
   const { user } = useAuth();
+  const { isComposition } = useTaxpayerType();
 
   const [companyDetails, setCompanyDetails] = useState({
     name: user?.company_name || 'Your Company',
@@ -172,7 +174,7 @@ export function CreditNotePreview({
   const cgstTotal = isInterStateSupply ? 0 : totalTax / 2;
   const sgstTotal = isInterStateSupply ? 0 : totalTax / 2;
   const igstTotal = isInterStateSupply ? totalTax : 0;
-  const grandTotal = subtotal + totalTax;
+  const grandTotal = subtotal + (isComposition ? 0 : totalTax);
 
   const displayNoteNumber = noteNumber || 'Auto-generated on save';
 
@@ -320,17 +322,19 @@ export function CreditNotePreview({
                       <td className="py-1">{formatDate(noteDate)}</td>
                     </tr>
                     <tr>
-                      <td className="py-1 font-semibold">ORIGINAL INVOICE</td>
+                      <td className="py-1 font-semibold">{isComposition ? 'ORIGINAL BILL OF SUPPLY' : 'ORIGINAL INVOICE'}</td>
                       <td className="py-1">{originalInvoice || 'N/A'}</td>
                     </tr>
                     <tr>
                       <td className="py-1 font-semibold">PLACE OF SUPPLY</td>
                       <td className="py-1">{placeOfSupplyLabel}</td>
                     </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">SUPPLY TYPE</td>
-                      <td className="py-1">{isInterStateSupply ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</td>
-                    </tr>
+                    {!isComposition && (
+                      <tr>
+                        <td className="py-1 font-semibold">SUPPLY TYPE</td>
+                        <td className="py-1">{isInterStateSupply ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -393,13 +397,17 @@ export function CreditNotePreview({
                   <th className="p-2 text-right border-r border-foreground w-12">Qty</th>
                   <th className="p-2 text-left border-r border-foreground w-12">Unit</th>
                   <th className="p-2 text-right border-r border-foreground w-20">Rate</th>
-                  <th className="p-2 text-right border-r border-foreground w-24">Taxable</th>
-                  {isInterStateSupply ? (
-                    <th className="p-2 text-right border-r border-foreground w-24">IGST</th>
-                  ) : (
+                  {!isComposition && (
                     <>
-                      <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
-                      <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
+                      <th className="p-2 text-right border-r border-foreground w-24">Taxable</th>
+                      {isInterStateSupply ? (
+                        <th className="p-2 text-right border-r border-foreground w-24">IGST</th>
+                      ) : (
+                        <>
+                          <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
+                          <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
+                        </>
+                      )}
                     </>
                   )}
                   <th className="p-2 text-right w-24">Amount</th>
@@ -408,7 +416,7 @@ export function CreditNotePreview({
               <tbody>
                 {lineItems.length === 0 ? (
                   <tr>
-                    <td colSpan={isInterStateSupply ? 9 : 10} className="p-4 text-center text-muted-foreground">
+                    <td colSpan={isComposition ? 7 : (isInterStateSupply ? 9 : 10)} className="p-4 text-center text-muted-foreground">
                       No line items.
                     </td>
                   </tr>
@@ -431,25 +439,29 @@ export function CreditNotePreview({
                       <td className="p-2 text-right border-r border-foreground tabular-nums">{item.qty.toFixed(2)}</td>
                       <td className="p-2 border-r border-foreground">{item.unit}</td>
                       <td className="p-2 text-right border-r border-foreground tabular-nums">{formatCurrency(item.rate)}</td>
-                      <td className="p-2 text-right border-r border-foreground tabular-nums">{formatCurrency(afterDiscount)}</td>
-                      {isInterStateSupply ? (
-                        <td className="p-2 text-right border-r border-foreground tabular-nums">
-                          <div>{formatCurrency(igst)}</div>
-                          <div className="text-[10px] opacity-70">{item.gst}%</div>
-                        </td>
-                      ) : (
+                      {!isComposition && (
                         <>
-                          <td className="p-2 text-right border-r border-foreground tabular-nums">
-                            <div>{formatCurrency(cgst)}</div>
-                            <div className="text-[10px] opacity-70">{(item.gst / 2).toFixed(1)}%</div>
-                          </td>
-                          <td className="p-2 text-right border-r border-foreground tabular-nums">
-                            <div>{formatCurrency(sgst)}</div>
-                            <div className="text-[10px] opacity-70">{(item.gst / 2).toFixed(1)}%</div>
-                          </td>
+                          <td className="p-2 text-right border-r border-foreground tabular-nums">{formatCurrency(afterDiscount)}</td>
+                          {isInterStateSupply ? (
+                            <td className="p-2 text-right border-r border-foreground tabular-nums">
+                              <div>{formatCurrency(igst)}</div>
+                              <div className="text-[10px] opacity-70">{item.gst}%</div>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="p-2 text-right border-r border-foreground tabular-nums">
+                                <div>{formatCurrency(cgst)}</div>
+                                <div className="text-[10px] opacity-70">{(item.gst / 2).toFixed(1)}%</div>
+                              </td>
+                              <td className="p-2 text-right border-r border-foreground tabular-nums">
+                                <div>{formatCurrency(sgst)}</div>
+                                <div className="text-[10px] opacity-70">{(item.gst / 2).toFixed(1)}%</div>
+                              </td>
+                            </>
+                          )}
                         </>
                       )}
-                      <td className="p-2 text-right tabular-nums">{formatCurrency(item.amount)}</td>
+                      <td className="p-2 text-right tabular-nums">{formatCurrency(isComposition ? afterDiscount : item.amount)}</td>
                     </tr>
                   );
                 })}
@@ -461,10 +473,10 @@ export function CreditNotePreview({
               <table className="print-rows w-full text-xs">
                 <tbody>
                   <tr className="border-b border-foreground">
-                    <td className="p-2 font-semibold">Sub-Total (Taxable)</td>
+                    <td className="p-2 font-semibold">{isComposition ? 'Sub-Total' : 'Sub-Total (Taxable)'}</td>
                     <td className="p-2 text-right font-semibold tabular-nums">₹{formatCurrency(subtotal)}</td>
                   </tr>
-                  {isInterStateSupply ? (
+                  {!isComposition && (isInterStateSupply ? (
                     <tr className="border-b-2 border-foreground">
                       <td className="p-2">Add: IGST</td>
                       <td className="p-2 text-right tabular-nums">₹{formatCurrency(igstTotal)}</td>
@@ -480,13 +492,18 @@ export function CreditNotePreview({
                         <td className="p-2 text-right tabular-nums">₹{formatCurrency(sgstTotal)}</td>
                       </tr>
                     </>
-                  )}
+                  ))}
                   <tr className={`border-b-2 border-foreground ${noteType === 'credit' ? 'bg-success/10' : 'bg-warning/10'}`}>
                     <td className="p-2 font-bold">GRAND TOTAL ({noteType === 'credit' ? 'CREDIT' : 'DEBIT'})</td>
                     <td className={`p-2 text-right font-bold tabular-nums ${noteType === 'credit' ? 'text-success' : 'text-warning'}`}>
                       {noteType === 'credit' ? '−' : '+'}₹{formatCurrency(grandTotal)}
                     </td>
                   </tr>
+                  {isComposition && (
+                    <tr className="border-b-2 border-foreground">
+                      <td className="p-2 font-semibold text-[11px]" colSpan={2}>Composition taxable person. Not eligible to collect tax on supplies.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

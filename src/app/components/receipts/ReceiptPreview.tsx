@@ -5,6 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { getGstinStateName } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 interface Customer {
   id?: string;
@@ -44,6 +45,8 @@ export function ReceiptPreview({
   customer,
 }: ReceiptPreviewProps) {
   const { user } = useAuth();
+  const { isComposition } = useTaxpayerType();
+  const docLabel = isComposition ? 'Bill of Supply' : 'Invoice';
 
   const [companyDetails, setCompanyDetails] = useState({
     name: user?.company_name || 'Your Company',
@@ -276,7 +279,7 @@ export function ReceiptPreview({
                     </tr>
                     {invoice && (
                       <tr>
-                        <td className="py-2 font-semibold">Invoice Ref.</td>
+                        <td className="py-2 font-semibold">{docLabel} Ref.</td>
                         <td className="py-2 font-mono">{invoice}</td>
                       </tr>
                     )}
@@ -323,7 +326,7 @@ export function ReceiptPreview({
                 <tbody>
                   <tr className="border-b border-foreground">
                     <td className="p-4 text-sm">
-                      {invoice ? `Payment against Invoice ${invoice}` : 'Advance Payment Received'}
+                      {invoice ? `Payment against ${docLabel} ${invoice}` : 'Advance Payment Received'}
                       {notes && <div className="text-xs text-muted-foreground mt-1 whitespace-pre-line">{notes}</div>}
                     </td>
                     <td className="p-4 text-right text-lg font-semibold tabular-nums">

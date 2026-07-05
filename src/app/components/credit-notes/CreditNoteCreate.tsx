@@ -7,6 +7,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { insertForUser, selectForUser } from '../../../lib/auditorData';
 import { AppSelect } from '../common/AppSelect';
+import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 const CN_UNIT_OPTIONS = ['Nos', 'Hrs', 'Days', 'Kgs', 'Pcs'];
 const CN_GST_OPTIONS = [
@@ -61,6 +62,7 @@ const todayIso = () => new Date().toISOString().split('T')[0];
 
 export function CreditNoteCreate() {
   const { user } = useAuth();
+  const { isComposition } = useTaxpayerType();
   const navigate = useNavigate();
 
   const [showPreview, setShowPreview] = useState(false);
@@ -224,7 +226,7 @@ export function CreditNoteCreate() {
     return sum + (item.qty * item.rate) - ((item.qty * item.rate) * item.discount / 100);
   }, 0);
 
-  const totalGST = lineItems.reduce((sum, item) => {
+  const totalGST = isComposition ? 0 : lineItems.reduce((sum, item) => {
     const baseAmount = item.qty * item.rate;
     const afterDiscount = baseAmount - (baseAmount * item.discount / 100);
     return sum + (afterDiscount * item.gst / 100);
@@ -294,9 +296,10 @@ export function CreditNoteCreate() {
       }
 
       const itemRows = lineItems.map((item) => {
+        const gst = isComposition ? 0 : item.gst;
         const baseAmount = item.qty * item.rate;
         const taxableAmount = baseAmount - (baseAmount * item.discount / 100);
-        const taxAmount = taxableAmount * item.gst / 100;
+        const taxAmount = taxableAmount * gst / 100;
         return {
           [fkColumn]: note.id,
           item_name: item.item || item.description || 'Line item',
@@ -305,7 +308,7 @@ export function CreditNoteCreate() {
           quantity: item.qty,
           unit: item.unit || null,
           rate: item.rate,
-          gst_rate: item.gst,
+          gst_rate: gst,
           taxable_amount: taxableAmount,
           tax_amount: taxAmount,
           total_amount: taxableAmount + taxAmount,
@@ -439,7 +442,7 @@ export function CreditNoteCreate() {
                 </div>
               ) : (
                 <p className="text-[12.5px] text-muted-foreground px-1">
-                  Pick the customer whose account this note adjusts. Their original invoices appear in step 2.
+                  Pick the customer whose account this note adjusts. Their original {isComposition ? 'bills of supply' : 'invoices'} appear in step 2.
                 </p>
               )}
             </div>
@@ -504,16 +507,16 @@ export function CreditNoteCreate() {
               </div>
             </div>
 
-            {/* Original Invoice */}
+            {/* Original Invoice / Bill of Supply */}
             <div>
               <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
-                Original Invoice <span className="text-muted-foreground/70 normal-case tracking-normal font-normal">(optional)</span>
+                Original {isComposition ? 'Bill of Supply' : 'Invoice'} <span className="text-muted-foreground/70 normal-case tracking-normal font-normal">(optional)</span>
               </label>
               <AppSelect
                 value={originalInvoice}
                 onChange={setOriginalInvoice}
                 options={[
-                  { value: '', label: selectedCustomerId ? 'Select original invoice…' : 'Pick a customer first to filter invoices' },
+                  { value: '', label: selectedCustomerId ? `Select original ${isComposition ? 'bill of supply' : 'invoice'}…` : `Pick a customer first to filter ${isComposition ? 'bills of supply' : 'invoices'}` },
                   ...filteredInvoices.map((inv) => ({ value: inv.invoice_number, label: `${inv.invoice_number}${inv.customer_name ? ` — ${inv.customer_name}` : ''}` })),
                 ]}
                 className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
@@ -568,7 +571,9 @@ export function CreditNoteCreate() {
                 <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-28">Unit</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-32">Rate</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-24">Disc%</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-24">GST%</th>
+                {!isComposition && (
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-24">GST%</th>
+                )}
                 <th className="px-4 py-3 text-right text-[11px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300 w-36">Amount</th>
                 <th className="px-2 py-3 w-12"></th>
               </tr>
@@ -643,16 +648,18 @@ export function CreditNoteCreate() {
                       className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                     />
                   </td>
-                  <td className="px-4 py-3 align-middle">
-                    <AppSelect
-                      value={String(item.gst)}
-                      onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
-                      options={CN_GST_OPTIONS}
-                      className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                    />
-                  </td>
+                  {!isComposition && (
+                    <td className="px-4 py-3 align-middle">
+                      <AppSelect
+                        value={String(item.gst)}
+                        onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
+                        options={CN_GST_OPTIONS}
+                        className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-sm font-medium text-foreground text-right align-middle tabular-nums">
-                    ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹{(isComposition ? item.qty * item.rate * (1 - item.discount / 100) : item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-2 py-3 align-middle">
                     {lineItems.length > 1 && (
@@ -807,15 +814,17 @@ export function CreditNoteCreate() {
                     </div>
 
                     {/* GST */}
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">GST %</label>
-                      <AppSelect
-                        value={String(item.gst)}
-                        onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
-                        options={CN_GST_OPTIONS}
-                        className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                      />
-                    </div>
+                    {!isComposition && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">GST %</label>
+                        <AppSelect
+                          value={String(item.gst)}
+                          onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
+                          options={CN_GST_OPTIONS}
+                          className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                        />
+                      </div>
+                    )}
 
                     {/* Calculated Amounts */}
                     <div className="pt-3 border-t border-violet-100 dark:border-violet-400/10 space-y-2">
@@ -828,7 +837,7 @@ export function CreditNoteCreate() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground font-semibold">Total Amount</span>
                         <span className="font-semibold text-foreground tabular-nums">
-                          ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ₹{(isComposition ? taxable : item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -871,12 +880,14 @@ export function CreditNoteCreate() {
                 ₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="flex items-center justify-between text-[13.5px]">
-              <span className="text-muted-foreground">Total GST</span>
-              <span className="font-medium text-foreground tabular-nums">
-                ₹{totalGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
+            {!isComposition && (
+              <div className="flex items-center justify-between text-[13.5px]">
+                <span className="text-muted-foreground">Total GST</span>
+                <span className="font-medium text-foreground tabular-nums">
+                  ₹{totalGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
             <div className="pt-3.5 border-t border-violet-100 dark:border-violet-400/15">
               <div className="flex items-end justify-between">
                 <div>
