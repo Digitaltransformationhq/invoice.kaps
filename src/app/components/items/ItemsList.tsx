@@ -5,6 +5,10 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { deleteForUser, insertForUser, selectForUser, updateForUser } from '../../../lib/auditorData';
 
+// Built-in units. Users can add their own via the "+ Add unit…" dropdown option.
+const ITEM_UNIT_OPTIONS = ['Nos', 'JOB', 'HRS', 'Days', 'Kgs', 'MTR', 'SQFT', 'BAG', 'BOX', 'Pcs'];
+const ADD_UNIT_SENTINEL = '__add_unit__';
+
 interface Item {
   id: string;
   name: string;
@@ -757,20 +761,24 @@ function ItemModal({
                 </label>
                 <select
                   value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === ADD_UNIT_SENTINEL) {
+                      const custom = window.prompt('Enter the unit (e.g. Ltr, Set, Roll):')?.trim();
+                      if (custom) setFormData({ ...formData, unit: custom });
+                      return;
+                    }
+                    setFormData({ ...formData, unit: value });
+                  }}
                   className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <option>Nos</option>
-                  <option>JOB</option>
-                  <option>HRS</option>
-                  <option>Days</option>
-                  <option>Kgs</option>
-                  <option>MTR</option>
-                  <option>SQFT</option>
-                  <option>BAG</option>
-                  <option>BOX</option>
-                  <option>Pcs</option>
-                  <option>Others</option>
+                  {formData.unit && !ITEM_UNIT_OPTIONS.includes(formData.unit) && (
+                    <option value={formData.unit}>{formData.unit}</option>
+                  )}
+                  {ITEM_UNIT_OPTIONS.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                  <option value={ADD_UNIT_SENTINEL}>+ Add unit…</option>
                 </select>
               </div>
             </div>
