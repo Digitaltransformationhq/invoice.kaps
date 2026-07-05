@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { ArrowLeft, Save, Send, Eye, Wallet, FileText } from 'lucide-react';
 import { PaymentVoucherPreview } from './PaymentVoucherPreview';
+import { AppSelect } from '../common/AppSelect';
 
 export function PaymentVoucherCreate() {
   const [showPreview, setShowPreview] = useState(false);
@@ -107,21 +108,12 @@ export function PaymentVoucherCreate() {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Payment Category *
                 </label>
-                <select
+                <AppSelect
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={setCategory}
+                  options={['Purchase', 'Salary', 'Rent', 'Utilities', 'Transportation', 'Professional Fees', 'Maintenance', 'Insurance', 'Other']}
                   className="w-full px-3 py-2 border border-input bg-input-background rounded focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="Purchase">Purchase</option>
-                  <option value="Salary">Salary</option>
-                  <option value="Rent">Rent</option>
-                  <option value="Utilities">Utilities</option>
-                  <option value="Transportation">Transportation</option>
-                  <option value="Professional Fees">Professional Fees</option>
-                  <option value="Maintenance">Maintenance</option>
-                  <option value="Insurance">Insurance</option>
-                  <option value="Other">Other</option>
-                </select>
+                />
               </div>
 
               <div>

@@ -3,6 +3,7 @@ import { Mail, Phone, MapPin, Save, Camera, Building2, Upload, ShieldCheck, Edit
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import { AppSelect } from '../common/AppSelect';
 
 interface ProfileFormData {
   name: string;
@@ -457,17 +458,14 @@ export function MyProfile() {
               <ProfileInput label="City" value={formData.city} disabled={!isEditing || !isOwner} onChange={(city) => setFormData({ ...formData, city })} />
               <div>
                 <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">State</label>
-                <select
+                <AppSelect
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  onChange={(v) => setFormData({ ...formData, state: v })}
                   disabled={!isEditing || !isOwner}
+                  placeholder="Select state"
+                  options={STATES}
                   className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select state</option>
-                  {STATES.map((state) => (
-                    <option key={state}>{state}</option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
           </div>

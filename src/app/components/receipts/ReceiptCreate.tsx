@@ -6,6 +6,7 @@ import { ReceiptPreview } from './ReceiptPreview';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { insertForUser, selectForUser } from '../../../lib/auditorData';
+import { AppSelect } from '../common/AppSelect';
 
 interface CustomerRow {
   id: string;
@@ -312,22 +313,17 @@ export function ReceiptCreate() {
             <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Customer</h3>
           </div>
           <div className="space-y-3.5">
-            <select
+            <AppSelect
               value={selectedCustomerId}
-              onChange={(e) => {
-                setSelectedCustomerId(e.target.value);
+              onChange={(v) => {
+                setSelectedCustomerId(v);
                 setSelectedInvoiceId(''); // reset invoice when customer changes
               }}
               disabled={isLoadingCustomers}
+              placeholder={isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}
+              options={customers.map((c) => ({ value: c.id, label: `${c.name}${c.gstin ? ` — ${c.gstin}` : ''}` }))}
               className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-            >
-              <option value="">{isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.gstin ? ` — ${c.gstin}` : ''}
-                </option>
-              ))}
-            </select>
+            />
 
             <div className="min-h-[230px]">
               {selectedCustomer ? (
@@ -463,28 +459,25 @@ export function ReceiptCreate() {
           <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">3</div>
           <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Linked Invoice <span className="text-muted-foreground font-normal text-[13px]">(optional)</span></h3>
         </div>
-        <select
+        <AppSelect
           value={selectedInvoiceId}
-          onChange={(e) => {
-            setSelectedInvoiceId(e.target.value);
-            const inv = invoices.find((i) => i.id === e.target.value);
+          onChange={(v) => {
+            setSelectedInvoiceId(v);
+            const inv = invoices.find((i) => i.id === v);
             if (inv) {
               const due = Math.max(0, inv.total_amount - inv.paid_amount);
               if (due > 0) setAmount(due);
             }
           }}
+          options={[
+            { value: '', label: selectedCustomerId ? 'Not linked to any invoice (advance payment)' : 'Pick a customer first to filter invoices' },
+            ...filteredInvoices.map((inv) => {
+              const due = Math.max(0, inv.total_amount - inv.paid_amount);
+              return { value: inv.id, label: `${inv.invoice_number} — ₹${inv.total_amount.toLocaleString('en-IN')} (${inv.status}, due ₹${due.toLocaleString('en-IN')})` };
+            }),
+          ]}
           className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-        >
-          <option value="">{selectedCustomerId ? 'Not linked to any invoice (advance payment)' : 'Pick a customer first to filter invoices'}</option>
-          {filteredInvoices.map((inv) => {
-            const due = Math.max(0, inv.total_amount - inv.paid_amount);
-            return (
-              <option key={inv.id} value={inv.id}>
-                {inv.invoice_number} — ₹{inv.total_amount.toLocaleString('en-IN')} ({inv.status}, due ₹{due.toLocaleString('en-IN')})
-              </option>
-            );
-          })}
-        </select>
+        />
         {selectedInvoice && (
           <div className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-400/25 text-[12.5px]">
             <span className="text-muted-foreground">Outstanding due on {selectedInvoice.invoice_number}:</span>

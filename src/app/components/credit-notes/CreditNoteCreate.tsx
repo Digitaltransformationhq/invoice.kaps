@@ -6,6 +6,16 @@ import { CreditNotePreview } from './CreditNotePreview';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { insertForUser, selectForUser } from '../../../lib/auditorData';
+import { AppSelect } from '../common/AppSelect';
+
+const CN_UNIT_OPTIONS = ['Nos', 'Hrs', 'Days', 'Kgs', 'Pcs'];
+const CN_GST_OPTIONS = [
+  { value: '0', label: '0%' },
+  { value: '5', label: '5%' },
+  { value: '12', label: '12%' },
+  { value: '18', label: '18%' },
+  { value: '28', label: '28%' },
+];
 
 interface LineItem {
   id: string;
@@ -363,19 +373,14 @@ export function CreditNoteCreate() {
             <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Customer</h3>
           </div>
           <div className="space-y-3.5">
-            <select
+            <AppSelect
               value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
+              onChange={setSelectedCustomerId}
               disabled={isLoadingCustomers}
+              placeholder={isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}
+              options={customers.map((c) => ({ value: c.id, label: `${c.name}${c.gstin ? ` — ${c.gstin}` : ''}` }))}
               className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-            >
-              <option value="">{isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.gstin ? ` — ${c.gstin}` : ''}
-                </option>
-              ))}
-            </select>
+            />
 
             <div className="min-h-[230px]">
               {selectedCustomer ? (
@@ -504,18 +509,15 @@ export function CreditNoteCreate() {
               <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
                 Original Invoice <span className="text-muted-foreground/70 normal-case tracking-normal font-normal">(optional)</span>
               </label>
-              <select
+              <AppSelect
                 value={originalInvoice}
-                onChange={(e) => setOriginalInvoice(e.target.value)}
+                onChange={setOriginalInvoice}
+                options={[
+                  { value: '', label: selectedCustomerId ? 'Select original invoice…' : 'Pick a customer first to filter invoices' },
+                  ...filteredInvoices.map((inv) => ({ value: inv.invoice_number, label: `${inv.invoice_number}${inv.customer_name ? ` — ${inv.customer_name}` : ''}` })),
+                ]}
                 className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-              >
-                <option value="">{selectedCustomerId ? 'Select original invoice…' : 'Pick a customer first to filter invoices'}</option>
-                {filteredInvoices.map((inv) => (
-                  <option key={inv.id} value={inv.invoice_number}>
-                    {inv.invoice_number}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             {/* Reason */}
@@ -611,17 +613,17 @@ export function CreditNoteCreate() {
                     />
                   </td>
                   <td className="px-4 py-3 align-middle">
-                    <select
+                    <AppSelect
                       value={item.unit}
-                      onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                      onChange={(v) => updateLineItem(item.id, 'unit', v)}
+                      options={item.unit && !CN_UNIT_OPTIONS.includes(item.unit) ? [item.unit, ...CN_UNIT_OPTIONS] : CN_UNIT_OPTIONS}
+                      onAddNew={() => {
+                        const custom = window.prompt('Enter the unit (e.g. Ltr, Box, Set):')?.trim();
+                        if (custom) updateLineItem(item.id, 'unit', custom);
+                      }}
+                      addLabel="Add unit"
                       className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                    >
-                      <option>Nos</option>
-                      <option>Hrs</option>
-                      <option>Days</option>
-                      <option>Kgs</option>
-                      <option>Pcs</option>
-                    </select>
+                    />
                   </td>
                   <td className="px-4 py-3 align-middle">
                     <input
@@ -642,17 +644,12 @@ export function CreditNoteCreate() {
                     />
                   </td>
                   <td className="px-4 py-3 align-middle">
-                    <select
-                      value={item.gst}
-                      onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
+                    <AppSelect
+                      value={String(item.gst)}
+                      onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
+                      options={CN_GST_OPTIONS}
                       className="w-full px-3 h-10 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                    >
-                      <option value="0">0%</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
+                    />
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-foreground text-right align-middle tabular-nums">
                     ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -771,17 +768,17 @@ export function CreditNoteCreate() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">Unit</label>
-                        <select
+                        <AppSelect
                           value={item.unit}
-                          onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                          onChange={(v) => updateLineItem(item.id, 'unit', v)}
+                          options={item.unit && !CN_UNIT_OPTIONS.includes(item.unit) ? [item.unit, ...CN_UNIT_OPTIONS] : CN_UNIT_OPTIONS}
+                          onAddNew={() => {
+                            const custom = window.prompt('Enter the unit (e.g. Ltr, Box, Set):')?.trim();
+                            if (custom) updateLineItem(item.id, 'unit', custom);
+                          }}
+                          addLabel="Add unit"
                           className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                        >
-                          <option>Nos</option>
-                          <option>Hrs</option>
-                          <option>Days</option>
-                          <option>Kgs</option>
-                          <option>Pcs</option>
-                        </select>
+                        />
                       </div>
                     </div>
 
@@ -812,17 +809,12 @@ export function CreditNoteCreate() {
                     {/* GST */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">GST %</label>
-                      <select
-                        value={item.gst}
-                        onChange={(e) => updateLineItem(item.id, 'gst', parseFloat(e.target.value))}
+                      <AppSelect
+                        value={String(item.gst)}
+                        onChange={(v) => updateLineItem(item.id, 'gst', parseFloat(v))}
+                        options={CN_GST_OPTIONS}
                         className="w-full px-4 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
-                      >
-                        <option value="0">0%</option>
-                        <option value="5">5%</option>
-                        <option value="12">12%</option>
-                        <option value="18">18%</option>
-                        <option value="28">28%</option>
-                      </select>
+                      />
                     </div>
 
                     {/* Calculated Amounts */}

@@ -5,6 +5,9 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { deleteForUser, insertForUser, selectForUser, updateForUser } from '../../../lib/auditorData';
 import { extractPanFromGstin, getGstinStateName, normalizeGstin } from '../../../lib/gstin';
+import { AppSelect } from '../common/AppSelect';
+
+const CUSTOMER_TYPES = ['B2B', 'B2C', 'SEZ', 'Export', 'Composition', 'Nil Rated', 'Exempt Supply'];
 
 interface Customer {
   id: string;
@@ -531,20 +534,12 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
                 <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
                   Customer Type <span className="text-destructive">*</span>
                 </label>
-                <select
-                  required
+                <AppSelect
                   value={formData.customerType}
-                  onChange={(e) => handleChange('customerType', e.target.value)}
+                  onChange={(v) => handleChange('customerType', v)}
+                  options={CUSTOMER_TYPES}
                   className="w-full px-3 py-2 border border-violet-300 dark:border-violet-400/30 bg-background rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="B2B">B2B</option>
-                  <option value="B2C">B2C</option>
-                  <option value="SEZ">SEZ</option>
-                  <option value="Export">Export</option>
-                  <option value="Composition">Composition</option>
-                  <option value="Nil Rated">Nil Rated</option>
-                  <option value="Exempt Supply">Exempt Supply</option>
-                </select>
+                />
               </div>
             </div>
           </div>
@@ -738,20 +733,12 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
                     />
                   </FieldRow>
                   <FieldRow label="Customer Type" required>
-                    <select
-                      required
+                    <AppSelect
                       value={formData.customerType}
-                      onChange={(e) => handleChange('customerType', e.target.value)}
+                      onChange={(v) => handleChange('customerType', v)}
+                      options={CUSTOMER_TYPES}
                       className={inputCls}
-                    >
-                      <option value="B2B">B2B</option>
-                      <option value="B2C">B2C</option>
-                      <option value="SEZ">SEZ</option>
-                      <option value="Export">Export</option>
-                      <option value="Composition">Composition</option>
-                      <option value="Nil Rated">Nil Rated</option>
-                      <option value="Exempt Supply">Exempt Supply</option>
-                    </select>
+                    />
                   </FieldRow>
                   <FieldRow label="GSTIN" required hint="15-character GST identification number">
                     <input

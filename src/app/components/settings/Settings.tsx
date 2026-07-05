@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
+import { AppSelect } from '../common/AppSelect';
 
 interface CompanyForm {
   company_name: string;
@@ -875,15 +876,13 @@ function InvoiceSettings({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Taxpayer Type</label>
-            <select
+            <AppSelect
               value={settings.taxpayer_type}
-              onChange={(event) => setSettings({ ...settings, taxpayer_type: event.target.value })}
+              onChange={(v) => setSettings({ ...settings, taxpayer_type: v })}
               disabled={!canEdit}
-              className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <option value="regular">Regular taxpayer</option>
-              <option value="composition">Composition scheme</option>
-            </select>
+              options={[{ value: 'regular', label: 'Regular taxpayer' }, { value: 'composition', label: 'Composition scheme' }]}
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            />
             <p className="text-[11.5px] text-muted-foreground mt-1.5">Choose Composition if you are registered under the GST Composition Scheme.</p>
           </div>
           <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={fieldsDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
@@ -891,16 +890,13 @@ function InvoiceSettings({
           <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
           <div>
             <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Currency</label>
-            <select
+            <AppSelect
               value={settings.currency}
-              onChange={(event) => setSettings({ ...settings, currency: event.target.value })}
+              onChange={(v) => setSettings({ ...settings, currency: v })}
               disabled={fieldsDisabled}
-              className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <option value="INR">INR (₹)</option>
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
-            </select>
+              options={[{ value: 'INR', label: 'INR (₹)' }, { value: 'USD', label: 'USD ($)' }, { value: 'EUR', label: 'EUR (€)' }]}
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            />
           </div>
           <SettingsTextarea label="Terms &amp; Conditions" value={settings.terms} disabled={fieldsDisabled} className="md:col-span-2" onChange={(terms) => setSettings({ ...settings, terms })} />
         </div>
@@ -935,18 +931,13 @@ function TaxSettings({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Default GST Rate</label>
-            <select
-              value={settings.default_gst_rate}
-              onChange={(event) => setSettings({ ...settings, default_gst_rate: Number(event.target.value) })}
+            <AppSelect
+              value={String(settings.default_gst_rate)}
+              onChange={(v) => setSettings({ ...settings, default_gst_rate: Number(v) })}
               disabled={!canEdit}
-              className="kaps-compact-select w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <option value="0">0%</option>
-              <option value="5">5%</option>
-              <option value="12">12%</option>
-              <option value="18">18%</option>
-              <option value="28">28%</option>
-            </select>
+              options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]}
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            />
           </div>
           <SettingsInput label="Default Place of Supply" value={settings.default_place_of_supply} disabled={!canEdit} placeholder="e.g. Karnataka" onChange={(default_place_of_supply) => setSettings({ ...settings, default_place_of_supply })} />
           <label className={`md:col-span-2 flex items-center gap-3 px-4 py-3 rounded-lg border ${settings.enable_reverse_charge ? 'border-violet-500 bg-violet-50/60 dark:bg-violet-500/10' : 'border-violet-200 dark:border-violet-400/25 bg-card'} ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
