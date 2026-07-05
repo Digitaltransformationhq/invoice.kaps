@@ -41,7 +41,14 @@ export function AppSelect({
   const opts = normalize(options);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
-  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [rect, setRect] = useState<{
+    top: number;
+    bottom: number;
+    left: number;
+    width: number;
+    placement: 'below' | 'above';
+    maxHeight: number;
+  } | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,7 +58,22 @@ export function AppSelect({
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    const margin = 8;
+    const gap = 4;
+    const DESIRED = 240; // matches the old max-h-60
+    const spaceBelow = window.innerHeight - r.bottom - margin;
+    const spaceAbove = r.top - margin;
+    // Flip up only when there isn't enough room below AND there's more above.
+    const openAbove = spaceBelow < Math.min(DESIRED, 180) && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(120, Math.min(DESIRED, openAbove ? spaceAbove : spaceBelow));
+    setRect({
+      top: r.bottom + gap,
+      bottom: window.innerHeight - r.top + gap,
+      left: r.left,
+      width: r.width,
+      placement: openAbove ? 'above' : 'below',
+      maxHeight,
+    });
   };
 
   const openMenu = () => {
@@ -131,8 +153,15 @@ export function AppSelect({
       {open && rect && createPortal(
         <div
           ref={menuRef}
-          style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 70 }}
-          className="max-h-60 overflow-auto rounded-lg border border-violet-200 dark:border-violet-400/30 bg-white dark:bg-[#0d0d2a] shadow-xl py-1"
+          style={{
+            position: 'fixed',
+            left: rect.left,
+            width: rect.width,
+            maxHeight: rect.maxHeight,
+            zIndex: 70,
+            ...(rect.placement === 'above' ? { bottom: rect.bottom } : { top: rect.top }),
+          }}
+          className="overflow-auto rounded-lg border border-violet-200 dark:border-violet-400/30 bg-white dark:bg-[#0d0d2a] shadow-xl py-1"
         >
           {opts.length === 0 && !onAddNew && (
             <div className="px-3 py-2 text-sm text-muted-foreground">No options</div>
