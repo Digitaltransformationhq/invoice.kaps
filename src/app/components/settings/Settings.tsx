@@ -880,10 +880,10 @@ function InvoiceSettings({
               value={settings.taxpayer_type}
               onChange={(v) => setSettings({ ...settings, taxpayer_type: v })}
               disabled={!canEdit}
-              options={[{ value: 'regular', label: 'Regular taxpayer' }, { value: 'composition', label: 'Composition scheme' }]}
+              options={[{ value: 'regular', label: 'Regular taxpayer' }, { value: 'composition', label: 'Composition Scheme / Unregistered User' }]}
               className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             />
-            <p className="text-[11.5px] text-muted-foreground mt-1.5">Choose Composition if you are registered under the GST Composition Scheme.</p>
+            <p className="text-[11.5px] text-muted-foreground mt-1.5">Choose Composition Scheme / Unregistered User if you are registered under the GST Composition Scheme or are not registered under GST.</p>
           </div>
           <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={fieldsDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
           <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />

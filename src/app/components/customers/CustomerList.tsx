@@ -505,11 +505,10 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
               </div>
               <div>
                 <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
-                  GSTIN <span className="text-destructive">*</span>
+                  GSTIN
                 </label>
                 <input
                   type="text"
-                  required
                   value={formData.gstin}
                   onChange={(e) => handleChange('gstin', e.target.value)}
                   placeholder="Enter GSTIN"
@@ -740,10 +739,9 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
                       className={inputCls}
                     />
                   </FieldRow>
-                  <FieldRow label="GSTIN" required hint="15-character GST identification number">
+                  <FieldRow label="GSTIN" hint="15-character GST identification number">
                     <input
                       type="text"
-                      required
                       value={formData.gstin}
                       onChange={(e) => handleChange('gstin', e.target.value)}
                       placeholder="22AAAAA0000A1Z5"

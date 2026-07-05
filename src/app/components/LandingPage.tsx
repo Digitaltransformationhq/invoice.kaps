@@ -1401,10 +1401,10 @@ export function LandingPage() {
                         <Field label="Company name" required className="sm:col-span-2">
                           <input type="text" value={signupData.companyName} onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })} className="kaps-input" placeholder="Your Company Pvt Ltd" required />
                         </Field>
-                        <Field label="Taxpayer type" required className="sm:col-span-2" hint="Choose Composition if you are registered under the GST Composition Scheme">
+                        <Field label="Taxpayer type" required className="sm:col-span-2" hint="Choose Composition Scheme / Unregistered User if you are under the GST Composition Scheme or not registered under GST">
                           <select value={signupData.taxpayerType} onChange={(e) => setSignupData({ ...signupData, taxpayerType: e.target.value })} className="kaps-input" required>
                             <option value="regular">Regular taxpayer</option>
-                            <option value="composition">Composition scheme</option>
+                            <option value="composition">Composition Scheme / Unregistered User</option>
                           </select>
                         </Field>
                         <Field label="Company logo" className="sm:col-span-2">
