@@ -762,7 +762,7 @@ export function InvoicePreview({
 
             {/* Amount in Words */}
             <div className="border-b border-foreground p-3 text-xs">
-              <div className="font-bold">Invoice Amount in Words: {numberToWords(grandTotal)}</div>
+              <span className="font-semibold">Invoice Amount in Words:</span> {numberToWords(grandTotal)}
               <div className="text-right mt-2">E. & O.E.</div>
             </div>
 
@@ -841,8 +841,8 @@ export function InvoicePreview({
                     </tr>
                   </tbody>
                 </table>
-                <div className="p-2 border-t border-foreground font-bold">
-                  Tax Amount (in words) : {numberToWords(taxSummaryTotals.tax)}
+                <div className="p-2 border-t border-foreground">
+                  <span className="font-semibold">Tax Amount (in words) :</span> {numberToWords(taxSummaryTotals.tax)}
                 </div>
               </div>
             )}
