@@ -555,11 +555,10 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
-                  Contact Name <span className="text-destructive">*</span>
+                  Contact Name
                 </label>
                 <input
                   type="text"
-                  required
                   value={formData.contact}
                   onChange={(e) => handleChange('contact', e.target.value)}
                   placeholder="Enter contact name"
@@ -568,11 +567,10 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
               </div>
               <div>
                 <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
-                  Email <span className="text-destructive">*</span>
+                  Email
                 </label>
                 <input
                   type="email"
-                  required
                   value={formData.email}
                   onChange={(e) => handleChange('email', e.target.value)}
                   placeholder="Enter email address"
@@ -581,11 +579,10 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
               </div>
               <div>
                 <label className="block text-sm font-medium text-violet-600 dark:text-violet-300 mb-2">
-                  Phone <span className="text-destructive">*</span>
+                  Phone
                 </label>
                 <input
                   type="tel"
-                  required
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
                   placeholder="Enter phone number"
@@ -783,30 +780,27 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
               {/* Contact Information */}
               <FormSection label="Contact Information">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FieldRow label="Contact Name" required>
+                  <FieldRow label="Contact Name">
                     <input
                       type="text"
-                      required
                       value={formData.contact}
                       onChange={(e) => handleChange('contact', e.target.value)}
                       placeholder="Enter contact name"
                       className={inputCls}
                     />
                   </FieldRow>
-                  <FieldRow label="Phone" required>
+                  <FieldRow label="Phone">
                     <input
                       type="tel"
-                      required
                       value={formData.phone}
                       onChange={(e) => handleChange('phone', e.target.value)}
                       placeholder="+91 98765 43210"
                       className={inputCls}
                     />
                   </FieldRow>
-                  <FieldRow label="Email" required className="md:col-span-2">
+                  <FieldRow label="Email" className="md:col-span-2">
                     <input
                       type="email"
-                      required
                       value={formData.email}
                       onChange={(e) => handleChange('email', e.target.value)}
                       placeholder="you@company.com"
