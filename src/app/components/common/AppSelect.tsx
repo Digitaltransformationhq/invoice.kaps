@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Plus, Check } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 
 export type AppSelectOption = { value: string; label: string; disabled?: boolean };
 
@@ -147,11 +147,10 @@ export function AppSelect({
                 if (!o.disabled) choose(o.value);
               }}
               onMouseEnter={() => setHighlight(index)}
-              className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-foreground transition-colors disabled:opacity-50 ${
-                index === highlight ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10'
-              }`}
+              className={`block w-full text-left px-3 py-2 text-sm transition-colors disabled:opacity-50 ${
+                o.value === value ? 'font-semibold text-violet-700 dark:text-violet-300' : 'text-foreground'
+              } ${index === highlight ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10'}`}
             >
-              <Check className={`w-3.5 h-3.5 shrink-0 ${o.value === value ? 'text-violet-600 dark:text-violet-300' : 'opacity-0'}`} />
               <span className="truncate">{o.label}</span>
             </button>
           ))}
