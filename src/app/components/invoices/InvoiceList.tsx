@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router';
-import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2, FileCheck } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { InvoicePreview } from './InvoicePreview';
@@ -347,6 +347,30 @@ export function InvoiceList() {
       item.id === invoice.id ? { ...item, status: 'paid' } : item
     )));
     toast.success(`${invoice.id} marked as paid`);
+    setOpenMenuId(null);
+  };
+
+  const handleCreateInvoice = async (invoice: InvoiceRow) => {
+    const values = { status: 'pending' };
+    const { error } = await updateForUser(user, 'invoices', 'invoices', () =>
+      supabase
+        .from('invoices')
+        .update(values)
+        .eq('id', invoice.dbId),
+      values,
+      { id: invoice.dbId },
+      invoice.id
+    );
+
+    if (error) {
+      toast.error(`Could not create invoice: ${error.message}`);
+      return;
+    }
+
+    setInvoices((currentInvoices) => currentInvoices.map((item) => (
+      item.id === invoice.id ? { ...item, status: 'pending' } : item
+    )));
+    toast.success(`${invoice.id} created`);
     setOpenMenuId(null);
   };
 
@@ -1004,7 +1028,15 @@ export function InvoiceList() {
               <Copy className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm text-foreground">Duplicate</span>
             </button>
-            {invoice.status !== 'paid' && (
+            {invoice.status === 'draft' ? (
+              <button
+                onClick={() => handleCreateInvoice(invoice)}
+                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors text-left"
+              >
+                <FileCheck className="w-4 h-4 text-accent" />
+                <span className="text-sm text-foreground">{isComposition ? 'Create Bill of Supply' : 'Create Invoice'}</span>
+              </button>
+            ) : invoice.status !== 'paid' && (
               <button
                 onClick={() => handleMarkPaid(invoice)}
                 className="w-full flex items-center gap-2 px-4 py-2 hover:bg-success/10 transition-colors text-left"
