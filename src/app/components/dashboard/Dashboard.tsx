@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { ArrowUpRight, ArrowDownRight, FileText, IndianRupee, Clock, Plus } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, FileText, IndianRupee, Clock, Plus, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
@@ -158,8 +158,8 @@ export function Dashboard() {
           <h3 className="text-[15px] font-semibold text-foreground tracking-tight">{isComposition ? 'Recent Bills of Supply' : 'Recent Invoices'}</h3>
           <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wider uppercase bg-violet-100 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300">Last 5</span>
         </div>
-        <Link to="/app/invoices" className="text-[12.5px] font-medium text-accent hover:text-accent/80 transition-colors">
-          View all →
+        <Link to="/app/invoices" className="inline-flex items-center gap-0.5 text-[12.5px] font-medium text-accent hover:text-accent/80 transition-colors">
+          View all <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
