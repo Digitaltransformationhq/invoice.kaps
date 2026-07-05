@@ -841,7 +841,7 @@ export function InvoicePreview({
                     </tr>
                   </tbody>
                 </table>
-                <div className="p-2 border-t border-foreground">
+                <div className="p-2 border-t border-foreground text-xs">
                   <span className="font-semibold">Tax Amount (in words) :</span> {numberToWords(taxSummaryTotals.tax)}
                 </div>
               </div>
