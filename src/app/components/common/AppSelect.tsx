@@ -161,30 +161,32 @@ export function AppSelect({
             zIndex: 70,
             ...(rect.placement === 'above' ? { bottom: rect.bottom } : { top: rect.top }),
           }}
-          className="overflow-auto rounded-lg border border-violet-200 dark:border-violet-400/30 bg-white dark:bg-[#0d0d2a] shadow-xl py-1"
+          className="flex flex-col overflow-hidden rounded-lg border border-violet-200 dark:border-violet-400/30 bg-white dark:bg-[#0d0d2a] shadow-xl"
         >
-          {opts.length === 0 && !onAddNew && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No options</div>
-          )}
-          {opts.map((o, index) => (
-            <button
-              key={o.value}
-              type="button"
-              disabled={o.disabled}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                if (!o.disabled) choose(o.value);
-              }}
-              onMouseEnter={() => setHighlight(index)}
-              className={`block w-full text-left px-3 py-2 text-sm transition-colors disabled:opacity-50 ${
-                o.value === value ? 'font-semibold text-violet-700 dark:text-violet-300' : 'text-foreground'
-              } ${index === highlight ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10'}`}
-            >
-              <span className="truncate">{o.label}</span>
-            </button>
-          ))}
+          <div className="min-h-0 flex-1 overflow-auto py-1">
+            {opts.length === 0 && !onAddNew && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">No options</div>
+            )}
+            {opts.map((o, index) => (
+              <button
+                key={o.value}
+                type="button"
+                disabled={o.disabled}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  if (!o.disabled) choose(o.value);
+                }}
+                onMouseEnter={() => setHighlight(index)}
+                className={`block w-full text-left px-3 py-2 text-sm transition-colors disabled:opacity-50 ${
+                  o.value === value ? 'font-semibold text-violet-700 dark:text-violet-300' : 'text-foreground'
+                } ${index === highlight ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10'}`}
+              >
+                <span className="truncate">{o.label}</span>
+              </button>
+            ))}
+          </div>
           {onAddNew && (
-            <div className="sticky bottom-0 border-t border-violet-100 dark:border-violet-400/15 bg-white dark:bg-[#0d0d2a]">
+            <div className="shrink-0 border-t border-violet-100 dark:border-violet-400/15">
               <button
                 type="button"
                 onMouseDown={(e) => {
