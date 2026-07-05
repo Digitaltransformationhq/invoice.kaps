@@ -21,6 +21,7 @@ interface InvoiceRow {
   dueDate: string;
   amount: number;
   status: string;
+  isManualNumber?: boolean;
   customerType?: string;
   billType?: string;
   placeOfSupply?: string;
@@ -110,6 +111,7 @@ export function InvoiceList() {
       dueDate: formatDate(invoice.due_date),
       amount: Number(invoice.total_amount || 0),
       status: invoice.status || 'draft',
+      isManualNumber: Boolean(invoice.is_manual_number),
       customerType: invoice.customer_type || customer?.customer_type || '',
       billType: derivedBillType,
       placeOfSupply: invoice.place_of_supply || '',
@@ -142,6 +144,7 @@ export function InvoiceList() {
         due_date,
         total_amount,
         status,
+        is_manual_number,
         customer_type,
         bill_type,
         place_of_supply,
@@ -182,7 +185,10 @@ export function InvoiceList() {
       invoice.customerDetails?.gstin?.toLowerCase().includes(normalizedSearch) ||
       invoice.customerDetails?.phone?.toLowerCase().includes(normalizedSearch) ||
       invoice.customerDetails?.email?.toLowerCase().includes(normalizedSearch);
-    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'all' ? true :
+      statusFilter === 'manual' ? Boolean(invoice.isManualNumber) :
+      invoice.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -822,6 +828,7 @@ export function InvoiceList() {
                 <option value="pending">Pending</option>
                 <option value="paid">Paid</option>
                 <option value="overdue">Overdue</option>
+                <option value="manual">Manual Invoice Number</option>
               </select>
             </label>
             {(statusFilter !== 'all' || searchQuery) && (
