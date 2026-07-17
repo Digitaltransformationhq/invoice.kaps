@@ -836,15 +836,16 @@ begin
 
   elsif p_action = 'insert' and p_resource = 'invoices' then
     insert into public.invoices (
-      company_id, customer_id, invoice_number, invoice_date, customer_type, bill_type,
+      company_id, customer_id, invoice_number, invoice_date, due_date, customer_type, bill_type,
       place_of_supply, reverse_charge, po_number, po_date, vehicle_number, transport_mode,
-      remarks, subtotal, cgst, sgst, igst, total_tax, total_amount, paid_amount, status,
+      remarks, terms, subtotal, cgst, sgst, igst, total_tax, total_amount, paid_amount, status,
       is_manual_number, created_by
     ) values (
       v_auditor.company_id,
       nullif(v_record->>'customer_id', '')::uuid,
       v_record->>'invoice_number',
       (v_record->>'invoice_date')::date,
+      nullif(v_record->>'due_date', '')::date,
       v_record->>'customer_type',
       v_record->>'bill_type',
       nullif(v_record->>'place_of_supply', ''),
@@ -854,6 +855,7 @@ begin
       nullif(v_record->>'vehicle_number', ''),
       nullif(v_record->>'transport_mode', ''),
       nullif(v_record->>'remarks', ''),
+      nullif(v_record->>'terms', ''),
       coalesce((v_record->>'subtotal')::numeric, 0),
       coalesce((v_record->>'cgst')::numeric, 0),
       coalesce((v_record->>'sgst')::numeric, 0),

@@ -434,6 +434,11 @@ export function Settings() {
       invoice_prefix: settings.invoice_prefix.trim() || 'INV',
       invoice_next_number: Number(settings.invoice_next_number) || 1,
       default_due_days: Number(settings.default_due_days) || 15,
+      // Round-tripped, not editable. A GST tax invoice is denominated in INR,
+      // and the whole app (CGST/SGST/IGST, HSN/SAC, GSTR-1, amount-in-words in
+      // Lakh/Crore) is built on that, so the currency picker was removed rather
+      // than left offering USD/EUR it could not honour. The column and the RPC
+      // signature stay as they are; whatever is stored is written back intact.
       currency: settings.currency,
       terms: settings.terms.trim() || null,
       default_gst_rate: Number(settings.default_gst_rate) || 0,
@@ -840,7 +845,10 @@ function InvoiceSettings({
   onToggleEnabled: (enabled: boolean) => void;
   onSave: () => void;
 }) {
-  const fieldsDisabled = !canEdit || !enabled;
+  // The toggle governs the prefix and nothing else. The start number, due days
+  // and terms each stand on their own — someone who wants unprefixed numbers
+  // still needs to pick the number they start at and when their bills fall due.
+  const prefixDisabled = !canEdit || !enabled;
 
   return (
     <div className="space-y-6">
@@ -851,8 +859,8 @@ function InvoiceSettings({
           <div className="min-w-0">
             <div className="text-[14px] font-semibold text-foreground">Use these invoice defaults</div>
             <p className="text-[12.5px] text-muted-foreground mt-0.5">
-              When on, new invoices use the prefix and next number below. When off, auto-generated
-              numbers are a plain sequence starting from 1.
+              When on, auto-generated invoice numbers carry the prefix below — INV-501. When off,
+              they are just the number — 501. Either way they start from the next number below.
             </p>
           </div>
           <button
@@ -885,20 +893,33 @@ function InvoiceSettings({
             />
             <p className="text-[11.5px] text-muted-foreground mt-1.5">Choose Composition Scheme / Unregistered User if you are registered under the GST Composition Scheme or are not registered under GST.</p>
           </div>
-          <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={fieldsDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
-          <SettingsInput label="Next Invoice Number" type="number" value={String(settings.invoice_next_number)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })} />
-          <SettingsInput label="Default Due Days" type="number" value={String(settings.default_due_days)} disabled={fieldsDisabled} inputClassName="tabular-nums" onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })} />
-          <div>
-            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Currency</label>
-            <AppSelect
-              value={settings.currency}
-              onChange={(v) => setSettings({ ...settings, currency: v })}
-              disabled={fieldsDisabled}
-              options={[{ value: 'INR', label: 'INR (₹)' }, { value: 'USD', label: 'USD ($)' }, { value: 'EUR', label: 'EUR (€)' }]}
-              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
-            />
-          </div>
-          <SettingsTextarea label="Terms &amp; Conditions" value={settings.terms} disabled={fieldsDisabled} className="md:col-span-2" onChange={(terms) => setSettings({ ...settings, terms })} />
+          <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={prefixDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
+          <SettingsInput
+            label="Next Invoice Number"
+            type="number"
+            value={String(settings.invoice_next_number)}
+            disabled={!canEdit}
+            inputClassName="tabular-nums"
+            hint="The number your next invoice will use, with or without the prefix. Moving from other billing software? Enter the number after your last bill there — e.g. 501 if it ended at 500 — and numbering carries on from it. Once you go past this number, it continues from your highest invoice."
+            onChange={(value) => setSettings({ ...settings, invoice_next_number: Number(value) })}
+          />
+          <SettingsInput
+            label="Default Due Days"
+            type="number"
+            value={String(settings.default_due_days)}
+            disabled={!canEdit}
+            inputClassName="tabular-nums"
+            hint="How long a new invoice has to be paid. Sets its due date to this many days after the document date — you can still change the date on any individual invoice."
+            onChange={(value) => setSettings({ ...settings, default_due_days: Number(value) })}
+          />
+          <SettingsTextarea
+            label="Terms &amp; Conditions"
+            value={settings.terms}
+            disabled={!canEdit}
+            className="md:col-span-2"
+            hint="Printed on new invoices, and copied onto each one as it is created — editing this never changes an invoice you have already issued."
+            onChange={(terms) => setSettings({ ...settings, terms })}
+          />
         </div>
         {canEdit && (
           <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">
@@ -1082,6 +1103,7 @@ function SettingsInput({
   className = '',
   inputClassName = '',
   placeholder,
+  hint,
 }: {
   label: string;
   value: string;
@@ -1091,6 +1113,7 @@ function SettingsInput({
   className?: string;
   inputClassName?: string;
   placeholder?: string;
+  hint?: string;
 }) {
   return (
     <div className={className}>
@@ -1103,6 +1126,7 @@ function SettingsInput({
         placeholder={placeholder}
         className={`w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed ${inputClassName}`}
       />
+      {hint && <p className="text-[11.5px] text-muted-foreground mt-1.5">{hint}</p>}
     </div>
   );
 }
@@ -1113,12 +1137,14 @@ function SettingsTextarea({
   onChange,
   disabled = false,
   className = '',
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
+  hint?: string;
 }) {
   return (
     <div className={className}>
@@ -1130,6 +1156,7 @@ function SettingsTextarea({
         disabled={disabled}
         className="w-full px-3.5 py-2.5 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none disabled:opacity-60 disabled:cursor-not-allowed"
       />
+      {hint && <p className="text-[11.5px] text-muted-foreground mt-1.5">{hint}</p>}
     </div>
   );
 }

@@ -109,6 +109,7 @@ export function InvoiceList() {
       date: formatDate(invoice.invoice_date),
       rawDate: invoice.invoice_date || '',
       dueDate: formatDate(invoice.due_date),
+      rawDueDate: invoice.due_date || '',
       amount: Number(invoice.total_amount || 0),
       status: invoice.status || 'draft',
       isManualNumber: Boolean(invoice.is_manual_number),
@@ -121,6 +122,7 @@ export function InvoiceList() {
       vehicleNo: invoice.vehicle_number || '',
       transportMode: invoice.transport_mode || '',
       remarks: invoice.remarks || '',
+      terms: invoice.terms || '',
       lineItems,
     };
   };
@@ -154,6 +156,7 @@ export function InvoiceList() {
         vehicle_number,
         transport_mode,
         remarks,
+        terms,
         customers(id, name, customer_type, gstin, contact_name, email, phone, city, state, address),
         invoice_items(id, item_name, description, hsn, quantity, unit, rate, discount_percent, gst_rate, total_amount, sort_order, items(type))
       `)
@@ -1079,6 +1082,7 @@ export function InvoiceList() {
           lineItems={selectedInvoice.lineItems}
           invoiceNumber={selectedInvoice.id}
           invoiceDate={selectedInvoice.rawDate}
+          dueDate={selectedInvoice.rawDueDate}
           customer={selectedInvoice.customerDetails}
           customerType={selectedInvoice.customerType}
           billType={selectedInvoice.billType}
@@ -1089,6 +1093,7 @@ export function InvoiceList() {
           vehicleNo={selectedInvoice.vehicleNo}
           transportMode={selectedInvoice.transportMode}
           remarks={selectedInvoice.remarks}
+          terms={selectedInvoice.terms}
         />
       )}
 

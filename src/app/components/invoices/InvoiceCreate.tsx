@@ -9,7 +9,27 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { insertForUser, selectForUser, updateForUser, deleteForUser } from '../../../lib/auditorData';
 import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
+import { useInvoiceDefaults } from '../../../lib/useInvoiceDefaults';
 import { AppSelect } from '../common/AppSelect';
+
+// Today as yyyy-mm-dd in the user's own timezone. Built from the local parts
+// rather than toISOString(), which is UTC and would still read as "yesterday"
+// through the evening in IST.
+const todayIso = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+};
+
+// Shift a yyyy-mm-dd date by whole days. Parsed as UTC midnight and shifted in
+// UTC so the result can never land on the wrong day via a timezone offset.
+const addDays = (isoDate: string, days: number) => {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
 
 // Built-in line-item units. Users can add their own via the "+ Add unit…"
 // option in the Unit dropdown; a custom value is kept per line item.
@@ -69,6 +89,8 @@ export function InvoiceCreate() {
   const { user } = useAuth();
   // Composition dealers issue a "Bill of Supply" with no tax.
   const { isComposition } = useTaxpayerType();
+  // Company defaults that seed a new invoice: due days and Terms & Conditions.
+  const { dueDays, terms: defaultTerms, isLoaded: defaultsLoaded } = useInvoiceDefaults();
   const [showPreview, setShowPreview] = useState(false);
   const [previewAutoSend, setPreviewAutoSend] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -86,7 +108,14 @@ export function InvoiceCreate() {
   const [sellerState, setSellerState] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [isManualInvoiceNumber, setIsManualInvoiceNumber] = useState(false);
-  const [invoiceDate, setInvoiceDate] = useState('2026-05-12');
+  const [invoiceDate, setInvoiceDate] = useState(todayIso);
+  const [dueDate, setDueDate] = useState('');
+  // Once the user sets a due date by hand, stop re-deriving it from the invoice
+  // date. Edit mode sets this too, so opening an old invoice never silently
+  // moves the due date its customer was given.
+  const dueDateTouched = useRef(false);
+  const [terms, setTerms] = useState('');
+  const termsTouched = useRef(false);
   const [placeOfSupply, setPlaceOfSupply] = useState('Auto from customer');
   const [reverseCharge, setReverseCharge] = useState(false);
   const [poNumber, setPoNumber] = useState('');
@@ -271,6 +300,13 @@ export function InvoiceCreate() {
     setInvoiceNumber(invoice.invoice_number || '');
     setIsManualInvoiceNumber(true);
     if (invoice.invoice_date) setInvoiceDate(invoice.invoice_date);
+    // Whatever this invoice was issued with wins over the current company
+    // defaults — including empty, for invoices predating these fields. Marking
+    // them touched stops the seeding effects from inventing values on top.
+    setDueDate(invoice.due_date || '');
+    dueDateTouched.current = true;
+    setTerms(invoice.terms || '');
+    termsTouched.current = true;
     setPlaceOfSupply(invoice.place_of_supply || 'Auto from customer');
     setReverseCharge(Boolean(invoice.reverse_charge));
     setPoNumber(invoice.po_number || '');
@@ -536,41 +572,65 @@ export function InvoiceCreate() {
     }
   };
 
-  // The number a brand-new invoice would get, based on the current settings.
-  const computeAutoInvoiceNumber = async () => {
-    const defaults = await getInvoiceDefaults();
-
-    // Count only the auto-numbered invoices for this company. Manually-numbered
-    // invoices are excluded so they never push the automatic sequence forward —
-    // the next auto number always continues from the last *automatic* invoice.
-    let existingCount = 0;
+  // Every invoice number this company's automatic sequence has issued.
+  // Manually-numbered invoices are excluded so they never push the automatic
+  // sequence forward — it always continues from the last *automatic* invoice.
+  //
+  // The full list is fetched rather than just the maximum: the numbers are
+  // strings, so the database would order "INV-9" above "INV-10".
+  const fetchAutoInvoiceNumbers = async (): Promise<string[]> => {
     if (user?.role === 'auditor') {
       const { data, error } = await selectForUser<any[]>(user, 'invoices', 'invoices', () =>
         supabase
           .from('invoices')
-          .select('id')
+          .select('invoice_number, is_manual_number')
           .eq('company_id', user?.company_id)
       );
       if (error) throw error;
-      existingCount = (data || []).filter((row: any) => !row?.is_manual_number).length;
-    } else {
-      const { count, error } = await supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('company_id', user?.company_id)
-        .eq('is_manual_number', false);
-      if (error) throw error;
-      existingCount = count || 0;
+      return (data || [])
+        .filter((row: any) => !row?.is_manual_number)
+        .map((row: any) => String(row?.invoice_number ?? ''));
     }
 
-    // Invoice Defaults off → plain sequence starting from 1.
-    if (!defaults.enabled) {
-      return String(existingCount + 1);
-    }
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .eq('company_id', user?.company_id)
+      .eq('is_manual_number', false);
+    if (error) throw error;
+    return (data || []).map((row: any) => String(row?.invoice_number ?? ''));
+  };
 
-    // Invoice Defaults on → configured prefix + (starting number offset by
-    // however many auto-numbered invoices already exist).
-    return `${defaults.prefix}-${existingCount + defaults.nextNumber}`;
+  // The number a brand-new invoice would get, based on the current settings.
+  const computeAutoInvoiceNumber = async () => {
+    const defaults = await getInvoiceDefaults();
+    const numbers = await fetchAutoInvoiceNumbers();
+
+    // Both shapes the sequence produces end in the counter: "INV-42" when the
+    // defaults are on, plain "42" when they're off. A prefix containing digits
+    // is safe — only the trailing run is read.
+    const highestIssued = numbers.reduce((highest, number) => {
+      const match = /(\d+)\s*$/.exec(number);
+      const value = match ? Number(match[1]) : 0;
+      return Number.isFinite(value) && value > highest ? value : highest;
+    }, 0);
+
+    // "Next Invoice Number" means exactly that — the next invoice takes it —
+    // until the sequence passes it, after which numbering carries on from the
+    // highest number actually issued.
+    //
+    // This is derived from the highest issued number rather than the row count
+    // so that a company migrating from other billing software can set 501 at
+    // any point and get 501 (the count would have given them 501 + however many
+    // invoices they'd already made). It also stops a deletion from rewinding
+    // the sequence onto a number that has already gone out to a customer.
+    //
+    // The starting number is deliberately NOT gated on the defaults toggle —
+    // only the prefix is. Someone migrating in mid-sequence needs to keep their
+    // numbering whether or not they want a prefix on it.
+    const next = Math.max(defaults.nextNumber, highestIssued + 1);
+
+    return defaults.enabled ? `${defaults.prefix}-${next}` : String(next);
   };
 
   const getNextInvoiceNumber = async () => {
@@ -595,6 +655,22 @@ export function InvoiceCreate() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId, isManualInvoiceNumber, user?.company_id]);
+
+  // Seed the due date from the invoice date + the company's Default Due Days,
+  // and re-derive whenever the invoice date moves — until the user sets it
+  // themselves. Skipped in edit mode, where the saved due date is authoritative.
+  useEffect(() => {
+    if (editId || dueDateTouched.current || !defaultsLoaded || !invoiceDate) return;
+    setDueDate(addDays(invoiceDate, dueDays));
+  }, [editId, invoiceDate, dueDays, defaultsLoaded]);
+
+  // Seed the Terms & Conditions from the company default. The invoice keeps its
+  // own copy from here on, so changing the company terms later never restates
+  // an invoice that has already been issued.
+  useEffect(() => {
+    if (editId || termsTouched.current || !defaultsLoaded) return;
+    setTerms(defaultTerms);
+  }, [editId, defaultTerms, defaultsLoaded]);
 
   const saveInvoice = async (status: string) => {
     if (!user?.company_id) {
@@ -622,6 +698,7 @@ export function InvoiceCreate() {
           customer_id: selectedCustomer || null,
           invoice_number: nextInvoiceNumber,
           invoice_date: invoiceDate,
+          due_date: dueDate || null,
           customer_type: selectedCustomerType,
           bill_type: derivedBillType,
           place_of_supply: supplyState || null,
@@ -631,6 +708,7 @@ export function InvoiceCreate() {
           vehicle_number: vehicleNo.trim() || null,
           transport_mode: transportMode.trim() || null,
           remarks: remarks.trim() || null,
+          terms: terms.trim() || null,
           subtotal,
           cgst,
           sgst,
@@ -777,7 +855,15 @@ export function InvoiceCreate() {
     setSelectedCustomer('');
     setIsManualInvoiceNumber(false);
     setInvoiceNumber('');
-    setInvoiceDate('2026-05-12');
+    // Re-seed directly rather than leaning on the seeding effects: if today's
+    // date equals the date already in the form, none of their dependencies
+    // change, they never re-run, and the next invoice opens with no due date.
+    const freshDate = todayIso();
+    dueDateTouched.current = false;
+    termsTouched.current = false;
+    setInvoiceDate(freshDate);
+    setDueDate(addDays(freshDate, dueDays));
+    setTerms(defaultTerms);
     setPlaceOfSupply('Auto from customer');
     setReverseCharge(false);
     setPoNumber('');
@@ -1071,7 +1157,7 @@ export function InvoiceCreate() {
                 )}
               </div>
 
-              {/* Document Date + Place of Supply */}
+              {/* Document Date + Due Date */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-semibold text-foreground mb-2">Document Date</label>
@@ -1082,6 +1168,29 @@ export function InvoiceCreate() {
                     className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                   />
                 </div>
+                <div>
+                  <label className="block text-[14px] font-semibold text-foreground mb-2">Due Date</label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => {
+                      dueDateTouched.current = true;
+                      setDueDate(e.target.value);
+                    }}
+                    className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                  />
+                  {!isEditMode && (
+                    <p className="text-[12px] text-muted-foreground mt-1.5">
+                      {dueDateTouched.current
+                        ? 'Set by hand — it no longer follows the document date.'
+                        : `${dueDays} days after the document date, from your Invoice Settings.`}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Place of Supply */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-semibold text-foreground mb-2">Place of Supply</label>
                   <AppSelect
@@ -1520,13 +1629,30 @@ export function InvoiceCreate() {
               <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">5</div>
               <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Notes</h3>
             </div>
+            <label className="block text-[14px] font-semibold text-foreground mb-2">Remarks / Narration</label>
             <textarea
-              rows={6}
+              rows={4}
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="Add any additional notes or remarks for this invoice…"
               className="w-full px-3.5 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
             />
+
+            <label className="block text-[14px] font-semibold text-foreground mb-2 mt-4">Terms &amp; Conditions</label>
+            <textarea
+              rows={3}
+              value={terms}
+              onChange={(e) => {
+                termsTouched.current = true;
+                setTerms(e.target.value);
+              }}
+              placeholder="Terms printed on this invoice…"
+              className="w-full px-3.5 py-3 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition resize-none"
+            />
+            <p className="text-[12px] text-muted-foreground mt-1.5">
+              Starts from your Invoice Settings. This invoice keeps whatever you save here — changing
+              the company terms later won't alter it.
+            </p>
           </div>
 
           {/* Summary */}
@@ -1617,6 +1743,7 @@ export function InvoiceCreate() {
         lineItems={previewLineItems}
         invoiceNumber={invoiceNumber}
         invoiceDate={invoiceDate}
+        dueDate={dueDate}
         customer={selectedCustomerDetails}
         customerType={selectedCustomerType}
         billType={derivedBillType}
@@ -1628,6 +1755,7 @@ export function InvoiceCreate() {
         vehicleNo={vehicleNo}
         transportMode={transportMode}
         remarks={remarks}
+        terms={terms}
       />
 
       {/* Success Modal */}
