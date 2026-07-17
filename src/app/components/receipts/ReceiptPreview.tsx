@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabase';
 import { getGstinStateName } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
+import { usePdfActions } from '../../../lib/usePdfActions';
 
 interface Customer {
   id?: string;
@@ -68,6 +69,9 @@ export function ReceiptPreview({
   });
 
   const [isSendingMail, setIsSendingMail] = useState(false);
+  const { printAreaRef, isExporting, handlePrint, handleDownloadPdf } = usePdfActions(
+    () => `${receiptNumber || 'receipt'}.pdf`
+  );
 
   useEffect(() => {
     if (!isOpen || !user?.company_id) return;
@@ -197,16 +201,18 @@ export function ReceiptPreview({
           <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">Preview</h2>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              onClick={handleDownloadPdf}
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               title="Download PDF"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline text-sm">Download PDF</span>
             </button>
             <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              onClick={handlePrint}
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               title="Print"
             >
               <Printer className="w-4 h-4" />
@@ -228,8 +234,8 @@ export function ReceiptPreview({
         </div>
 
         {/* Receipt Content */}
-        <div className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-          <div className="invoice-print-page receipt-print-page bg-white border-2 border-foreground mx-auto max-w-[210mm]" style={{ fontFamily: 'Arial, sans-serif' }}>
+        <div ref={printAreaRef} className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+          <div className="invoice-print-page bg-white border-2 border-foreground mx-auto max-w-[210mm]" style={{ fontFamily: 'Arial, sans-serif' }}>
             {/* Header */}
             <div className="text-right px-4 pt-2 text-xs">
               <div className="font-semibold">PAYMENT RECEIPT</div>

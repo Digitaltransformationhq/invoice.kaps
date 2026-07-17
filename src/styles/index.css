@@ -128,12 +128,21 @@
     padding: 0 !important;
   }
 
+  /* Pin the document to the exact A4 printable box (210mm paper less the 6mm
+   * @page margin on each side). A percentage width here would resolve against
+   * whatever the absolutely-positioned ancestor happens to measure, which is
+   * not necessarily the page. `printFit` measures against this same number.
+   *
+   * `transform: none` neutralises the scale fallback the screen rules below
+   * apply on old Firefox. `zoom` is deliberately NOT reset — `printFit` sets it
+   * per page to fit the sheet, and an !important reset would override it. */
   .invoice-print-page {
-    width: 100% !important;
-    max-width: none !important;
+    width: 198mm !important;
+    max-width: 198mm !important;
     margin: 0 auto !important;
     box-sizing: border-box !important;
     overflow: visible !important;
+    transform: none !important;
     break-after: page;
     break-inside: avoid;
     page-break-after: always;
@@ -156,6 +165,9 @@
     page-break-inside: avoid;
   }
 
+  /* Compaction, applied unconditionally when printing — see the note on the
+   * duplicate `.print-compact` block below. The two blocks MUST stay in sync;
+   * they are the same declarations reached two different ways. */
   .invoice-print-page .p-6 {
     padding: 2.6mm 3mm !important;
   }
@@ -191,22 +203,64 @@
     padding-top: 1mm !important;
   }
 
-  .invoice-print-page {
-    zoom: 1 !important;
-    transform: none !important;
-  }
-
-  /* The receipt stacks ~9 full-width sections, which runs slightly taller than
-   * one A4 page. Scale the whole receipt down on print so it always fits on a
-   * single page. Scoped to receipts only — invoices print at full scale. */
-  .invoice-print-page.receipt-print-page {
-    zoom: 0.78 !important;
-  }
-
   .invoice-print-page .py-1 {
     padding-top: 0.8mm !important;
     padding-bottom: 0.8mm !important;
   }
+}
+
+/* Print compaction: the on-screen padding scale (Tailwind's rem-based p-6, p-4,
+ * …) is far too generous for paper and pushes each copy past a single sheet.
+ *
+ * This duplicates the `@media print` block above on purpose, and the two must
+ * stay in sync. The copy above is what actually prints, and it is deliberately
+ * NOT conditional on JS: when compaction depended solely on the class below and
+ * `printFit` didn't run, printing silently fell back to the roomy screen
+ * padding and overflowed far worse than the bug being fixed.
+ *
+ * This copy exists only so `printFit` can apply the print padding on screen and
+ * measure the real printed height before the browser paginates — inside
+ * `@media print` those metrics are unreachable, which is why fitting used to
+ * rely on a hardcoded guess. `printFit` adds `print-compact` on `beforeprint`
+ * and strips it on `afterprint`, so the preview the user sees is untouched. */
+.invoice-print-page.print-compact .p-6 {
+  padding: 2.6mm 3mm !important;
+}
+
+.invoice-print-page.print-compact .py-3 {
+  padding-top: 1.4mm !important;
+  padding-bottom: 1.4mm !important;
+}
+
+.invoice-print-page.print-compact .p-4 {
+  padding: 3mm !important;
+}
+
+.invoice-print-page.print-compact .p-3 {
+  padding: 2.4mm !important;
+}
+
+.invoice-print-page.print-compact .p-2 {
+  padding: 1.6mm 2mm !important;
+}
+
+.invoice-print-page.print-compact .px-4 {
+  padding-left: 2mm !important;
+  padding-right: 2mm !important;
+}
+
+.invoice-print-page.print-compact .py-2 {
+  padding-top: 1.8mm !important;
+  padding-bottom: 1.8mm !important;
+}
+
+.invoice-print-page.print-compact .pt-2 {
+  padding-top: 1mm !important;
+}
+
+.invoice-print-page.print-compact .py-1 {
+  padding-top: 0.8mm !important;
+  padding-bottom: 0.8mm !important;
 }
 
 /* Screen-only: shrink the A4 invoice page so it fits inside the preview

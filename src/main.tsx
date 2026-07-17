@@ -1,5 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import './styles/index.css';
+import { installPrintFit } from './lib/printFit';
+
+// Global rather than per-modal: only one preview is mounted at a time (each
+// returns null while closed), so this sees exactly the pages being printed.
+installPrintFit();
 
 const rootElement = document.getElementById('root');
 let hasRenderedApp = false;

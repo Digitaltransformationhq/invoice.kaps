@@ -47,6 +47,14 @@ export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob
     clone.style.width = `${A4_WIDTH_PX}px`;
     clone.style.maxWidth = 'none';
     clone.style.margin = '0';
+    // Render with the paper padding scale rather than the screen one. Without
+    // this the copy rasterises tall and narrow, and fitting it to A4 below
+    // shrinks it to ~80% width with wide empty margins. The rules are keyed on
+    // a class (not `@media print`) precisely so they can be applied here.
+    clone.classList.add('print-compact');
+    // `printFit` may have left an inline fit-to-sheet zoom on the source page,
+    // which cloneNode copies. This render does its own fitting, so drop it.
+    clone.style.zoom = '1';
     holder.appendChild(clone);
     document.body.appendChild(holder);
 
@@ -81,6 +89,67 @@ export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob
   }
 
   return pdf.output('blob');
+}
+
+// Print by handing the browser a PDF that is already fitted to A4, instead of
+// calling window.print() on the live DOM.
+//
+// The DOM path needs Chrome to paginate an absolutely-positioned, visibility-
+// hacked subtree against `@page` while honouring a `zoom` scale — and it kept
+// breaking each copy onto a second sheet. A pre-fitted PDF removes pagination
+// from the equation: the page count is decided by jsPDF, not the print engine.
+//
+// Chrome/Edge print a PDF in a hidden iframe happily. Anything that can't
+// (notably Firefox, which won't print a cross-document PDF frame) falls back to
+// opening the PDF in a tab so the user can print it from the viewer.
+export async function printPdfBlob(blob: Blob): Promise<'printed' | 'opened'> {
+  const url = URL.createObjectURL(blob);
+
+  const printed = await new Promise<boolean>((resolve) => {
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    // If the frame never loads or the viewer refuses to print, don't leave the
+    // user staring at nothing — fall through to the tab.
+    const timer = window.setTimeout(() => resolve(false), 4000);
+
+    frame.onload = () => {
+      try {
+        const win = frame.contentWindow;
+        if (!win) throw new Error('no frame window');
+        win.focus();
+        win.print();
+        window.clearTimeout(timer);
+        resolve(true);
+      } catch {
+        window.clearTimeout(timer);
+        resolve(false);
+      }
+    };
+    frame.onerror = () => {
+      window.clearTimeout(timer);
+      resolve(false);
+    };
+
+    frame.src = url;
+    document.body.appendChild(frame);
+
+    // The iframe must outlive this call — removing it cancels the print dialog.
+    // Chrome keeps the dialog tied to the frame, so it's cleaned up on unload.
+    window.addEventListener(
+      'beforeunload',
+      () => {
+        frame.remove();
+        URL.revokeObjectURL(url);
+      },
+      { once: true }
+    );
+  });
+
+  if (printed) return 'printed';
+
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return 'opened';
 }
 
 // Share the PDF via the native share sheet; fall back to a plain download when

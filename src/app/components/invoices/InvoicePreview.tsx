@@ -5,7 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
-import { generateInvoicePdfBlob } from '../../../lib/invoicePdf';
+import { generateInvoicePdfBlob, printPdfBlob } from '../../../lib/invoicePdf';
 
 interface LineItem {
   id: string;
@@ -40,6 +40,7 @@ interface InvoicePreviewProps {
   lineItems: LineItem[];
   invoiceNumber: string;
   invoiceDate: string;
+  dueDate?: string;
   customer?: Customer | null;
   customerType?: string;
   billType?: string;
@@ -51,6 +52,9 @@ interface InvoicePreviewProps {
   vehicleNo?: string;
   transportMode?: string;
   remarks?: string;
+  // The terms this invoice was issued with — snapshotted on the invoice row,
+  // not read live from company settings. See supabase_invoice_terms.sql.
+  terms?: string;
   autoOpenSend?: boolean;
 }
 
@@ -61,6 +65,7 @@ export function InvoicePreview({
   lineItems,
   invoiceNumber,
   invoiceDate,
+  dueDate,
   customer,
   customerType,
   billType,
@@ -72,6 +77,7 @@ export function InvoicePreview({
   vehicleNo,
   transportMode,
   remarks,
+  terms,
   autoOpenSend = false,
 }: InvoicePreviewProps) {
   const { user } = useAuth();
@@ -315,6 +321,62 @@ export function InvoicePreview({
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
+  const pdfFileName = () => `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
+
+  // The PDF the send sheet pre-builds, or a fresh one. Print and Download go
+  // through here rather than window.print() on the live DOM: jsPDF fits each
+  // copy to a single A4 page, so nothing depends on the print engine paginating
+  // the preview's absolutely-positioned subtree correctly.
+  const buildInvoicePdf = async (): Promise<Blob | null> => {
+    if (pdfBlobRef.current) return pdfBlobRef.current;
+    if (pdfPromiseRef.current) {
+      try {
+        return await pdfPromiseRef.current;
+      } catch {
+        return null;
+      }
+    }
+    const pages = Array.from(
+      printAreaRef.current?.querySelectorAll('.invoice-print-page') ?? []
+    ) as HTMLElement[];
+    if (!pages.length) return null;
+    try {
+      return await generateInvoicePdfBlob(pages);
+    } catch {
+      return null;
+    }
+  };
+
+  const withPdf = async (use: (blob: Blob) => void | Promise<void>, failure: string) => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const blob = await buildInvoicePdf();
+      if (!blob) {
+        toast.error(failure);
+        return;
+      }
+      await use(blob);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handlePrint = () =>
+    withPdf(
+      async (blob) => {
+        const how = await printPdfBlob(blob);
+        if (how === 'opened') toast.info('Opened the invoice PDF in a new tab — print it from there.');
+      },
+      'Could not prepare the invoice for printing.'
+    );
+
+  const handleDownloadPdf = () =>
+    withPdf(
+      (blob) => downloadFile(new File([blob], pdfFileName(), { type: 'application/pdf' })),
+      'Could not build the invoice PDF.'
+    );
+
   // Return the pre-built invoice PDF as a File (waiting on the in-flight build if
   // the user acted before it finished). Web Share only needs share() to fire
   // within ~5s of the tap, which the background head-start keeps us under.
@@ -330,8 +392,7 @@ export function InvoicePreview({
       setIsSharing(false);
     }
     if (!blob) return null;
-    const fileName = `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
-    return new File([blob], fileName, { type: 'application/pdf' });
+    return new File([blob], pdfFileName(), { type: 'application/pdf' });
   };
 
   const handleWhatsAppInvoice = async () => {
@@ -428,16 +489,18 @@ export function InvoicePreview({
           <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">{title.replace(/^Invoice\s+/, '')}</h2>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              onClick={handleDownloadPdf}
+              disabled={isSharing}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               title="Download PDF"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline text-sm">Download PDF</span>
             </button>
             <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors"
+              onClick={handlePrint}
+              disabled={isSharing}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 border border-border rounded hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               title="Print"
             >
               <Printer className="w-4 h-4" />
@@ -591,6 +654,12 @@ export function InvoicePreview({
                       <td className="py-1 font-semibold">DATED</td>
                       <td className="py-1">{formatDate(invoiceDate)}</td>
                     </tr>
+                    {dueDate && (
+                      <tr>
+                        <td className="py-1 font-semibold">DUE DATE</td>
+                        <td className="py-1">{formatDate(dueDate)}</td>
+                      </tr>
+                    )}
                     <tr>
                       <td className="py-1 font-semibold">PLACE OF SUPPLY</td>
                       <td className="py-1">{effectivePlaceOfSupply}</td>
@@ -850,6 +919,17 @@ export function InvoicePreview({
             {remarks && (
               <div className="border-b border-foreground p-3 text-xs">
                 <span className="font-semibold">Remarks / Narration:</span> {remarks}
+              </div>
+            )}
+
+            {/* The terms this invoice was issued under, copied onto it at
+              * creation. Invoices predating the column have none and simply
+              * print no block, exactly as before. `whitespace-pre-line` keeps
+              * the line breaks the user typed. */}
+            {terms?.trim() && (
+              <div className="border-b border-foreground p-3 text-xs">
+                <div className="font-semibold mb-1">TERMS &amp; CONDITIONS</div>
+                <div className="leading-relaxed whitespace-pre-line">{terms}</div>
               </div>
             )}
 
