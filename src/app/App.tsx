@@ -8,6 +8,8 @@ import { InvoiceList } from './components/invoices/InvoiceList';
 import { InvoiceCreate } from './components/invoices/InvoiceCreate';
 import { CustomerList } from './components/customers/CustomerList';
 import { ItemsList } from './components/items/ItemsList';
+import { DeliveryChallansList } from './components/delivery-challans/DeliveryChallansList';
+import { DeliveryChallanCreate } from './components/delivery-challans/DeliveryChallanCreate';
 import { CreditNotesList } from './components/credit-notes/CreditNotesList';
 import { CreditNoteCreate } from './components/credit-notes/CreditNoteCreate';
 import { ReceiptsList } from './components/receipts/ReceiptsList';
@@ -36,9 +38,8 @@ export default function App() {
               <Route path="invoices/new" element={<ProtectedRoute permission="invoices"><InvoiceCreate /></ProtectedRoute>} />
               <Route path="customers" element={<ProtectedRoute permission="customers"><CustomerList /></ProtectedRoute>} />
               <Route path="items" element={<ProtectedRoute permission="items"><ItemsList /></ProtectedRoute>} />
-              {/* TODO delivery-challans: routes land with the screens — see
-                * docs/delivery-challans-plan.md §8. The permission, nav entry,
-                * tables, RPC branches and rule logic are already in place. */}
+              <Route path="delivery-challans" element={<ProtectedRoute permission="delivery-challans"><DeliveryChallansList /></ProtectedRoute>} />
+              <Route path="delivery-challans/new" element={<ProtectedRoute permission="delivery-challans"><DeliveryChallanCreate /></ProtectedRoute>} />
               <Route path="credit-notes" element={<ProtectedRoute permission="credit-notes"><CreditNotesList /></ProtectedRoute>} />
               <Route path="credit-notes/new" element={<ProtectedRoute permission="credit-notes"><CreditNoteCreate /></ProtectedRoute>} />
               <Route path="receipts" element={<ProtectedRoute permission="receipts"><ReceiptsList /></ProtectedRoute>} />

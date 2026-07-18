@@ -30,9 +30,7 @@ import { selectForUser } from '../../../lib/auditorData';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
 const PAYMENT_VOUCHERS_ENABLED = false;
-// Flip to true when DeliveryChallansList/Create land and their routes are
-// registered in App.tsx — see docs/delivery-challans-plan.md §8.
-const DELIVERY_CHALLANS_ENABLED = false;
+const DELIVERY_CHALLANS_ENABLED = true;
 
 interface SearchInvoiceResult {
   id: string;
@@ -128,8 +126,6 @@ export function DashboardLayout() {
     { name: 'Customers', href: '/app/customers', icon: Users, permission: 'customers' },
     { name: 'Items & Services', href: '/app/items', icon: Package, permission: 'items' },
     { name: isComposition ? 'Bills of Supply' : 'Tax Invoices', href: '/app/invoices', icon: FileText, permission: 'invoices' },
-    // Dark until the screens land — the route does not exist yet. Same pattern
-    // as PAYMENT_VOUCHERS_ENABLED above.
     { name: 'Delivery Challans', href: '/app/delivery-challans', icon: Truck, permission: 'delivery-challans', enabled: DELIVERY_CHALLANS_ENABLED },
     { name: 'Credit / Debit Notes', href: '/app/credit-notes', icon: FileEdit, permission: 'credit-notes' },
     { name: 'Receipts', href: '/app/receipts', icon: Receipt, permission: 'receipts' },
