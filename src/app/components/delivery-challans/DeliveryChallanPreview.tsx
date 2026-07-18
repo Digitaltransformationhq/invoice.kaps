@@ -356,7 +356,12 @@ export function DeliveryChallanPreview({
                     <div className="font-bold uppercase">{consigneeName}</div>
                     {consigneeAddress && <div>{consigneeAddress}</div>}
                     {consigneeState && <div className="mt-1">State: {consigneeState}</div>}
-                    {consigneeGstin && <div className="font-semibold">GSTIN: {consigneeGstin}</div>}
+                    {/* Rule 55(2)(iii): GSTIN/UIN "if registered". Print
+                      * "Unregistered" rather than a blank so an inspecting
+                      * officer sees the status was recorded, not omitted. */}
+                    <div className="font-semibold">
+                      GSTIN/UIN: {consigneeGstin || 'Unregistered'}
+                    </div>
                   </div>
                 </div>
                 <div className="p-4">
@@ -532,7 +537,9 @@ export function DeliveryChallanPreview({
                         <img src={companyDetails.stampImage} alt="Stamp" className="h-12 object-contain" />
                       )}
                     </div>
-                    <div className="border-t border-foreground inline-block px-8 pt-1">Authorised Signatory</div>
+                    {/* Rule 55(2)(ix): signature of the consignor or their
+                      * authorised representative. */}
+                    <div className="border-t border-foreground inline-block px-6 pt-1">Consignor / Authorised Signatory</div>
                   </div>
                 </div>
               </div>
