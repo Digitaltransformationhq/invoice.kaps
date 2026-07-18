@@ -244,7 +244,7 @@ export function RecordPaymentDialog({ isOpen, invoice, onClose, onRecorded }: Re
         {/* Header */}
         <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-violet-100 dark:border-violet-400/15">
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold text-foreground">Record Payment</h2>
+            <h2 className="text-[15px] font-semibold text-foreground">{balance <= 0 ? 'Payment History' : 'Record Payment'}</h2>
             <p className="text-[12px] text-muted-foreground truncate">Invoice {invoice.id}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors" title="Close">

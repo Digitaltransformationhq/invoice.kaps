@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router';
-import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2, FileCheck, IndianRupee } from 'lucide-react';
+import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2, FileCheck, IndianRupee, History } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { InvoicePreview } from './InvoicePreview';
@@ -1035,7 +1035,10 @@ export function InvoiceList() {
                 <FileCheck className="w-4 h-4 text-accent" />
                 <span className="text-sm text-foreground">{isComposition ? 'Create Bill of Supply' : 'Create Invoice'}</span>
               </button>
-            ) : invoice.status !== 'paid' && (
+            ) : (
+              // Same dialog either way: for an unpaid invoice it records a
+              // payment (and shows history); once fully paid it becomes a
+              // read-only history view so the record is never lost.
               <button
                 onClick={() => {
                   setPaymentInvoice({
@@ -1049,8 +1052,17 @@ export function InvoiceList() {
                 }}
                 className="w-full flex items-center gap-2 px-4 py-2 hover:bg-success/10 transition-colors text-left"
               >
-                <IndianRupee className="w-4 h-4 text-success" />
-                <span className="text-sm text-foreground">Record Payment</span>
+                {invoice.status === 'paid' ? (
+                  <>
+                    <History className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-foreground">Payment History</span>
+                  </>
+                ) : (
+                  <>
+                    <IndianRupee className="w-4 h-4 text-success" />
+                    <span className="text-sm text-foreground">Record Payment</span>
+                  </>
+                )}
               </button>
             )}
             <div className="border-t border-violet-100 dark:border-violet-400/15 my-1"></div>
