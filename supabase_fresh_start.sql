@@ -122,6 +122,12 @@ create table public.company_settings (
   default_gst_rate numeric(5,2) not null default 18,
   default_place_of_supply text,
   enable_reverse_charge boolean not null default false,
+  -- Added later by supabase_invoice_defaults_toggle.sql and
+  -- supabase_taxpayer_type.sql; carried here so a rebuild has them, since the
+  -- settings RPCs (get/save_company_settings) reference both. Missing either
+  -- makes get_company_settings error at runtime on a fresh database.
+  invoice_defaults_enabled boolean not null default true,
+  taxpayer_type text not null default 'regular' check (taxpayer_type in ('regular', 'composition')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

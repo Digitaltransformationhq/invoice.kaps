@@ -627,7 +627,8 @@ begin
       'default_gst_rate',        v_settings.default_gst_rate,
       'default_place_of_supply', v_settings.default_place_of_supply,
       'enable_reverse_charge',   v_settings.enable_reverse_charge,
-      'invoice_defaults_enabled', v_settings.invoice_defaults_enabled
+      'invoice_defaults_enabled', v_settings.invoice_defaults_enabled,
+      'taxpayer_type',            v_settings.taxpayer_type
     )
   );
 end;
