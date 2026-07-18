@@ -36,6 +36,9 @@ export default function App() {
               <Route path="invoices/new" element={<ProtectedRoute permission="invoices"><InvoiceCreate /></ProtectedRoute>} />
               <Route path="customers" element={<ProtectedRoute permission="customers"><CustomerList /></ProtectedRoute>} />
               <Route path="items" element={<ProtectedRoute permission="items"><ItemsList /></ProtectedRoute>} />
+              {/* TODO delivery-challans: routes land with the screens — see
+                * docs/delivery-challans-plan.md §8. The permission, nav entry,
+                * tables, RPC branches and rule logic are already in place. */}
               <Route path="credit-notes" element={<ProtectedRoute permission="credit-notes"><CreditNotesList /></ProtectedRoute>} />
               <Route path="credit-notes/new" element={<ProtectedRoute permission="credit-notes"><CreditNoteCreate /></ProtectedRoute>} />
               <Route path="receipts" element={<ProtectedRoute permission="receipts"><ReceiptsList /></ProtectedRoute>} />

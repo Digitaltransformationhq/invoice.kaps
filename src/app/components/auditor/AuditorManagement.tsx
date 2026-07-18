@@ -20,6 +20,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'customers', label: 'Customers' },
   { id: 'items', label: 'Items & Services' },
   { id: 'invoices', label: 'Tax Invoices' },
+  { id: 'delivery-challans', label: 'Delivery Challans' },
   { id: 'credit-notes', label: 'Credit / Debit Notes' },
   { id: 'receipts', label: 'Receipts' },
   { id: 'outstanding', label: 'Outstanding' },

@@ -122,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'customers',
           'items',
           'invoices',
+          'delivery-challans',
           'credit-notes',
           'receipts',
           'outstanding',
