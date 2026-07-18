@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { ReceiptPreview } from './ReceiptPreview';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
-import { insertForUser, selectForUser } from '../../../lib/auditorData';
+import { insertForUser, selectForUser, updateForUser } from '../../../lib/auditorData';
 import { AppSelect } from '../common/AppSelect';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 
@@ -258,14 +258,23 @@ export function ReceiptCreate() {
         );
         if (allocError) throw allocError;
 
-        // Bump paid_amount + status on the invoice — only when payment is cleared
+        // Bump paid_amount + status on the invoice — only when payment is cleared.
+        // Through updateForUser (not a raw update) so the auditor RPC applies it;
+        // a raw update runs with no company context for auditors and silently
+        // fails under RLS, leaving the invoice balance stale.
         if (status === 'cleared' && selectedInvoice) {
           const newPaidAmount = selectedInvoice.paid_amount + amount;
           const newStatus = newPaidAmount >= selectedInvoice.total_amount ? 'paid' : 'pending';
-          await supabase
-            .from('invoices')
-            .update({ paid_amount: newPaidAmount, status: newStatus })
-            .eq('id', selectedInvoice.id);
+          const invoiceValues = { paid_amount: newPaidAmount, status: newStatus };
+          await updateForUser(
+            user,
+            'invoices',
+            'invoices',
+            () => Promise.resolve(supabase.from('invoices').update(invoiceValues).eq('id', selectedInvoice.id)),
+            invoiceValues,
+            { id: selectedInvoice.id },
+            selectedInvoice.id,
+          );
         }
       }
 

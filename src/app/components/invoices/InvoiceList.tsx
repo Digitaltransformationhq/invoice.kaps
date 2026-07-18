@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router';
-import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2, FileCheck } from 'lucide-react';
+import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, Copy, CheckCircle, XCircle, Mail, MessageCircle, X, Loader2, FileCheck, IndianRupee } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { InvoicePreview } from './InvoicePreview';
+import { RecordPaymentDialog, PaymentInvoice } from './RecordPaymentDialog';
 import { toast } from 'sonner';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import ExcelJS from 'exceljs';
@@ -20,6 +21,8 @@ interface InvoiceRow {
   rawDate: string;
   dueDate: string;
   amount: number;
+  paidAmount: number;
+  customerId?: string | null;
   status: string;
   isManualNumber?: boolean;
   customerType?: string;
@@ -45,6 +48,7 @@ export function InvoiceList() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<PaymentInvoice | null>(null);
   const [previewAutoSend, setPreviewAutoSend] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -111,6 +115,8 @@ export function InvoiceList() {
       dueDate: formatDate(invoice.due_date),
       rawDueDate: invoice.due_date || '',
       amount: Number(invoice.total_amount || 0),
+      paidAmount: Number(invoice.paid_amount || 0),
+      customerId: customer?.id || invoice.customer_id || null,
       status: invoice.status || 'draft',
       isManualNumber: Boolean(invoice.is_manual_number),
       customerType: invoice.customer_type || customer?.customer_type || '',
@@ -145,6 +151,8 @@ export function InvoiceList() {
         invoice_date,
         due_date,
         total_amount,
+        paid_amount,
+        customer_id,
         status,
         is_manual_number,
         customer_type,
@@ -333,30 +341,6 @@ export function InvoiceList() {
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  const handleMarkPaid = async (invoice: InvoiceRow) => {
-    const values = { status: 'paid', paid_amount: invoice.amount };
-    const { error } = await updateForUser(user, 'invoices', 'invoices', () =>
-      supabase
-        .from('invoices')
-        .update(values)
-        .eq('id', invoice.dbId),
-      values,
-      { id: invoice.dbId },
-      invoice.id
-    );
-
-    if (error) {
-      toast.error(`Could not mark invoice as paid: ${error.message}`);
-      return;
-    }
-
-    setInvoices((currentInvoices) => currentInvoices.map((item) => (
-      item.id === invoice.id ? { ...item, status: 'paid' } : item
-    )));
-    toast.success(`${invoice.id} marked as paid`);
-    setOpenMenuId(null);
   };
 
   const handleCreateInvoice = async (invoice: InvoiceRow) => {
@@ -932,9 +916,14 @@ export function InvoiceList() {
                     <div className="text-sm font-medium text-foreground tabular-nums">
                       ₹{invoice.amount.toLocaleString()}
                     </div>
+                    {invoice.paidAmount > 0 && invoice.paidAmount < invoice.amount - 0.01 && invoice.status !== 'draft' && invoice.status !== 'cancelled' && (
+                      <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
+                        Bal ₹{Math.max(0, invoice.amount - invoice.paidAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4">
-                    <StatusBadge status={invoice.status} />
+                    <StatusBadge status={displayStatus(invoice.status, invoice.amount, invoice.paidAmount)} />
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-start gap-2">
@@ -1048,11 +1037,20 @@ export function InvoiceList() {
               </button>
             ) : invoice.status !== 'paid' && (
               <button
-                onClick={() => handleMarkPaid(invoice)}
+                onClick={() => {
+                  setPaymentInvoice({
+                    dbId: invoice.dbId,
+                    id: invoice.id,
+                    amount: invoice.amount,
+                    paidAmount: invoice.paidAmount,
+                    customerId: invoice.customerId,
+                  });
+                  setOpenMenuId(null);
+                }}
                 className="w-full flex items-center gap-2 px-4 py-2 hover:bg-success/10 transition-colors text-left"
               >
-                <CheckCircle className="w-4 h-4 text-success" />
-                <span className="text-sm text-foreground">Mark as Paid</span>
+                <IndianRupee className="w-4 h-4 text-success" />
+                <span className="text-sm text-foreground">Record Payment</span>
               </button>
             )}
             <div className="border-t border-violet-100 dark:border-violet-400/15 my-1"></div>
@@ -1094,6 +1092,25 @@ export function InvoiceList() {
           transportMode={selectedInvoice.transportMode}
           remarks={selectedInvoice.remarks}
           terms={selectedInvoice.terms}
+        />
+      )}
+
+      {/* Record Payment Dialog */}
+      {paymentInvoice && (
+        <RecordPaymentDialog
+          isOpen={!!paymentInvoice}
+          invoice={paymentInvoice}
+          onClose={() => setPaymentInvoice(null)}
+          onRecorded={({ paidAmount, status }) => {
+            // Reflect the new balance/status on the row, and keep the open
+            // dialog's invoice in sync so a follow-up payment sees it too.
+            setInvoices((current) =>
+              current.map((item) =>
+                item.dbId === paymentInvoice.dbId ? { ...item, paidAmount, status } : item,
+              ),
+            );
+            setPaymentInvoice((current) => (current ? { ...current, paidAmount } : current));
+          }}
         />
       )}
 
@@ -1204,20 +1221,32 @@ function StatCard({
   );
 }
 
+// Derive the badge shown to the user: an invoice that is 'pending'/'sent'/
+// 'overdue' but already has money against it reads as "Partially Paid". This is
+// display-only — the stored status stays 'pending' (there is no partial status
+// in the schema), so nothing downstream needs to learn a new value.
+function displayStatus(status: string, amount: number, paidAmount: number): string {
+  if (status === 'paid' || status === 'draft' || status === 'cancelled') return status;
+  if (paidAmount > 0 && paidAmount < amount - 0.01) return 'partial';
+  return status;
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     draft: 'bg-muted text-muted-foreground border-border',
     sent: 'bg-accent/10 text-accent border-accent/30',
     paid: 'bg-success/10 text-success border-success/30',
+    partial: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30',
     pending: 'bg-warning/10 text-warning border-warning/30',
     overdue: 'bg-destructive/10 text-destructive border-destructive/30',
     cancelled: 'bg-muted text-muted-foreground border-border',
   };
   const badgeStyle = styles[status] || styles.draft;
+  const label = status === 'partial' ? 'Partially Paid' : status;
 
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${badgeStyle}`}>
-      {status}
+      {label}
     </span>
   );
 }
