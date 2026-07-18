@@ -919,6 +919,381 @@ begin
     returning id, invoice_number into v_id, v_resource_name;
     v_data := jsonb_build_object('id', v_id);
 
+  elsif p_action = 'select' and p_resource = 'delivery_challans' then
+    select coalesce(jsonb_agg(
+      to_jsonb(dc)
+      || jsonb_build_object(
+        'customers', case when c.id is null then null else to_jsonb(c) end,
+        'invoices', case when i.id is null then null
+                    else jsonb_build_object('id', i.id, 'invoice_number', i.invoice_number) end,
+        'delivery_challan_items', coalesce((
+          select jsonb_agg(to_jsonb(dci) order by dci.sort_order)
+          from public.delivery_challan_items dci
+          where dci.delivery_challan_id = dc.id
+        ), '[]'::jsonb)
+      )
+      order by dc.challan_date desc, dc.created_at desc
+    ), '[]'::jsonb)
+    into v_data
+    from public.delivery_challans dc
+    left join public.customers c on c.id = dc.customer_id
+    left join public.invoices  i on i.id = dc.invoice_id
+    where dc.company_id = v_auditor.company_id;
+
+  elsif p_action = 'insert' and p_resource = 'delivery_challans' then
+    insert into public.delivery_challans (
+      company_id, customer_id, consignee_name, consignee_gstin, consignee_address,
+      consignee_state, invoice_id, challan_number, challan_date, purpose,
+      ship_to_address, place_of_supply, is_final_consignment, expected_return_date,
+      reason, transport_mode, vehicle_number, transporter_name, lr_number,
+      eway_bill_number, subtotal, cgst, sgst, igst, total_tax, total_amount,
+      notes, status, created_by
+    ) values (
+      v_auditor.company_id,
+      nullif(v_record->>'customer_id', '')::uuid,
+      v_record->>'consignee_name',
+      nullif(v_record->>'consignee_gstin', ''),
+      nullif(v_record->>'consignee_address', ''),
+      nullif(v_record->>'consignee_state', ''),
+      nullif(v_record->>'invoice_id', '')::uuid,
+      v_record->>'challan_number',
+      (v_record->>'challan_date')::date,
+      v_record->>'purpose',
+      nullif(v_record->>'ship_to_address', ''),
+      nullif(v_record->>'place_of_supply', ''),
+      coalesce((v_record->>'is_final_consignment')::boolean, false),
+      nullif(v_record->>'expected_return_date', '')::date,
+      nullif(v_record->>'reason', ''),
+      nullif(v_record->>'transport_mode', ''),
+      nullif(v_record->>'vehicle_number', ''),
+      nullif(v_record->>'transporter_name', ''),
+      nullif(v_record->>'lr_number', ''),
+      nullif(v_record->>'eway_bill_number', ''),
+      coalesce((v_record->>'subtotal')::numeric, 0),
+      coalesce((v_record->>'cgst')::numeric, 0),
+      coalesce((v_record->>'sgst')::numeric, 0),
+      coalesce((v_record->>'igst')::numeric, 0),
+      coalesce((v_record->>'total_tax')::numeric, 0),
+      coalesce((v_record->>'total_amount')::numeric, 0),
+      nullif(v_record->>'notes', ''),
+      coalesce(v_record->>'status', 'draft'),
+      v_auditor.id
+    )
+    returning id into v_id;
+    select jsonb_build_object('id', dc.id, 'challan_number', dc.challan_number)
+    into v_data
+    from public.delivery_challans dc
+    where dc.id = v_id;
+    v_resource_name := coalesce(v_resource_name, v_data->>'challan_number');
+
+  elsif p_action = 'insert' and p_resource = 'delivery_challan_items' then
+    insert into public.delivery_challan_items (
+      delivery_challan_id, invoice_item_id, item_id, item_name, description, hsn,
+      quantity, is_provisional_quantity, unit, rate, discount_percent, gst_rate,
+      taxable_amount, tax_amount, total_amount, sort_order
+    )
+    select
+      (item->>'delivery_challan_id')::uuid,
+      nullif(item->>'invoice_item_id', '')::uuid,
+      nullif(item->>'item_id', '')::uuid,
+      item->>'item_name',
+      nullif(item->>'description', ''),
+      nullif(item->>'hsn', ''),
+      coalesce((item->>'quantity')::numeric, 0),
+      coalesce((item->>'is_provisional_quantity')::boolean, false),
+      nullif(item->>'unit', ''),
+      coalesce((item->>'rate')::numeric, 0),
+      coalesce((item->>'discount_percent')::numeric, 0),
+      coalesce((item->>'gst_rate')::numeric, 0),
+      coalesce((item->>'taxable_amount')::numeric, 0),
+      coalesce((item->>'tax_amount')::numeric, 0),
+      coalesce((item->>'total_amount')::numeric, 0),
+      coalesce((item->>'sort_order')::int, 0)
+    from jsonb_array_elements(v_record) as item
+    where exists (
+      select 1 from public.delivery_challans dc
+      where dc.id = (item->>'delivery_challan_id')::uuid
+        and dc.company_id = v_auditor.company_id
+    );
+    v_data := jsonb_build_object('inserted', jsonb_array_length(v_record));
+
+  elsif p_action = 'update' and p_resource = 'delivery_challans' then
+    -- Issued challans are never amended (no provision to amend a document that
+    -- has travelled with the goods) — only cancelled, or linked to the invoice
+    -- raised later for an approval / quantity_unknown challan.
+    v_id := (v_match->>'id')::uuid;
+    update public.delivery_challans
+    set
+      status     = coalesce(v_values->>'status', status),
+      invoice_id = case when v_values ? 'invoice_id'
+                        then nullif(v_values->>'invoice_id', '')::uuid
+                        else invoice_id end
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, challan_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  elsif p_action = 'delete' and p_resource = 'delivery_challans' then
+    v_id := (v_match->>'id')::uuid;
+    delete from public.delivery_challans
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, challan_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  -- --------------------------------------------------------------------------
+  -- Credit notes / debit notes / receipts.
+  --
+  -- These resources were reachable from the UI but had no branch here, so every
+  -- auditor call fell through to 'Unsupported resource request' — auditors could
+  -- not use the credit-notes or receipts modules at all.
+  --
+  -- Item payloads arrive as an array (note items) or a bare object (a receipt
+  -- allocation), so each item branch normalises before jsonb_array_elements,
+  -- which errors on an object.
+  -- --------------------------------------------------------------------------
+
+  elsif p_action = 'select' and p_resource = 'credit_notes' then
+    select coalesce(jsonb_agg(
+      to_jsonb(n)
+      || jsonb_build_object(
+        'customers', case when c.id is null then null else to_jsonb(c) end,
+        'invoices', case when i.id is null then null
+                    else jsonb_build_object('id', i.id, 'invoice_number', i.invoice_number) end,
+        'credit_note_items', coalesce((
+          select jsonb_agg(to_jsonb(ni))
+          from public.credit_note_items ni
+          where ni.credit_note_id = n.id
+        ), '[]'::jsonb)
+      )
+      order by n.note_date desc, n.created_at desc
+    ), '[]'::jsonb)
+    into v_data
+    from public.credit_notes n
+    left join public.customers c on c.id = n.customer_id
+    left join public.invoices  i on i.id = n.invoice_id
+    where n.company_id = v_auditor.company_id;
+
+  elsif p_action = 'select' and p_resource = 'debit_notes' then
+    select coalesce(jsonb_agg(
+      to_jsonb(n)
+      || jsonb_build_object(
+        'customers', case when c.id is null then null else to_jsonb(c) end,
+        'invoices', case when i.id is null then null
+                    else jsonb_build_object('id', i.id, 'invoice_number', i.invoice_number) end,
+        'debit_note_items', coalesce((
+          select jsonb_agg(to_jsonb(ni))
+          from public.debit_note_items ni
+          where ni.debit_note_id = n.id
+        ), '[]'::jsonb)
+      )
+      order by n.note_date desc, n.created_at desc
+    ), '[]'::jsonb)
+    into v_data
+    from public.debit_notes n
+    left join public.customers c on c.id = n.customer_id
+    left join public.invoices  i on i.id = n.invoice_id
+    where n.company_id = v_auditor.company_id;
+
+  elsif p_action = 'insert' and p_resource = 'credit_notes' then
+    insert into public.credit_notes (
+      company_id, customer_id, invoice_id, note_number, note_date, reason,
+      subtotal, total_tax, total_amount, status
+    ) values (
+      v_auditor.company_id,
+      nullif(v_record->>'customer_id', '')::uuid,
+      nullif(v_record->>'invoice_id', '')::uuid,
+      v_record->>'note_number',
+      (v_record->>'note_date')::date,
+      nullif(v_record->>'reason', ''),
+      coalesce((v_record->>'subtotal')::numeric, 0),
+      coalesce((v_record->>'total_tax')::numeric, 0),
+      coalesce((v_record->>'total_amount')::numeric, 0),
+      coalesce(v_record->>'status', 'draft')
+    )
+    returning id into v_id;
+    select jsonb_build_object('id', n.id, 'note_number', n.note_number)
+    into v_data
+    from public.credit_notes n where n.id = v_id;
+    v_resource_name := coalesce(v_resource_name, v_data->>'note_number');
+
+  elsif p_action = 'insert' and p_resource = 'debit_notes' then
+    insert into public.debit_notes (
+      company_id, customer_id, invoice_id, note_number, note_date, reason,
+      subtotal, total_tax, total_amount, status
+    ) values (
+      v_auditor.company_id,
+      nullif(v_record->>'customer_id', '')::uuid,
+      nullif(v_record->>'invoice_id', '')::uuid,
+      v_record->>'note_number',
+      (v_record->>'note_date')::date,
+      nullif(v_record->>'reason', ''),
+      coalesce((v_record->>'subtotal')::numeric, 0),
+      coalesce((v_record->>'total_tax')::numeric, 0),
+      coalesce((v_record->>'total_amount')::numeric, 0),
+      coalesce(v_record->>'status', 'draft')
+    )
+    returning id into v_id;
+    select jsonb_build_object('id', n.id, 'note_number', n.note_number)
+    into v_data
+    from public.debit_notes n where n.id = v_id;
+    v_resource_name := coalesce(v_resource_name, v_data->>'note_number');
+
+  elsif p_action = 'insert' and p_resource = 'credit_note_items' then
+    insert into public.credit_note_items (
+      credit_note_id, item_name, description, hsn, quantity, unit, rate,
+      gst_rate, taxable_amount, tax_amount, total_amount
+    )
+    select
+      (item->>'credit_note_id')::uuid,
+      item->>'item_name',
+      nullif(item->>'description', ''),
+      nullif(item->>'hsn', ''),
+      coalesce((item->>'quantity')::numeric, 0),
+      nullif(item->>'unit', ''),
+      coalesce((item->>'rate')::numeric, 0),
+      coalesce((item->>'gst_rate')::numeric, 0),
+      coalesce((item->>'taxable_amount')::numeric, 0),
+      coalesce((item->>'tax_amount')::numeric, 0),
+      coalesce((item->>'total_amount')::numeric, 0)
+    from jsonb_array_elements(
+      case when jsonb_typeof(v_record) = 'array' then v_record else jsonb_build_array(v_record) end
+    ) as item
+    where exists (
+      select 1 from public.credit_notes n
+      where n.id = (item->>'credit_note_id')::uuid
+        and n.company_id = v_auditor.company_id
+    );
+    v_data := jsonb_build_object('inserted', jsonb_array_length(
+      case when jsonb_typeof(v_record) = 'array' then v_record else jsonb_build_array(v_record) end));
+
+  elsif p_action = 'insert' and p_resource = 'debit_note_items' then
+    insert into public.debit_note_items (
+      debit_note_id, item_name, description, hsn, quantity, unit, rate,
+      gst_rate, taxable_amount, tax_amount, total_amount
+    )
+    select
+      (item->>'debit_note_id')::uuid,
+      item->>'item_name',
+      nullif(item->>'description', ''),
+      nullif(item->>'hsn', ''),
+      coalesce((item->>'quantity')::numeric, 0),
+      nullif(item->>'unit', ''),
+      coalesce((item->>'rate')::numeric, 0),
+      coalesce((item->>'gst_rate')::numeric, 0),
+      coalesce((item->>'taxable_amount')::numeric, 0),
+      coalesce((item->>'tax_amount')::numeric, 0),
+      coalesce((item->>'total_amount')::numeric, 0)
+    from jsonb_array_elements(
+      case when jsonb_typeof(v_record) = 'array' then v_record else jsonb_build_array(v_record) end
+    ) as item
+    where exists (
+      select 1 from public.debit_notes n
+      where n.id = (item->>'debit_note_id')::uuid
+        and n.company_id = v_auditor.company_id
+    );
+    v_data := jsonb_build_object('inserted', jsonb_array_length(
+      case when jsonb_typeof(v_record) = 'array' then v_record else jsonb_build_array(v_record) end));
+
+  elsif p_action = 'update' and p_resource = 'credit_notes' then
+    v_id := (v_match->>'id')::uuid;
+    update public.credit_notes
+    set status = coalesce(v_values->>'status', status)
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, note_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  elsif p_action = 'update' and p_resource = 'debit_notes' then
+    v_id := (v_match->>'id')::uuid;
+    update public.debit_notes
+    set status = coalesce(v_values->>'status', status)
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, note_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  elsif p_action = 'delete' and p_resource = 'credit_notes' then
+    v_id := (v_match->>'id')::uuid;
+    delete from public.credit_notes
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, note_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  elsif p_action = 'delete' and p_resource = 'debit_notes' then
+    v_id := (v_match->>'id')::uuid;
+    delete from public.debit_notes
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, note_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  elsif p_action = 'select' and p_resource = 'receipts' then
+    select coalesce(jsonb_agg(
+      to_jsonb(r)
+      || jsonb_build_object(
+        'customers', case when c.id is null then null else to_jsonb(c) end,
+        'receipt_allocations', coalesce((
+          select jsonb_agg(to_jsonb(ra))
+          from public.receipt_allocations ra
+          where ra.receipt_id = r.id
+        ), '[]'::jsonb)
+      )
+      order by r.receipt_date desc, r.created_at desc
+    ), '[]'::jsonb)
+    into v_data
+    from public.receipts r
+    left join public.customers c on c.id = r.customer_id
+    where r.company_id = v_auditor.company_id;
+
+  elsif p_action = 'insert' and p_resource = 'receipts' then
+    insert into public.receipts (
+      company_id, customer_id, receipt_number, receipt_date, amount,
+      payment_mode, reference_number, notes, status
+    ) values (
+      v_auditor.company_id,
+      nullif(v_record->>'customer_id', '')::uuid,
+      v_record->>'receipt_number',
+      (v_record->>'receipt_date')::date,
+      coalesce((v_record->>'amount')::numeric, 0),
+      nullif(v_record->>'payment_mode', ''),
+      nullif(v_record->>'reference_number', ''),
+      nullif(v_record->>'notes', ''),
+      coalesce(v_record->>'status', 'cleared')
+    )
+    returning id into v_id;
+    select jsonb_build_object('id', r.id, 'receipt_number', r.receipt_number)
+    into v_data
+    from public.receipts r where r.id = v_id;
+    v_resource_name := coalesce(v_resource_name, v_data->>'receipt_number');
+
+  elsif p_action = 'insert' and p_resource = 'receipt_allocations' then
+    insert into public.receipt_allocations (receipt_id, invoice_id, amount)
+    select
+      (item->>'receipt_id')::uuid,
+      nullif(item->>'invoice_id', '')::uuid,
+      coalesce((item->>'amount')::numeric, 0)
+    from jsonb_array_elements(
+      case when jsonb_typeof(v_record) = 'array' then v_record else jsonb_build_array(v_record) end
+    ) as item
+    where exists (
+      select 1 from public.receipts r
+      where r.id = (item->>'receipt_id')::uuid
+        and r.company_id = v_auditor.company_id
+    );
+    v_data := jsonb_build_object('inserted', jsonb_array_length(
+      case when jsonb_typeof(v_record) = 'array' then v_record else jsonb_build_array(v_record) end));
+
+  elsif p_action = 'update' and p_resource = 'receipts' then
+    v_id := (v_match->>'id')::uuid;
+    update public.receipts
+    set status = coalesce(v_values->>'status', status)
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, receipt_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
+  elsif p_action = 'delete' and p_resource = 'receipts' then
+    v_id := (v_match->>'id')::uuid;
+    delete from public.receipts
+    where id = v_id and company_id = v_auditor.company_id
+    returning id, receipt_number into v_id, v_resource_name;
+    v_data := jsonb_build_object('id', v_id);
+
   elsif p_action = 'log' then
     v_data := jsonb_build_object('logged', true);
 

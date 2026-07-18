@@ -275,9 +275,13 @@ export function CreditNoteCreate() {
         status,
       };
 
+      // The module argument is the permission id, which is hyphenated: the RPC
+      // matches it against auditor_permissions.permission_name. The underscore
+      // form used here previously matched nothing, so every auditor call failed
+      // the permission check and this module was unusable for them.
       const { data: note, error: noteError } = await insertForUser<any>(
         user,
-        'credit_notes',
+        'credit-notes',
         noteTable,
         () =>
           Promise.resolve(
@@ -317,7 +321,7 @@ export function CreditNoteCreate() {
 
       const { error: itemsError } = await insertForUser(
         user,
-        'credit_notes',
+        'credit-notes',
         itemsTable,
         () => Promise.resolve(supabase.from(itemsTable).insert(itemRows)),
         itemRows,

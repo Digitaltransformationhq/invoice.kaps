@@ -146,7 +146,8 @@ export function CreditNotesList() {
     };
 
     const [creditRes, debitRes] = await Promise.all([
-      selectForUser<any[]>(user, 'credit_notes', 'credit_notes', () =>
+      // Module = the hyphenated permission id; resource = the table branch.
+      selectForUser<any[]>(user, 'credit-notes', 'credit_notes', () =>
         Promise.resolve(
           supabase
             .from('credit_notes')
@@ -166,7 +167,7 @@ export function CreditNotesList() {
             .order('created_at', { ascending: false })
         )
       ),
-      selectForUser<any[]>(user, 'credit_notes', 'debit_notes', () =>
+      selectForUser<any[]>(user, 'credit-notes', 'debit_notes', () =>
         Promise.resolve(
           supabase
             .from('debit_notes')
@@ -266,7 +267,7 @@ export function CreditNotesList() {
         if (error) throw error;
       }
 
-      await logAuditorAction(user, 'credit_notes', 'bulk_delete', 'bulk_delete_notes', {
+      await logAuditorAction(user, 'credit-notes', 'bulk_delete', 'bulk_delete_notes', {
         count: notesToDelete.length,
         creditCount: creditIds.length,
         debitCount: debitIds.length,
@@ -808,7 +809,7 @@ export function CreditNotesList() {
 
             const { error } = await deleteForUser(
               user,
-              'credit_notes',
+              'credit-notes',
               table,
               () =>
                 Promise.resolve(
@@ -828,7 +829,7 @@ export function CreditNotesList() {
               return;
             }
 
-            await logAuditorAction(user, 'credit_notes', table, auditAction, {
+            await logAuditorAction(user, 'credit-notes', table, auditAction, {
               noteNumber: deletingNote.id,
             });
 

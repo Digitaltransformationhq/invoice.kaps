@@ -33,6 +33,8 @@ drop function if exists public.current_company_id();
 drop function if exists public.touch_updated_at();
 
 drop table if exists public.audit_logs cascade;
+drop table if exists public.delivery_challan_items cascade;
+drop table if exists public.delivery_challans cascade;
 drop table if exists public.payment_vouchers cascade;
 drop table if exists public.receipt_allocations cascade;
 drop table if exists public.receipts cascade;
@@ -186,7 +188,10 @@ create table public.invoices (
   paid_amount numeric(14,2) not null default 0,
   status text not null default 'draft' check (status in ('draft', 'sent', 'pending', 'paid', 'overdue', 'cancelled')),
   is_manual_number boolean not null default false,
-  created_by uuid references public.app_users(id) on delete set null,
+  -- Plain uuid, NO foreign key: an invoice can be created by an owner
+  -- (public.app_users) or an auditor (public.auditors). A FK to app_users made
+  -- every auditor insert fail — see supabase_auditor_access_fixes.sql.
+  created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(company_id, invoice_number)
@@ -244,6 +249,77 @@ create table public.credit_note_items (
   total_amount numeric(14,2) not null default 0
 );
 
+-- Delivery challans (Rule 55, CGST Rules 2017). See supabase_delivery_challans.sql
+-- for the incremental migration and the full commentary on each column.
+create table public.delivery_challans (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  -- Nullable: a job worker is not a customer, and an 'other_than_supply' branch
+  -- transfer goes to your own premises. The consignee_* snapshot is what prints.
+  customer_id uuid references public.customers(id) on delete set null,
+  consignee_name text not null,
+  consignee_gstin text,
+  consignee_address text,
+  consignee_state text,
+  -- Both directions, disambiguated by purpose: the parent invoice for lot_supply,
+  -- the invoice raised later for approval / quantity_unknown.
+  invoice_id uuid references public.invoices(id) on delete set null,
+  challan_number text not null,
+  challan_date date not null default current_date,
+  purpose text not null check (purpose in (
+    'lot_supply', 'quantity_unknown', 'job_work', 'approval', 'other_than_supply'
+  )),
+  ship_to_address text,
+  place_of_supply text,
+  is_final_consignment boolean not null default false,
+  expected_return_date date,
+  reason text,
+  transport_mode text,
+  vehicle_number text,
+  transporter_name text,
+  lr_number text,
+  eway_bill_number text,
+  subtotal numeric(14,2) not null default 0,
+  cgst numeric(14,2) not null default 0,
+  sgst numeric(14,2) not null default 0,
+  igst numeric(14,2) not null default 0,
+  total_tax numeric(14,2) not null default 0,
+  total_amount numeric(14,2) not null default 0,
+  notes text,
+  status text not null default 'draft' check (status in ('draft', 'issued', 'cancelled')),
+  -- Plain uuid, no FK: owners live in app_users, auditors in auditors.
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(company_id, challan_number)
+);
+
+create table public.delivery_challan_items (
+  id uuid primary key default gen_random_uuid(),
+  delivery_challan_id uuid not null references public.delivery_challans(id) on delete cascade,
+  -- Drives remaining-quantity tracking for Rule 55(5) consignments.
+  invoice_item_id uuid references public.invoice_items(id) on delete set null,
+  item_id uuid references public.items(id) on delete set null,
+  item_name text not null,
+  description text,
+  hsn text,
+  quantity numeric(14,3) not null default 1,
+  is_provisional_quantity boolean not null default false,
+  unit text,
+  rate numeric(14,2) not null default 0,
+  discount_percent numeric(5,2) not null default 0,
+  gst_rate numeric(5,2) not null default 0,
+  taxable_amount numeric(14,2) not null default 0,
+  tax_amount numeric(14,2) not null default 0,
+  total_amount numeric(14,2) not null default 0,
+  sort_order int not null default 0
+);
+
+create index idx_delivery_challans_company on public.delivery_challans(company_id);
+create index idx_delivery_challans_invoice on public.delivery_challans(invoice_id) where invoice_id is not null;
+create index idx_delivery_challan_items_challan on public.delivery_challan_items(delivery_challan_id);
+create index idx_delivery_challan_items_invoice_item on public.delivery_challan_items(invoice_item_id) where invoice_item_id is not null;
+
 create table public.receipts (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -254,6 +330,11 @@ create table public.receipts (
   payment_mode text,
   reference_number text,
   notes text,
+  -- cleared: payment confirmed (the default for UPI/Cash/Card)
+  -- pending: awaiting confirmation (typically a cheque until it clears)
+  -- Added later by supabase/receipt_status_migration.sql; carried here so a
+  -- fresh rebuild does not come up without it and break the receipts UI.
+  status text not null default 'cleared' check (status in ('cleared', 'pending')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(company_id, receipt_number)
@@ -316,6 +397,7 @@ create trigger customers_touch_updated before update on public.customers for eac
 create trigger items_touch_updated before update on public.items for each row execute function public.touch_updated_at();
 create trigger invoices_touch_updated before update on public.invoices for each row execute function public.touch_updated_at();
 create trigger credit_notes_touch_updated before update on public.credit_notes for each row execute function public.touch_updated_at();
+create trigger delivery_challans_touch_updated before update on public.delivery_challans for each row execute function public.touch_updated_at();
 create trigger receipts_touch_updated before update on public.receipts for each row execute function public.touch_updated_at();
 create trigger payment_vouchers_touch_updated before update on public.payment_vouchers for each row execute function public.touch_updated_at();
 
@@ -671,6 +753,8 @@ alter table public.invoices enable row level security;
 alter table public.invoice_items enable row level security;
 alter table public.credit_notes enable row level security;
 alter table public.credit_note_items enable row level security;
+alter table public.delivery_challans enable row level security;
+alter table public.delivery_challan_items enable row level security;
 alter table public.receipts enable row level security;
 alter table public.receipt_allocations enable row level security;
 alter table public.payment_vouchers enable row level security;
@@ -743,6 +827,24 @@ create policy "owner credit note items access" on public.credit_note_items
     exists (
       select 1 from public.credit_notes cn
       where cn.id = credit_note_id and cn.company_id = public.current_company_id()
+    )
+  );
+
+create policy "owner delivery challans access" on public.delivery_challans
+  for all using (company_id = public.current_company_id())
+  with check (company_id = public.current_company_id());
+
+create policy "owner delivery challan items access" on public.delivery_challan_items
+  for all using (
+    exists (
+      select 1 from public.delivery_challans dc
+      where dc.id = delivery_challan_id and dc.company_id = public.current_company_id()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.delivery_challans dc
+      where dc.id = delivery_challan_id and dc.company_id = public.current_company_id()
     )
   );
 
