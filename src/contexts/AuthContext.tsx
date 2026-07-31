@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { clearMpinVault } from '../lib/mpin';
 
 interface User {
   id: string;
@@ -45,6 +46,8 @@ interface AuthContextType {
   login: (email: string, password: string, role?: 'owner' | 'auditor') => Promise<{ success: boolean; error?: string }>;
   lookupAuditorCompanies: (email: string) => Promise<{ success: boolean; companies?: AuditorCompany[]; error?: string }>;
   loginAuditorById: (auditorId: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+  completePasswordReset: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   hasPermission: (resource: string, action?: 'view' | 'create' | 'edit' | 'delete') => boolean;
 }
@@ -74,6 +77,22 @@ const ownerPermissions = OWNER_PERMISSIONS.map((permission_name) => ({
 }));
 
 const SESSION_RESTORE_TIMEOUT_MS = 5000;
+
+/** Route the emailed password-reset link points back to. */
+export const PASSWORD_RESET_PATH = '/reset-password';
+
+/**
+ * A recovery link creates a real Supabase session so `updateUser()` can change
+ * the password — but it must NOT be treated as a normal sign-in, or clicking the
+ * link would hand out full app access without anyone knowing the password. While
+ * the reset page is open we ignore auth events instead of storing an app session.
+ */
+function isPasswordRecoveryContext(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.location.pathname.startsWith(PASSWORD_RESET_PATH);
+}
 
 function readStoredSession() {
   try {
@@ -155,6 +174,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isPasswordRecoveryContext()) {
+        return;
+      }
+
       if (!session) {
         const storedRole = localStorage.getItem('userRole');
         if (storedRole !== 'auditor') {
@@ -225,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const restoreSession = async () => {
     try {
-      if (!isSupabaseConfigured) {
+      if (!isSupabaseConfigured || isPasswordRecoveryContext()) {
         return;
       }
 
@@ -342,6 +365,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Emails the owner a single-use recovery link pointing at PASSWORD_RESET_PATH.
+   * Supabase deliberately answers the same way whether or not the address is
+   * registered, so we never reveal which emails have accounts — only genuine
+   * faults (network, rate limit) come back as errors.
+   */
+  const requestPasswordReset = async (email: string) => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { success: false, error: 'Enter the email address you signed up with' };
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: `${window.location.origin}${PASSWORD_RESET_PATH}`,
+      });
+
+      if (error) {
+        if (isNetworkFailure(error)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
+        if ((error as any).status === 429) {
+          return { success: false, error: 'Too many reset requests. Wait a minute before trying again.' };
+        }
+        return { success: false, error: describeAuthError(error, 'Could not send the reset link') };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: describeAuthError(error, 'Could not send the reset link') };
+    }
+  };
+
+  /**
+   * Sets the new password using the short-lived session the recovery link
+   * created. Afterwards the user is signed out so they have to sign in with the
+   * new password, and the device MPIN vault is dropped because it still holds
+   * the old credentials.
+   */
+  const completePasswordReset = async (newPassword: string) => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured.' };
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        return { success: false, error: 'Your reset link has expired. Request a new one and try again.' };
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        if (isNetworkFailure(error)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
+        return { success: false, error: describeAuthError(error, 'Could not update your password') };
+      }
+
+      clearMpinVault();
+      await supabase.auth.signOut();
+      clearSession();
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: describeAuthError(error, 'Could not update your password') };
+    }
+  };
+
   const logout = async () => {
     if (user?.role === 'owner') {
       await supabase.auth.signOut();
@@ -431,6 +526,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         lookupAuditorCompanies,
         loginAuditorById,
+        requestPasswordReset,
+        completePasswordReset,
         logout,
         hasPermission,
       }}

@@ -28,6 +28,7 @@ import {
   Bell,
   Sun,
   Moon,
+  MailCheck,
   Store,
   Truck,
   Factory,
@@ -52,8 +53,10 @@ export function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [loginRole, setLoginRole] = useState<'user' | 'auditor'>('user');
-  // Owner login can be done by 4-digit MPIN (quick) or email + password.
-  const [userLoginMode, setUserLoginMode] = useState<'mpin' | 'password'>('mpin');
+  // Owner login can be done by 4-digit MPIN (quick) or email + password, and
+  // branches off into the emailed password-reset flow.
+  const [userLoginMode, setUserLoginMode] = useState<'mpin' | 'password' | 'forgot' | 'forgot-sent'>('mpin');
+  const [resetLoading, setResetLoading] = useState(false);
   const [mpinDigits, setMpinDigits] = useState<string[]>(['', '', '', '']);
   const [mpinLoading, setMpinLoading] = useState(false);
   const [mpinError, setMpinError] = useState('');
@@ -156,7 +159,7 @@ export function LandingPage() {
     confirmMpin: ''
   });
 
-  const { login, lookupAuditorCompanies, loginAuditorById, user } = useAuth();
+  const { login, lookupAuditorCompanies, loginAuditorById, requestPasswordReset, user } = useAuth();
   const navigate = useNavigate();
 
   // Existing users (a saved MPIN exists on this device) never get dropped on
@@ -184,6 +187,20 @@ export function LandingPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // /reset-password sends the user back here with ?signin=1 after a successful
+  // password change — open the modal on the email + password screen (their MPIN
+  // vault was wiped along with the old password).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signin') !== '1') {
+      return;
+    }
+    window.history.replaceState({}, '', window.location.pathname);
+    openLoginModal('user');
+    setUserLoginMode('password');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const resetAuditorFlow = () => {
     setAuditorStage('email');
@@ -266,6 +283,37 @@ export function LandingPage() {
       }
     } catch (error) {
       toast.error('Login failed. Please try again.');
+    }
+  };
+
+  // Emails a 15-minute, single-use recovery link that lands on /reset-password.
+  // The response is intentionally the same whether or not the address has an
+  // account, so this screen can't be used to probe for registered emails.
+  const handleForgotPassword = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!loginEmail.trim()) {
+      toast.error('Enter the email address you signed up with');
+      return;
+    }
+
+    setResetLoading(true);
+    const result = await requestPasswordReset(loginEmail);
+    setResetLoading(false);
+
+    if (result.success) {
+      setUserLoginMode('forgot-sent');
+    } else {
+      toast.error(result.error || 'Could not send the reset link');
+    }
+  };
+
+  const openForgotPassword = () => {
+    setUserLoginMode('forgot');
+    setLoginPassword('');
+    setMpinError('');
+    setMpinDigits(['', '', '', '']);
+    if (!loginEmail) {
+      setLoginEmail(getVaultEmail() || '');
     }
   };
 
@@ -1032,13 +1080,23 @@ export function LandingPage() {
                       <Receipt className="w-4 h-4 text-white" strokeWidth={2.25} />
                     </div>
                     <h3 className="text-[16px] font-medium tracking-tight text-slate-900 dark:text-white">
-                      {loginRole === 'user' ? 'Welcome back' : 'Auditor sign-in'}
+                      {loginRole !== 'user'
+                        ? 'Auditor sign-in'
+                        : userLoginMode === 'forgot'
+                          ? 'Reset your password'
+                          : userLoginMode === 'forgot-sent'
+                            ? 'Check your inbox'
+                            : 'Welcome back'}
                     </h3>
                   </div>
                   <p className="text-[13px] text-slate-600 dark:text-white/55 mt-4">
-                    {loginRole === 'user'
-                      ? 'Sign in with the owner account you created at signup.'
-                      : 'Sign in with the auditor credentials shared by the business owner.'}
+                    {loginRole !== 'user'
+                      ? 'Sign in with the auditor credentials shared by the business owner.'
+                      : userLoginMode === 'forgot'
+                        ? "We'll email you a secure link to set a new password."
+                        : userLoginMode === 'forgot-sent'
+                          ? `If an account exists for ${loginEmail}, a reset link is on its way.`
+                          : 'Sign in with the owner account you created at signup.'}
                   </p>
                 </div>
 
@@ -1086,6 +1144,16 @@ export function LandingPage() {
                       Sign in with email &amp; password
                     </button>
 
+                    <p className="text-[12px] text-center">
+                      <button
+                        type="button"
+                        onClick={openForgotPassword}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        Forgot your password?
+                      </button>
+                    </p>
+
                     <p className="text-[12px] text-center text-slate-500 dark:text-white/50">
                       Don't have an account?{' '}
                       <button
@@ -1094,6 +1162,75 @@ export function LandingPage() {
                         className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
                         Create one
+                      </button>
+                    </p>
+                  </div>
+                ) : loginRole === 'user' && userLoginMode === 'forgot' ? (
+                  <form onSubmit={handleForgotPassword} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
+                      <input
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        className="kaps-input"
+                        placeholder="you@company.com"
+                        autoFocus
+                        required
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {resetLoading ? 'Sending…' : 'Send reset link'}
+                      {!resetLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
+                    </button>
+
+                    <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
+                      The link expires 15 minutes after it is sent and can only be used once.
+                    </p>
+
+                    <p className="text-[12px] text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setUserLoginMode(hasMpinVault() ? 'mpin' : 'password')}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        ← Back to sign in
+                      </button>
+                    </p>
+                  </form>
+                ) : loginRole === 'user' && userLoginMode === 'forgot-sent' ? (
+                  <div className="p-6 space-y-5">
+                    <div className="flex gap-3 px-4 py-3.5 rounded-xl bg-violet-50/70 dark:bg-violet-500/[0.07] border border-violet-200 dark:border-violet-400/25">
+                      <MailCheck className="w-4 h-4 text-violet-600 dark:text-violet-300 shrink-0 mt-0.5" />
+                      <div className="text-[12.5px] leading-relaxed text-slate-700 dark:text-white/70 space-y-1.5">
+                        <p>Open the email and follow the link to choose a new password.</p>
+                        <p className="text-slate-500 dark:text-white/50">
+                          It expires in 15 minutes. Nothing in your inbox? Check the spam folder before resending.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleForgotPassword()}
+                      disabled={resetLoading}
+                      className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-full border border-violet-300/60 dark:border-white/12 text-violet-700 dark:text-violet-200 text-[13px] font-semibold hover:bg-violet-50 dark:hover:bg-white/[0.04] transition-colors disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {resetLoading ? 'Sending…' : 'Resend link'}
+                    </button>
+
+                    <p className="text-[12px] text-center">
+                      <button
+                        type="button"
+                        onClick={() => setUserLoginMode(hasMpinVault() ? 'mpin' : 'password')}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        ← Back to sign in
                       </button>
                     </p>
                   </div>
@@ -1112,7 +1249,16 @@ export function LandingPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Password</label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70">Password</label>
+                        <button
+                          type="button"
+                          onClick={openForgotPassword}
+                          className="text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
                       <div className="relative">
                         <input
                           type={showPassword ? 'text' : 'password'}

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LandingPage } from './components/LandingPage';
+import { ResetPassword } from './components/auth/ResetPassword';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { InvoiceList } from './components/invoices/InvoiceList';
@@ -31,6 +32,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/app" element={<DashboardLayout />}>
               <Route index element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
               <Route path="dashboard" element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
