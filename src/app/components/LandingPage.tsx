@@ -1258,23 +1258,15 @@ export function LandingPage() {
                       Sign in with email &amp; password
                     </button>
 
-                    <div className="flex items-center justify-center gap-2.5 text-[11px]">
+                    <p className="text-center text-[10px]">
                       <button
                         type="button"
                         onClick={openForgotMpin}
-                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-medium"
                       >
                         Forgot MPIN?
                       </button>
-                      <span className="text-slate-300 dark:text-white/20">•</span>
-                      <button
-                        type="button"
-                        onClick={openForgotPassword}
-                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
-                      >
-                        Forgot password?
-                      </button>
-                    </div>
+                    </p>
 
                     <p className="text-[12px] text-center text-slate-500 dark:text-white/50">
                       Don't have an account?{' '}
