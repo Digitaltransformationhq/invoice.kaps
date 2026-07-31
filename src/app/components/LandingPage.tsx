@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   Menu,
   X,
@@ -1330,11 +1331,11 @@ export function LandingPage() {
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
-                      <p className="mt-1.5 text-[11px] text-right">
+                      <p className="mt-1.5 text-[10px] text-right">
                         <button
                           type="button"
                           onClick={openForgotPassword}
-                          className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                          className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-medium"
                         >
                           Forgot password too?
                         </button>
@@ -1388,9 +1389,10 @@ export function LandingPage() {
                       <button
                         type="button"
                         onClick={() => { setUserLoginMode('mpin'); resetMpin(); }}
-                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                        className="inline-flex items-center gap-1.5 text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
-                        ← Back to MPIN sign-in
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        Back to MPIN sign-in
                       </button>
                     </p>
                   </form>
@@ -1482,9 +1484,10 @@ export function LandingPage() {
                       <button
                         type="button"
                         onClick={() => setUserLoginMode(hasMpinVault() ? 'mpin' : 'password')}
-                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                        className="inline-flex items-center gap-1.5 text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
-                        ← Back to sign in
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        Back to sign in
                       </button>
                     </p>
                   </form>
@@ -1513,9 +1516,10 @@ export function LandingPage() {
                       <button
                         type="button"
                         onClick={() => setUserLoginMode(hasMpinVault() ? 'mpin' : 'password')}
-                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                        className="inline-flex items-center gap-1.5 text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
-                        ← Back to sign in
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        Back to sign in
                       </button>
                     </p>
                   </div>
@@ -1662,9 +1666,10 @@ export function LandingPage() {
                         setAuditorStage('email');
                         setAuditorCompanies([]);
                       }}
-                      className="text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      className="inline-flex items-center gap-1.5 text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                     >
-                      ← Use a different email
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      Use a different email
                     </button>
                   </div>
                 ) : (
@@ -1727,9 +1732,10 @@ export function LandingPage() {
                           setLoginPassword('');
                         }
                       }}
-                      className="text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      className="inline-flex items-center gap-1.5 text-[12px] text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                     >
-                      ← {auditorCompanies.length > 1 ? 'Pick a different workspace' : 'Use a different email'}
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      {auditorCompanies.length > 1 ? 'Pick a different workspace' : 'Use a different email'}
                     </button>
                   </form>
                 )}
