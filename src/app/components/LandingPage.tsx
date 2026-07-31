@@ -39,7 +39,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { toast, Toaster } from 'sonner';
 import { supabase } from '../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../lib/gstin';
-import { saveMpinVault, unlockWithMpin, hasMpinVault, getVaultEmail, markReturningUser, isValidMpin } from '../../lib/mpin';
+import { saveMpinVault, unlockWithMpin, hasMpinVault, getVaultEmail, markReturningUser, isValidMpin, clearMpinVault } from '../../lib/mpin';
 
 type Theme = 'dark' | 'light';
 const THEME_KEY = 'kaps-landing-theme';
@@ -445,10 +445,27 @@ export function LandingPage() {
       toast.success('Login successful!');
       setShowLoginModal(false);
       navigate('/app');
-    } else {
-      setMpinError(result.error || 'Could not sign in. Use email & password below.');
-      resetMpin();
+      return;
     }
+
+    // The PIN decrypted the vault, so the PIN was right — the server rejected the
+    // credentials inside it. That means the password changed elsewhere: the vault
+    // is device-local, so a reset done on another device or browser leaves this
+    // one holding the old password with nothing to clear it. Blaming the PIN here
+    // sends people in circles, so drop the dead vault and ask for the password.
+    if (/invalid login credentials|invalid credentials|invalid email or password/i.test(result.error || '')) {
+      clearMpinVault();
+      setMpinDigits(['', '', '', '']);
+      setMpinError('');
+      setLoginEmail(creds.email);
+      setLoginPassword('');
+      setUserLoginMode('password');
+      toast.error('Your password changed since this MPIN was set. Sign in with your password, then pick a new MPIN.');
+      return;
+    }
+
+    setMpinError(result.error || 'Could not sign in. Use email & password below.');
+    resetMpin();
   };
 
   const handleMpinChange = (index: number, raw: string) => {
