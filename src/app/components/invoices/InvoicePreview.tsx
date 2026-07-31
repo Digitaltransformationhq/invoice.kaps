@@ -839,32 +839,36 @@ export function InvoicePreview({
             {!isComposition && taxSummaryRows.length > 0 && (
               <div className="border-b border-foreground">
                 <table className="w-full text-xs">
+                  {/* Every rule here is owned by a cell, never by the <tr>. A row
+                      border would be painted straight through the rowSpan={2}
+                      headings when html2canvas rasterises this for the PDF, which
+                      is what struck a line across "Taxable" and "Total". */}
                   <thead>
-                    <tr className="border-b border-foreground bg-muted/30">
-                      <th rowSpan={2} className="p-2 border-r border-foreground text-left align-bottom">HSN/SAC</th>
-                      <th rowSpan={2} className="p-2 border-r border-foreground text-right align-bottom">Taxable<br />Value</th>
+                    <tr className="bg-muted/30">
+                      <th rowSpan={2} className="p-2 border-r border-b border-foreground text-left align-bottom">HSN/SAC</th>
+                      <th rowSpan={2} className="p-2 border-r border-b border-foreground text-right align-bottom">Taxable<br />Value</th>
                       {isInterStateSupply ? (
-                        <th colSpan={2} className="p-2 border-r border-foreground text-center">Integrated Tax</th>
+                        <th colSpan={2} className="p-2 border-r border-b border-foreground text-center">Integrated Tax</th>
                       ) : (
                         <>
-                          <th colSpan={2} className="p-2 border-r border-foreground text-center">Central Tax</th>
-                          <th colSpan={2} className="p-2 border-r border-foreground text-center">State Tax</th>
+                          <th colSpan={2} className="p-2 border-r border-b border-foreground text-center">Central Tax</th>
+                          <th colSpan={2} className="p-2 border-r border-b border-foreground text-center">State Tax</th>
                         </>
                       )}
-                      <th rowSpan={2} className="p-2 text-right align-bottom">Total<br />Tax Amount</th>
+                      <th rowSpan={2} className="p-2 border-b border-foreground text-right align-bottom">Total<br />Tax Amount</th>
                     </tr>
-                    <tr className="border-b border-foreground bg-muted/30">
+                    <tr className="bg-muted/30">
                       {isInterStateSupply ? (
                         <>
-                          <th className="p-2 border-r border-foreground text-right">Rate</th>
-                          <th className="p-2 border-r border-foreground text-right">Amount</th>
+                          <th className="p-2 border-r border-b border-foreground text-right">Rate</th>
+                          <th className="p-2 border-r border-b border-foreground text-right">Amount</th>
                         </>
                       ) : (
                         <>
-                          <th className="p-2 border-r border-foreground text-right">Rate</th>
-                          <th className="p-2 border-r border-foreground text-right">Amount</th>
-                          <th className="p-2 border-r border-foreground text-right">Rate</th>
-                          <th className="p-2 border-r border-foreground text-right">Amount</th>
+                          <th className="p-2 border-r border-b border-foreground text-right">Rate</th>
+                          <th className="p-2 border-r border-b border-foreground text-right">Amount</th>
+                          <th className="p-2 border-r border-b border-foreground text-right">Rate</th>
+                          <th className="p-2 border-r border-b border-foreground text-right">Amount</th>
                         </>
                       )}
                     </tr>
