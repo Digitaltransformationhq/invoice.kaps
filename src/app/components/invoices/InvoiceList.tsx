@@ -901,7 +901,17 @@ export function InvoiceList() {
                     />
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-foreground">{invoice.id}</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {invoice.id}
+                      {invoice.isManualNumber && (
+                        <span
+                          className="ml-0.5 text-violet-600 dark:text-violet-300"
+                          title="Manually entered invoice number"
+                        >
+                          *
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-foreground">{invoice.customer}</div>
@@ -973,6 +983,12 @@ export function InvoiceList() {
             </tbody>
           </table>
         </div>
+
+        {!isLoading && filteredInvoices.some((invoice) => invoice.isManualNumber) && (
+          <div className="px-6 pt-3 text-xs text-muted-foreground">
+            <span className="text-violet-600 dark:text-violet-300">*</span> Invoice number entered manually (outside the automatic numbering sequence).
+          </div>
+        )}
 
         {/* Pagination */}
         <div className="px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 flex items-center justify-between">
