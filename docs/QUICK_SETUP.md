@@ -50,7 +50,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 1. In Supabase Dashboard, click **SQL Editor** (in left sidebar)
 2. Click **"New query"**
-3. Open the file `supabase_setup_v2.sql` from your project
+3. Open the file `supabase/sql/supabase_setup_v2.sql` from your project
 4. **Copy ALL the content** (Ctrl+A, Ctrl+C)
 5. **Paste** into the SQL Editor
 6. Click **"Run"** (or press Ctrl+Enter)

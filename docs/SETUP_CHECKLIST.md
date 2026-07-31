@@ -32,7 +32,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ### Step 3: Run the Database Setup
 1. Go to Supabase Dashboard → SQL Editor
-2. Copy **ALL** content from `supabase_setup_v2.sql`
+2. Copy **ALL** content from `supabase/sql/supabase_setup_v2.sql`
 3. Paste into SQL Editor
 4. Click **Run**
 
@@ -97,7 +97,7 @@ After signup, check Supabase Dashboard:
 ### No company record created
 - The trigger might not have run
 - Check Supabase SQL Editor logs for errors
-- Make sure you ran `supabase_setup_v2.sql` completely
+- Make sure you ran `supabase/sql/supabase_setup_v2.sql` completely
 - Check the trigger exists:
   ```sql
   SELECT * FROM pg_trigger WHERE tgname = 'on_auth_user_created';

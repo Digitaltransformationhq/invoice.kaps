@@ -80,7 +80,7 @@ Per-purpose extras:
 
 ## 3. Data model
 
-Two new tables, modelled on `supabase/debit_notes_migration.sql` (idempotent, `begin/commit`,
+Two new tables, modelled on `supabase/sql/debit_notes_migration.sql` (idempotent, `begin/commit`,
 `drop policy if exists` + recreate). New document types get their **own tables** in this repo —
 `credit_notes.note_type` was explicitly dropped in favour of separate tables, so no
 discriminator column.
@@ -319,11 +319,11 @@ challan (Rule 55(1)(a)).
 7. Invoice side: dispatch action + tracker in `InvoiceList` / `InvoicePreview`
 
 **Database**
-8. New migration `supabase_delivery_challans.sql` — tables, trigger, RLS
-9. `supabase_fresh_start.sql` — drops, tables, trigger, RLS enable, policies, so a rebuild matches
+8. New migration `supabase/sql/supabase_delivery_challans.sql` — tables, trigger, RLS
+9. `supabase/sql/supabase_fresh_start.sql` — drops, tables, trigger, RLS enable, policies, so a rebuild matches
 10. `auditor_data_request` branches: select / insert / insert-items / update / delete.
-    **Three drifted copies** must all get them: `supabase_auditor_pgcrypto_fix.sql`,
-    `supabase/auditors_bifurcation_migration.sql`, `.clean.sql`
+    **Three drifted copies** must all get them: `supabase/sql/supabase_auditor_pgcrypto_fix.sql`,
+    `supabase/sql/auditors_bifurcation_migration.sql`, `.clean.sql`
 
 **Do not repeat**
 11. Module string must be `delivery-challans` (hyphen) to match `permission_name`. Credit notes

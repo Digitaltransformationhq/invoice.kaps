@@ -60,7 +60,7 @@ DROP FUNCTION IF EXISTS handle_new_user_signup;
 ```
 
 ### 2. Run Fixed SQL
-- Use `supabase_setup_fixed.sql`
+- Use `supabase/sql/supabase_setup_fixed.sql`
 
 ### 3. Update Frontend
 - Follow instructions in `SUPABASE_FIXED_INTEGRATION.md`
@@ -77,9 +77,9 @@ DROP FUNCTION IF EXISTS handle_new_user_signup;
 
 | File | Purpose |
 |------|---------|
-| `supabase_setup_fixed.sql` | **USE THIS** - Corrected database setup |
+| `supabase/sql/supabase_setup_fixed.sql` | **USE THIS** - Corrected database setup |
 | `SUPABASE_FIXED_INTEGRATION.md` | Frontend integration guide |
-| `supabase_setup.sql` | ❌ Old broken version - ignore |
+| `supabase/sql/supabase_setup.sql` | ❌ Old broken version - ignore |
 
 ## Test After Fix
 

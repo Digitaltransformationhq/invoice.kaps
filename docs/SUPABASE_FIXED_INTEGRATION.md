@@ -15,7 +15,7 @@ The previous SQL had issues with directly creating users in `auth.users` table. 
    - Run: `DROP TABLE IF EXISTS invoices, items, customers, auditors, companies CASCADE;`
    
 2. Run the new fixed SQL:
-   - Copy content from `supabase_setup_fixed.sql`
+   - Copy content from `supabase/sql/supabase_setup_fixed.sql`
    - Paste into Supabase SQL Editor
    - Click "Run"
 
@@ -202,7 +202,7 @@ import { supabase } from '../../contexts/AuthContext';
 
 ## Complete Setup Checklist
 
-- [ ] Run `supabase_setup_fixed.sql`
+- [ ] Run `supabase/sql/supabase_setup_fixed.sql`
 - [ ] Update LandingPage.tsx handleSignup
 - [ ] Add supabase import to LandingPage.tsx
 - [ ] Test owner signup

@@ -48,7 +48,7 @@ Complete multi-user system with owner and auditor roles, permission management, 
 2. **Run the Schema**
    - Go to SQL Editor
    - Click "New Query"
-   - Copy ALL contents from `/supabase/auditor_system_schema.sql`
+   - Copy ALL contents from `supabase/sql/auditor_system_schema.sql`
    - Paste and click "Run"
 
 3. **Verify Tables Created:**

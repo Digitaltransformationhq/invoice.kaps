@@ -616,7 +616,7 @@ export function LandingPage() {
       if (error) {
         console.error('Signup error:', error);
         if (error.message.toLowerCase().includes('database error saving new user')) {
-          toast.error('Signup trigger failed. Run supabase_signup_repair.sql in Supabase SQL Editor, then try again.');
+          toast.error('Signup trigger failed. Run supabase/sql/supabase_signup_repair.sql in Supabase SQL Editor, then try again.');
           return;
         }
         toast.error('Signup failed: ' + error.message);

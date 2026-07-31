@@ -53,7 +53,7 @@ interface InvoicePreviewProps {
   transportMode?: string;
   remarks?: string;
   // The terms this invoice was issued with — snapshotted on the invoice row,
-  // not read live from company settings. See supabase_invoice_terms.sql.
+  // not read live from company settings. See supabase/sql/supabase_invoice_terms.sql.
   terms?: string;
   autoOpenSend?: boolean;
 }

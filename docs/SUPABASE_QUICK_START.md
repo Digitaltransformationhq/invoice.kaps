@@ -14,7 +14,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ```
 
 ### 3. Run Setup SQL
-- Copy content from `supabase_setup.sql`
+- Copy content from `supabase/sql/supabase_setup.sql`
 - Paste into Supabase SQL Editor
 - Click "Run"
 - Wait for completion

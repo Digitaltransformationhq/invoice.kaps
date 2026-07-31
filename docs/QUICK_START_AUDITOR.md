@@ -8,7 +8,7 @@ Complete multi-user access control with owner and auditor roles.
 
 1. Open https://supabase.com/dashboard
 2. Select your project → SQL Editor → New Query
-3. Copy **ALL** from `/supabase/auditor_system_schema.sql`
+3. Copy **ALL** from `supabase/sql/auditor_system_schema.sql`
 4. Paste and click **Run**
 5. ✅ See success message
 
@@ -100,7 +100,7 @@ Reports:    View ✓
 ## 📂 Files Created/Updated
 
 **Database Schema:**
-- `/supabase/auditor_system_schema.sql` - Database tables
+- `supabase/sql/auditor_system_schema.sql` - Database tables
 
 **Backend:**
 - `/supabase/functions/server/auth.tsx` - Auth helper functions

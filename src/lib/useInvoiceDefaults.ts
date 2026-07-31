@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 // InvoiceCreate, which must read the live next number the moment it saves)
 // because these only seed the form — once the invoice exists it carries its own
 // copy. Editing the company terms must never rewrite the terms on an invoice
-// that has already gone out; see supabase_invoice_terms.sql.
+// that has already gone out; see supabase/sql/supabase_invoice_terms.sql.
 //
 // Mirrors useTaxpayerType: same RPC, same auditor branch (auditors have no
 // current_company_id(), so they must pass their id), same refresh event.
