@@ -39,7 +39,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { toast, Toaster } from 'sonner';
 import { supabase } from '../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../lib/gstin';
-import { saveMpinVault, unlockWithMpin, hasMpinVault, getVaultEmail, markReturningUser, isValidMpin, DEFAULT_MPIN } from '../../lib/mpin';
+import { saveMpinVault, unlockWithMpin, hasMpinVault, getVaultEmail, markReturningUser, isValidMpin } from '../../lib/mpin';
 
 type Theme = 'dark' | 'light';
 const THEME_KEY = 'kaps-landing-theme';
@@ -55,8 +55,13 @@ export function LandingPage() {
   const [loginRole, setLoginRole] = useState<'user' | 'auditor'>('user');
   // Owner login can be done by 4-digit MPIN (quick) or email + password, and
   // branches off into the emailed password-reset flow.
-  const [userLoginMode, setUserLoginMode] = useState<'mpin' | 'password' | 'forgot' | 'forgot-sent'>('mpin');
+  const [userLoginMode, setUserLoginMode] = useState<
+    'mpin' | 'password' | 'forgot' | 'forgot-sent' | 'forgot-mpin' | 'set-mpin'
+  >('mpin');
   const [resetLoading, setResetLoading] = useState(false);
+  // New PIN captured while re-provisioning the vault (forgot-mpin / set-mpin).
+  const [newMpin, setNewMpin] = useState('');
+  const [confirmNewMpin, setConfirmNewMpin] = useState('');
   const [mpinDigits, setMpinDigits] = useState<string[]>(['', '', '', '']);
   const [mpinLoading, setMpinLoading] = useState(false);
   const [mpinError, setMpinError] = useState('');
@@ -265,14 +270,17 @@ export function LandingPage() {
     try {
       const result = await login(loginEmail, loginPassword, loginRole === 'auditor' ? 'auditor' : 'owner');
       if (result.success) {
-        // Remember this device for owners and provision a default MPIN (9999)
-        // for existing users so they can use quick sign-in next time.
         if (loginRole === 'user') {
           markReturningUser();
+          // No vault on this device yet — either a first sign-in here, or the
+          // vault was dropped by a password reset / "Forgot MPIN". Ask for a PIN
+          // rather than provisioning a guessable default behind their back. The
+          // session is already live, so skipping just means no quick sign-in.
           if (!hasMpinVault()) {
-            try {
-              await saveMpinVault(loginEmail, loginPassword, DEFAULT_MPIN);
-            } catch {}
+            setNewMpin('');
+            setConfirmNewMpin('');
+            setUserLoginMode('set-mpin');
+            return;
           }
         }
         toast.success('Login successful!');
@@ -304,6 +312,100 @@ export function LandingPage() {
       setUserLoginMode('forgot-sent');
     } else {
       toast.error(result.error || 'Could not send the reset link');
+    }
+  };
+
+  // The MPIN only ever encrypts credentials we already hold, so re-provisioning
+  // it is gated on the password rather than on the old PIN — that is what makes
+  // a forgotten PIN recoverable without any server-side record of it.
+  const saveNewMpin = async (email: string, password: string) => {
+    if (!isValidMpin(newMpin)) {
+      toast.error('MPIN must be exactly 4 digits');
+      return false;
+    }
+    if (newMpin !== confirmNewMpin) {
+      toast.error('MPIN and confirmation do not match');
+      return false;
+    }
+
+    try {
+      await saveMpinVault(email, password, newMpin);
+    } catch {
+      toast.error('Could not save the MPIN on this device');
+      return false;
+    }
+
+    markReturningUser();
+    setNewMpin('');
+    setConfirmNewMpin('');
+    return true;
+  };
+
+  const finishLogin = (message: string) => {
+    toast.success(message);
+    setShowLoginModal(false);
+    setLoginPassword('');
+    navigate('/app');
+  };
+
+  // Forgot MPIN: prove identity with email + password, then replace the vault.
+  const handleForgotMpin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim() || !loginPassword) {
+      toast.error('Enter your email and password');
+      return;
+    }
+    if (!isValidMpin(newMpin)) {
+      toast.error('MPIN must be exactly 4 digits');
+      return;
+    }
+    if (newMpin !== confirmNewMpin) {
+      toast.error('MPIN and confirmation do not match');
+      return;
+    }
+
+    setMpinLoading(true);
+    const result = await login(loginEmail, loginPassword, 'owner');
+    if (!result.success) {
+      setMpinLoading(false);
+      toast.error(result.error || 'Invalid email or password');
+      return;
+    }
+
+    const saved = await saveNewMpin(loginEmail, loginPassword);
+    setMpinLoading(false);
+    if (saved) {
+      finishLogin('MPIN updated. Signed in.');
+    }
+  };
+
+  // Set MPIN: reached straight after a successful password login on a device
+  // with no vault, so the credentials in state are already verified.
+  const handleSetMpin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMpinLoading(true);
+    const saved = await saveNewMpin(loginEmail, loginPassword);
+    setMpinLoading(false);
+    if (saved) {
+      finishLogin('MPIN set. Quick sign-in is ready on this device.');
+    }
+  };
+
+  const skipSetMpin = () => {
+    setNewMpin('');
+    setConfirmNewMpin('');
+    finishLogin('Login successful!');
+  };
+
+  const openForgotMpin = () => {
+    setUserLoginMode('forgot-mpin');
+    setLoginPassword('');
+    setNewMpin('');
+    setConfirmNewMpin('');
+    setMpinError('');
+    setMpinDigits(['', '', '', '']);
+    if (!loginEmail) {
+      setLoginEmail(getVaultEmail() || '');
     }
   };
 
@@ -402,6 +504,21 @@ export function LandingPage() {
     }
   };
 
+  const closeLoginModal = () => {
+    // Dismissing the post-login "set your MPIN" step is the same as skipping it —
+    // the session is already live, so send them into the app rather than back to
+    // the marketing page.
+    if (loginRole === 'user' && userLoginMode === 'set-mpin') {
+      skipSetMpin();
+      return;
+    }
+    setShowLoginModal(false);
+    setLoginEmail('');
+    setLoginPassword('');
+    setLoginRole('user');
+    resetAuditorFlow();
+  };
+
   const openSignupModal = () => {
     setShowSignupModal(true);
     setMobileMenuOpen(false);
@@ -494,7 +611,7 @@ export function LandingPage() {
       // Provision the MPIN vault on this device so quick sign-in works right
       // after the user logs in. Falls back to the default 9999 if left blank.
       try {
-        await saveMpinVault(signupData.email, signupData.password, signupData.mpin || DEFAULT_MPIN);
+        await saveMpinVault(signupData.email, signupData.password, signupData.mpin);
         markReturningUser();
       } catch {}
       toast.success('Account created successfully! Please login to continue.');
@@ -1050,12 +1167,7 @@ export function LandingPage() {
         {showLoginModal && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
-            onClick={() => {
-              setShowLoginModal(false);
-              setLoginEmail('');
-              setLoginPassword('');
-              setLoginRole('user');
-            }}
+            onClick={closeLoginModal}
           >
             <div
               className="relative max-w-md w-full rounded-2xl p-[1px] bg-gradient-to-br from-violet-500/50 via-slate-200 dark:via-white/10 to-violet-500/30"
@@ -1064,13 +1176,7 @@ export function LandingPage() {
               <div className="rounded-[15px] bg-white dark:bg-[#0a0a26]/95 backdrop-blur overflow-hidden">
                 <div className="relative px-6 pt-7 pb-3 border-b border-slate-200 dark:border-white/[0.08]">
                   <button
-                    onClick={() => {
-                      setShowLoginModal(false);
-                      setLoginEmail('');
-                      setLoginPassword('');
-                      setLoginRole('user');
-                      resetAuditorFlow();
-                    }}
+                    onClick={closeLoginModal}
                     className="absolute right-5 top-5 p-1 rounded-md text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                   >
                     <X className="w-4 h-4" />
@@ -1086,7 +1192,11 @@ export function LandingPage() {
                           ? 'Reset your password'
                           : userLoginMode === 'forgot-sent'
                             ? 'Check your inbox'
-                            : 'Welcome back'}
+                            : userLoginMode === 'forgot-mpin'
+                              ? 'Set a new MPIN'
+                              : userLoginMode === 'set-mpin'
+                                ? 'Set your MPIN'
+                                : 'Welcome back'}
                     </h3>
                   </div>
                   <p className="text-[13px] text-slate-600 dark:text-white/55 mt-4">
@@ -1096,7 +1206,11 @@ export function LandingPage() {
                         ? "We'll email you a secure link to set a new password."
                         : userLoginMode === 'forgot-sent'
                           ? `If an account exists for ${loginEmail}, a reset link is on its way.`
-                          : 'Sign in with the owner account you created at signup.'}
+                          : userLoginMode === 'forgot-mpin'
+                            ? 'Confirm your password to replace the PIN saved on this device.'
+                            : userLoginMode === 'set-mpin'
+                              ? 'Pick a 4-digit PIN for faster sign-in on this device.'
+                              : 'Sign in with the owner account you created at signup.'}
                   </p>
                 </div>
 
@@ -1144,15 +1258,23 @@ export function LandingPage() {
                       Sign in with email &amp; password
                     </button>
 
-                    <p className="text-[12px] text-center">
+                    <div className="flex items-center justify-center gap-2.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={openForgotMpin}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        Forgot MPIN?
+                      </button>
+                      <span className="text-slate-300 dark:text-white/20">•</span>
                       <button
                         type="button"
                         onClick={openForgotPassword}
                         className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
-                        Forgot your password?
+                        Forgot password?
                       </button>
-                    </p>
+                    </div>
 
                     <p className="text-[12px] text-center text-slate-500 dark:text-white/50">
                       Don't have an account?{' '}
@@ -1165,6 +1287,160 @@ export function LandingPage() {
                       </button>
                     </p>
                   </div>
+                ) : loginRole === 'user' && userLoginMode === 'forgot-mpin' ? (
+                  <form onSubmit={handleForgotMpin} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
+                      <input
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        className="kaps-input"
+                        placeholder="you@company.com"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          className="kaps-input pr-11"
+                          placeholder="Enter your password"
+                          autoFocus
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-right">
+                        <button
+                          type="button"
+                          onClick={openForgotPassword}
+                          className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                        >
+                          Forgot password too?
+                        </button>
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">New MPIN</label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={newMpin}
+                          onChange={(e) => setNewMpin(e.target.value.replace(/\D/g, ''))}
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="4 digits"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Confirm MPIN</label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={confirmNewMpin}
+                          onChange={(e) => setConfirmNewMpin(e.target.value.replace(/\D/g, ''))}
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="Re-enter"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={mpinLoading}
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {mpinLoading ? 'Saving…' : 'Save MPIN & sign in'}
+                      {!mpinLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
+                    </button>
+
+                    <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
+                      The MPIN is stored encrypted on this device only — it is never sent to the
+                      server, which is why your password is needed to replace it.
+                    </p>
+
+                    <p className="text-[12px] text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => { setUserLoginMode('mpin'); resetMpin(); }}
+                        className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
+                      >
+                        ← Back to MPIN sign-in
+                      </button>
+                    </p>
+                  </form>
+                ) : loginRole === 'user' && userLoginMode === 'set-mpin' ? (
+                  <form onSubmit={handleSetMpin} className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Choose MPIN</label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={newMpin}
+                          onChange={(e) => setNewMpin(e.target.value.replace(/\D/g, ''))}
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="4 digits"
+                          autoFocus
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Confirm MPIN</label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={confirmNewMpin}
+                          onChange={(e) => setConfirmNewMpin(e.target.value.replace(/\D/g, ''))}
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="Re-enter"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={mpinLoading}
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {mpinLoading ? 'Saving…' : 'Save MPIN & continue'}
+                      {!mpinLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
+                    </button>
+
+                    <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
+                      You're already signed in. This just enables the 4-digit quick sign-in next
+                      time on this device.
+                    </p>
+
+                    <p className="text-[12px] text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={skipSetMpin}
+                        className="text-slate-500 dark:text-white/50 hover:text-slate-700 dark:hover:text-white/70 font-medium"
+                      >
+                        Skip for now
+                      </button>
+                    </p>
+                  </form>
                 ) : loginRole === 'user' && userLoginMode === 'forgot' ? (
                   <form onSubmit={handleForgotPassword} className="p-6 space-y-4">
                     <div>

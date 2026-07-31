@@ -217,7 +217,7 @@ export function ResetPassword() {
 
               <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
                 Your quick sign-in MPIN on this device will be cleared, since it still holds the old
-                password. Sign in once with the new password to set it up again.
+                password. You'll be asked to choose a new one after signing in.
               </p>
             </form>
           )}

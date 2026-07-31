@@ -10,9 +10,6 @@
 const VAULT_KEY = 'kaps-mpin-vault';
 const RETURNING_KEY = 'kaps-returning-user';
 
-/** Default MPIN provisioned for existing users on their next email/password login. */
-export const DEFAULT_MPIN = '9999';
-
 interface VaultData {
   email: string; // kept in clear so the sign-in screen can greet/prefill
   salt: string; // base64

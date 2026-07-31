@@ -126,7 +126,14 @@ Custom SMTP is configured. Worth looking at so you know the current number.
 4. On success the user is signed out, the device MPIN vault is cleared (it still holds the
    old password, so quick sign-in would otherwise replay stale credentials), and they are
    sent back to `/?signin=1`, which reopens the modal on the email + password screen.
-5. Signing in once with the new password re-provisions the MPIN vault with the default PIN.
+5. Signing in with the new password lands on a "set your MPIN" step, since the device has
+   no vault any more. Choosing a PIN there re-enables quick sign-in; skipping just means
+   password-only on this device.
+
+The same "set your MPIN" step also backs **Forgot MPIN?** on the quick sign-in screen. The
+PIN is only ever a device-local key over stored credentials, so it cannot be recovered — it
+can only be replaced, and replacing it requires the password. A user who has forgotten both
+resets the password first, then sets a new PIN.
 
 ### Security note
 
