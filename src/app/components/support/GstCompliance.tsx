@@ -304,7 +304,7 @@ export function GstCompliance() {
         Looking for how the app itself works?{' '}
         <button
           onClick={() => navigate('/app/help/user-guide')}
-          className="text-[12px] font-normal text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
+          className="text-[12px] font-semibold text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
         >
           Read the User Guide
         </button>

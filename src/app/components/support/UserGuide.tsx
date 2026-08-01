@@ -315,7 +315,7 @@ export function UserGuide() {
         Something not covered here?{' '}
         <a
           href="mailto:office@kapsca.in"
-          className="text-[12px] font-normal text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
+          className="text-[12px] font-semibold text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
         >
           Email us
         </a>{' '}
