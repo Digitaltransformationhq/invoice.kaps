@@ -44,7 +44,8 @@ export function HelpSupport() {
     {
       icon: FileText,
       title: 'GST Compliance',
-      description: 'GST filing guides and tax updates',
+      description: 'What the rules expect of your invoices and returns',
+      to: '/app/help/gst-compliance',
     },
   ];
 
@@ -114,10 +115,12 @@ export function HelpSupport() {
           <h2 className="text-[16px] font-semibold text-foreground tracking-tight">Learning Resources</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {resources.map((resource) => (
+          {resources.map((resource) => {
+            const target = resource.to;
+            return (
             <button
               key={resource.title}
-              onClick={resource.to ? () => navigate(resource.to) : comingSoon(resource.title)}
+              onClick={target ? () => navigate(target) : comingSoon(resource.title)}
               className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 text-left shadow-[0_1px_2px_rgba(139,92,246,0.06)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] hover:border-violet-400 dark:hover:border-violet-400/55 transition-all"
             >
               <div className="w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center mb-3">
@@ -126,7 +129,8 @@ export function HelpSupport() {
               <h3 className="font-semibold text-foreground tracking-tight">{resource.title}</h3>
               <p className="text-[12.5px] text-muted-foreground leading-relaxed mt-1">{resource.description}</p>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
