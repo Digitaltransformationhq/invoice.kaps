@@ -1,9 +1,11 @@
 import { Mail, Phone, Book, HelpCircle, FileText, Search, ChevronDown, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 export function HelpSupport() {
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
 
   const faqs = [
     {
@@ -32,11 +34,12 @@ export function HelpSupport() {
     },
   ];
 
-  const resources = [
+  const resources: Array<{ icon: typeof Book; title: string; description: string; to?: string }> = [
     {
       icon: Book,
       title: 'User Guide',
-      description: 'Complete documentation and tutorials',
+      description: 'How each part of the app works, start to finish',
+      to: '/app/help/user-guide',
     },
     {
       icon: FileText,
@@ -114,7 +117,7 @@ export function HelpSupport() {
           {resources.map((resource) => (
             <button
               key={resource.title}
-              onClick={comingSoon(resource.title)}
+              onClick={resource.to ? () => navigate(resource.to) : comingSoon(resource.title)}
               className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 text-left shadow-[0_1px_2px_rgba(139,92,246,0.06)] hover:shadow-[0_8px_24px_-8px_rgba(139,92,246,0.25)] hover:border-violet-400 dark:hover:border-violet-400/55 transition-all"
             >
               <div className="w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center mb-3">

@@ -20,6 +20,7 @@ import { ReportsDashboard } from './components/reports/ReportsDashboard';
 import { MyProfile } from './components/profile/MyProfile';
 import { Settings } from './components/settings/Settings';
 import { HelpSupport } from './components/support/HelpSupport';
+import { UserGuide } from './components/support/UserGuide';
 import { AuditorManagement } from './components/auditor/AuditorManagement';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
@@ -53,6 +54,7 @@ export default function App() {
               <Route path="profile" element={<MyProfile />} />
               <Route path="settings" element={<Settings />} />
               <Route path="help" element={<HelpSupport />} />
+              <Route path="help/user-guide" element={<UserGuide />} />
             </Route>
           </Routes>
           <InstallPrompt />
