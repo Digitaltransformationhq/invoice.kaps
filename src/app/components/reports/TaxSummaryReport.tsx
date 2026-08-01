@@ -4,7 +4,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -256,6 +259,12 @@ export function TaxSummaryReport({ onBack, dateRange }: TaxSummaryReportProps) {
   const totalTax = totals.cgst + totals.sgst + totals.igst;
   const effectiveRate = totals.taxable > 0 ? (totalTax / totals.taxable) * 100 : 0;
 
+  const distribution = [
+    { name: 'CGST', value: totals.cgst, color: SERIES.cgst },
+    { name: 'SGST', value: totals.sgst, color: SERIES.sgst },
+    { name: 'IGST', value: totals.igst, color: SERIES.igst },
+  ];
+
   const exportHsn = () => {
     downloadCSV(
       hsn.map((h) => ({
@@ -354,22 +363,65 @@ export function TaxSummaryReport({ onBack, dateRange }: TaxSummaryReportProps) {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Taxable value by rate" subtitle="Which GST slabs your sales fall into">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={rates} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-violet-200 dark:text-violet-400/20" vertical={false} />
-                  <XAxis dataKey="rate" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(r: any) => `${r}%`} />
-                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatCompact} width={62} />
+            <ChartCard title="Tax distribution" subtitle="Share of total tax by head">
+              <ResponsiveContainer width="100%" height={244}>
+                <PieChart>
+                  <Pie
+                    data={distribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={58}
+                    outerRadius={96}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    stroke="var(--color-card, #fff)"
+                    strokeWidth={2}
+                  >
+                    {distribution.map((slice) => (
+                      <Cell key={slice.name} fill={slice.color} />
+                    ))}
+                  </Pie>
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    labelFormatter={(r: any) => `${r}% slab`}
-                    formatter={(value: any) => [`₹${formatRupee(Number(value))}`, 'Taxable value']}
+                    formatter={(value: any, name: any) => [`₹${formatRupee(Number(value))}`, name]}
                   />
-                  <Bar dataKey="taxable" name="Taxable value" fill={SERIES.cgst} radius={[4, 4, 0, 0]} maxBarSize={56} />
-                </BarChart>
+                </PieChart>
               </ResponsiveContainer>
+              {/* Direct labels rather than a legend — with three slices the values
+                  matter more than the wedges, and CGST/SGST are equal by design. */}
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                {distribution.map((slice) => (
+                  <div key={slice.name} className="text-center">
+                    <div className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
+                      <span className="w-2.5 h-2.5 rounded-sm" style={{ background: slice.color }} />
+                      {slice.name}
+                    </div>
+                    <div className="text-[13px] font-semibold text-foreground tabular-nums">
+                      ₹{formatRupee(slice.value)}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </ChartCard>
           </div>
+
+          {/* Rate slabs */}
+          <ChartCard title="Taxable value by rate" subtitle="Which GST slabs your sales fall into">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={rates} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-violet-200 dark:text-violet-400/20" vertical={false} />
+                <XAxis dataKey="rate" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(r: any) => `${r}%`} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatCompact} width={62} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(r: any) => `${r}% slab`}
+                  formatter={(value: any) => [`₹${formatRupee(Number(value))}`, 'Taxable value']}
+                />
+                <Bar dataKey="taxable" name="Taxable value" fill={SERIES.cgst} radius={[4, 4, 0, 0]} maxBarSize={56} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
           {/* Liability */}
           <div className="bg-violet-50/50 dark:bg-violet-500/[0.05] border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6">

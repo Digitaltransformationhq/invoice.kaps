@@ -22,9 +22,10 @@ interface SalesReportProps {
   dateRange: { from: string; to: string };
 }
 
-interface MonthPoint {
-  month: string;
+interface TrendPoint {
+  label: string;
   revenue: number;
+  gst: number;
   collections: number;
   invoices: number;
 }
@@ -120,9 +121,11 @@ const downloadCSV = (rows: Record<string, any>[], filename: string, headers: str
 export function SalesReport({ onBack, dateRange }: SalesReportProps) {
   const { user } = useAuth();
   const [groupBy, setGroupBy] = useState<'customer' | 'item'>('customer');
+  const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly');
   const [isLoading, setIsLoading] = useState(true);
 
-  const [months, setMonths] = useState<MonthPoint[]>([]);
+  const [months, setMonths] = useState<TrendPoint[]>([]);
+  const [days, setDays] = useState<TrendPoint[]>([]);
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [totals, setTotals] = useState<Totals>({ invoices: 0, revenue: 0, gst: 0, paid: 0, outstanding: 0 });
@@ -166,7 +169,8 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
       }
 
       const invoices = data || [];
-      const monthMap = new Map<string, MonthPoint & { sort: string }>();
+      const monthMap = new Map<string, TrendPoint & { sort: string }>();
+      const dayMap = new Map<string, TrendPoint & { sort: string }>();
       const customerMap = new Map<string, CustomerRow>();
       const itemMap = new Map<string, ItemRow & { invoiceKeys: Set<string> }>();
       const sum: Totals = { invoices: invoices.length, revenue: 0, gst: 0, paid: 0, outstanding: 0 };
@@ -187,16 +191,23 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
         sum.paid += paid;
         sum.outstanding += outstanding;
 
-        // ---- monthly trend ----
+        // ---- trend, bucketed both ways so the Monthly/Daily toggle is instant ----
         const date = new Date(inv.invoice_date);
         if (!Number.isNaN(date.getTime())) {
-          const sortKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          const label = date.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
-          const point = monthMap.get(sortKey) || { month: label, revenue: 0, collections: 0, invoices: 0, sort: sortKey };
-          point.revenue += revenue;
-          point.collections += paid;
-          point.invoices += 1;
-          monthMap.set(sortKey, point);
+          const addTo = (map: Map<string, TrendPoint & { sort: string }>, sortKey: string, label: string) => {
+            const point = map.get(sortKey) || { label, revenue: 0, gst: 0, collections: 0, invoices: 0, sort: sortKey };
+            point.revenue += revenue;
+            point.gst += gst;
+            point.collections += paid;
+            point.invoices += 1;
+            map.set(sortKey, point);
+          };
+
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          addTo(monthMap, monthKey, date.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }));
+
+          const dayKey = `${monthKey}-${String(date.getDate()).padStart(2, '0')}`;
+          addTo(dayMap, dayKey, date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }));
         }
 
         // ---- customer-wise ----
@@ -238,11 +249,13 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
         });
       });
 
-      setMonths(
-        Array.from(monthMap.values())
+      const toSeries = (map: Map<string, TrendPoint & { sort: string }>) =>
+        Array.from(map.values())
           .sort((a, b) => a.sort.localeCompare(b.sort))
-          .map(({ sort, ...point }) => point)
-      );
+          .map(({ sort, ...point }) => point);
+
+      setMonths(toSeries(monthMap));
+      setDays(toSeries(dayMap));
       setCustomers(Array.from(customerMap.values()).sort((a, b) => b.revenue - a.revenue));
       setItems(
         Array.from(itemMap.values())
@@ -255,6 +268,8 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
 
     load();
   }, [user?.company_id, dateRange.from, dateRange.to]);
+
+  const trend = viewMode === 'monthly' ? months : days;
 
   const collectedPct = totals.revenue + totals.gst > 0
     ? (totals.paid / (totals.revenue + totals.gst)) * 100
@@ -364,14 +379,33 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
             />
           </div>
 
-          {/* Charts — revenue and collections share the rupee axis; invoice count
-              gets its own chart rather than a second scale on the same one. */}
+          {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title="Billed vs received" subtitle="Taxable value against payments recorded, by month">
+            <ChartCard
+              title="Revenue trend"
+              subtitle={`Taxable value and GST, ${viewMode === 'monthly' ? 'by month' : 'by day'}`}
+              action={
+                <div className="inline-flex p-1 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-400/25">
+                  {(['monthly', 'daily'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      className={`px-2.5 h-7 rounded-md text-[12px] font-medium transition-colors ${
+                        viewMode === mode
+                          ? 'bg-violet-500 text-white shadow-[0_2px_8px_-3px_rgba(139,92,246,0.6)]'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {mode === 'monthly' ? 'Monthly' : 'Daily'}
+                    </button>
+                  ))}
+                </div>
+              }
+            >
               <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={months} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                <LineChart data={trend} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-violet-200 dark:text-violet-400/20" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={16} />
                   <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatCompact} width={62} />
                   <Tooltip
                     contentStyle={tooltipStyle}
@@ -381,33 +415,59 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
                   <Line
                     type="monotone"
                     dataKey="revenue"
-                    name="Billed"
+                    name="Revenue"
                     stroke={SERIES.revenue}
                     strokeWidth={2}
-                    dot={{ r: 4, strokeWidth: 2 }}
+                    dot={{ r: 3, strokeWidth: 2 }}
                     activeDot={{ r: 6 }}
                   />
                   <Line
                     type="monotone"
-                    dataKey="collections"
-                    name="Received"
+                    dataKey="gst"
+                    name="GST"
                     stroke={SERIES.collections}
                     strokeWidth={2}
-                    dot={{ r: 4, strokeWidth: 2 }}
+                    dot={{ r: 3, strokeWidth: 2 }}
                     activeDot={{ r: 6 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Invoices issued" subtitle="Count per month">
+            {/* Invoice count and collections are different units, so they get their
+                own axes side by side rather than one scale that would flatten the
+                count to zero next to rupee values. */}
+            <ChartCard title="Invoices & collections" subtitle={`Count issued and payments received, ${viewMode === 'monthly' ? 'by month' : 'by day'}`}>
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={months} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                <BarChart data={trend} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-violet-200 dark:text-violet-400/20" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [value, 'Invoices']} />
-                  <Bar dataKey="invoices" name="Invoices" fill={SERIES.revenue} radius={[4, 4, 0, 0]} maxBarSize={44} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={16} />
+                  <YAxis
+                    yAxisId="count"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    width={34}
+                  />
+                  <YAxis
+                    yAxisId="money"
+                    orientation="right"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={formatCompact}
+                    width={62}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: any, name: any) =>
+                      name === 'Invoices' ? [value, name] : [`₹${formatRupee(Number(value))}`, name]
+                    }
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                  <Bar yAxisId="count" dataKey="invoices" name="Invoices" fill={SERIES.revenue} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar yAxisId="money" dataKey="collections" name="Collections" fill={SERIES.collections} radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -536,16 +596,23 @@ function SummaryStat({
 function ChartCard({
   title,
   subtitle,
+  action,
   children,
 }: {
   title: string;
   subtitle: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl p-5 md:p-6 shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
-      <h3 className="text-[16px] font-semibold text-foreground tracking-tight">{title}</h3>
-      <p className="text-[13px] text-muted-foreground mt-0.5 mb-4">{subtitle}</p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <h3 className="text-[16px] font-semibold text-foreground tracking-tight">{title}</h3>
+          <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>
+        </div>
+        {action}
+      </div>
       {children}
     </div>
   );
