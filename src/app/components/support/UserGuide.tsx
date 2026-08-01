@@ -364,16 +364,11 @@ export function UserGuide() {
           Help &amp; Support
         </button>
 
-        <div className="flex items-center gap-3 mt-4">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white flex items-center justify-center">
-            <Book className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-[22px] font-semibold text-foreground tracking-tight">User Guide</h1>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              How each part of the app works, in the order you will need it.
-            </p>
-          </div>
+        <div className="mt-4">
+          <h1 className="text-[22px] font-semibold text-foreground tracking-tight">User Guide</h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            How each part of the app works, in the order you will need it.
+          </p>
         </div>
       </div>
 
