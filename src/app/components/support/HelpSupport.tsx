@@ -1,4 +1,4 @@
-import { Mail, Phone, MessageCircle, Book, Video, HelpCircle, FileText, Search, ChevronDown, Sparkles } from 'lucide-react';
+import { Mail, Phone, Book, HelpCircle, FileText, Search, ChevronDown, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -39,19 +39,9 @@ export function HelpSupport() {
       description: 'Complete documentation and tutorials',
     },
     {
-      icon: Video,
-      title: 'Video Tutorials',
-      description: 'Step-by-step video guides',
-    },
-    {
       icon: FileText,
       title: 'GST Compliance',
       description: 'GST filing guides and tax updates',
-    },
-    {
-      icon: MessageCircle,
-      title: 'Community Forum',
-      description: 'Connect with other users',
     },
   ];
 
@@ -120,7 +110,7 @@ export function HelpSupport() {
           </div>
           <h2 className="text-[16px] font-semibold text-foreground tracking-tight">Learning Resources</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {resources.map((resource) => (
             <button
               key={resource.title}
@@ -180,26 +170,6 @@ export function HelpSupport() {
         </div>
       </div>
 
-      {/* Footer CTA */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 to-violet-600 p-8 md:p-10 text-center shadow-[0_8px_28px_-12px_rgba(139,92,246,0.6)]">
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/15 mb-3">
-            <MessageCircle className="w-6 h-6 text-white" />
-          </div>
-          <h3 className="text-[20px] font-semibold text-white tracking-tight">Still need help?</h3>
-          <p className="text-[13.5px] text-violet-100 mt-2 max-w-md mx-auto leading-relaxed">
-            Our support team is ready to assist you with any questions about invoicing, GST filing, or your account.
-          </p>
-          <a
-            href="mailto:office@kapsca.in"
-            className="inline-flex items-center gap-2 mt-5 px-6 h-11 bg-white text-violet-700 rounded-lg text-[13.5px] font-semibold hover:bg-violet-50 transition-colors"
-          >
-            <Mail className="w-4 h-4" />
-            Contact Support Team
-          </a>
-        </div>
-      </div>
     </div>
   );
 }
