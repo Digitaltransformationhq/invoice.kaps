@@ -311,11 +311,11 @@ export function UserGuide() {
         ))}
       </div>
 
-      <p className="text-[12.5px] text-muted-foreground text-center">
+      <p className="text-[11px] text-muted-foreground text-center">
         Something not covered here?{' '}
         <a
           href="mailto:office@kapsca.in"
-          className="font-semibold text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200"
+          className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
         >
           Email us
         </a>{' '}
