@@ -95,7 +95,7 @@ export function HelpSupport() {
       </div>
 
       {/* Contact Options */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ContactCard
           icon={Mail}
           title="Email Support"
@@ -106,16 +106,9 @@ export function HelpSupport() {
         <ContactCard
           icon={Phone}
           title="Phone Support"
-          subtitle="Mon–Fri, 9 AM – 6 PM IST."
+          subtitle="Mon–Fri, 10 AM – 6 PM IST."
           actionLabel="+91 78630 42436"
           actionHref="tel:+917863042436"
-        />
-        <ContactCard
-          icon={MessageCircle}
-          title="Live Chat"
-          subtitle="Chat with our support team in real time."
-          actionLabel="Start Chat"
-          onClick={comingSoon('Live chat')}
         />
       </div>
 
