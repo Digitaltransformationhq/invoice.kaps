@@ -100,15 +100,15 @@ export function HelpSupport() {
           icon={Mail}
           title="Email Support"
           subtitle="Get help via email within 24 hours."
-          actionLabel="support@gstinvoice.com"
-          actionHref="mailto:support@gstinvoice.com"
+          actionLabel="office@kapsca.in"
+          actionHref="mailto:office@kapsca.in"
         />
         <ContactCard
           icon={Phone}
           title="Phone Support"
           subtitle="Mon–Fri, 9 AM – 6 PM IST."
-          actionLabel="+91 98765 43210"
-          actionHref="tel:+919876543210"
+          actionLabel="+91 78630 42436"
+          actionHref="tel:+917863042436"
         />
         <ContactCard
           icon={MessageCircle}
@@ -199,7 +199,7 @@ export function HelpSupport() {
             Our support team is ready to assist you with any questions about invoicing, GST filing, or your account.
           </p>
           <a
-            href="mailto:support@gstinvoice.com"
+            href="mailto:office@kapsca.in"
             className="inline-flex items-center gap-2 mt-5 px-6 h-11 bg-white text-violet-700 rounded-lg text-[13.5px] font-semibold hover:bg-violet-50 transition-colors"
           >
             <Mail className="w-4 h-4" />
