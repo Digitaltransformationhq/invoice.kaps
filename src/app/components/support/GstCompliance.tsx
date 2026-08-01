@@ -297,11 +297,11 @@ export function GstCompliance() {
         </div>
       </div>
 
-      <p className="text-[12.5px] text-muted-foreground text-center">
+      <p className="text-[11px] text-muted-foreground text-center">
         Looking for how the app itself works?{' '}
         <button
           onClick={() => navigate('/app/help/user-guide')}
-          className="font-semibold text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200"
+          className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
         >
           Read the User Guide
         </button>
