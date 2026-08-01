@@ -297,11 +297,14 @@ export function GstCompliance() {
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground text-center">
+      {/* Size is set on the <button> as well as the <p>: a button does not reliably
+          inherit font-size, so leaving it to the parent renders the link larger
+          than the sentence it sits in. */}
+      <p className="text-[12px] font-normal text-muted-foreground text-center">
         Looking for how the app itself works?{' '}
         <button
           onClick={() => navigate('/app/help/user-guide')}
-          className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
+          className="text-[12px] font-normal text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 hover:underline"
         >
           Read the User Guide
         </button>
