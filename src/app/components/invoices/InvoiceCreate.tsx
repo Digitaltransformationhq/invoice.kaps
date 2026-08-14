@@ -1167,7 +1167,14 @@ export function InvoiceCreate() {
                     B2C
                   </span>
                   <p className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15 text-[12.5px] text-muted-foreground">
-                    This name goes on the invoice as typed. It isn’t a saved customer, so there’s no GSTIN or address to print and the invoice is treated as B2C. To bill them with a GSTIN, pick them from the list or use <span className="font-medium text-violet-700 dark:text-violet-300">Add “{typedCustomerName}” as a new customer</span> at the bottom of the dropdown.
+                    This name goes on the invoice as typed. It isn’t a saved customer, so there’s no GSTIN or address to print and the invoice is treated as B2C. To bill them with a GSTIN, pick them from the list, or{' '}
+                    <button
+                      type="button"
+                      onClick={() => handleAddNewCustomerFromName(typedCustomerName)}
+                      className="font-medium text-violet-700 dark:text-violet-300 underline underline-offset-2 decoration-violet-300 dark:decoration-violet-400/50 hover:decoration-violet-700 dark:hover:decoration-violet-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 rounded-sm transition"
+                    >
+                      Add “{typedCustomerName}” as a new customer
+                    </button>.
                   </p>
                 </div>
               ) : (
