@@ -1,0 +1,43 @@
+-- Invoice customer name (typed, unsaved buyers)
+-- =============================================================================
+-- Adds `customer_name` to public.invoices so an invoice can carry a buyer name
+-- that was typed on the create form but never saved to public.customers.
+--
+-- Why: the customer box is typeable, but an invoice previously stored only
+-- customer_id. A name that matched no saved customer therefore had nowhere to
+-- live — it saved as NULL and the invoice printed "Customer not selected".
+-- This column is where that typed name goes.
+--
+-- The column is written for every invoice, not just detached ones. When a
+-- customer *is* linked the two agree, so nothing changes; but it also means the
+-- name is snapshotted at issue time. Display still prefers the linked customer
+-- record, so renaming a customer keeps flowing through to their invoices as it
+-- did before — the snapshot is only a fallback.
+--
+-- Behaviour after this migration:
+--   * Typing a buyer name and saving keeps that name on the invoice; it shows
+--     in the invoice list, preview, PDF and email.
+--   * A detached buyer has no GSTIN, address or state on file, so those print
+--     blank and the invoice is stamped B2C — an unregistered buyer is not B2B.
+--   * Existing rows get NULL and are completely unaffected: they all have a
+--     customer_id, which is still what the preview reads first.
+--
+-- Safe to run more than once.
+-- =============================================================================
+
+alter table public.invoices
+  add column if not exists customer_name text;
+
+-- -----------------------------------------------------------------------------
+-- IMPORTANT: auditors create invoices through the auditor_data_request() RPC,
+-- which inserts with an explicit column list. That list has been updated to
+-- carry `customer_name`, so re-run whichever auditor function file you
+-- deployed or auditor-created invoices will silently save no typed name:
+--     supabase_auditor_pgcrypto_fix.sql
+--   (or auditors_bifurcation_migration.sql / .clean.sql, whichever you deployed)
+-- Owner-created invoices work immediately without any function change.
+--
+-- The RPC's *select* branch uses to_jsonb(i), so it picks the new column up on
+-- its own, and its *update* branch only touches status/paid_amount. The insert
+-- is the only place that needed changing.
+-- -----------------------------------------------------------------------------

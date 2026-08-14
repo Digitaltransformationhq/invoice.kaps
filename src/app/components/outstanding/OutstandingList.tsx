@@ -56,7 +56,7 @@ export function OutstandingList() {
       const { data, error } = await selectForUser<any[]>(user, 'outstanding', 'invoices', () =>
         supabase
           .from('invoices')
-          .select('id, invoice_number, invoice_date, due_date, total_amount, paid_amount, status, customers(name, email, phone)')
+          .select('id, invoice_number, invoice_date, due_date, total_amount, paid_amount, status, customer_name, customers(name, email, phone)')
           .eq('company_id', user.company_id)
           .not('status', 'in', '("paid","cancelled","draft")')
       );
@@ -78,7 +78,7 @@ export function OutstandingList() {
 
             return {
               id: invoice.id,
-              customer: customer?.name || 'Customer not selected',
+              customer: customer?.name || invoice.customer_name || 'Customer not selected',
               customerEmail: customer?.email || '',
               customerPhone: customer?.phone || '',
               invoiceId: invoice.invoice_number,

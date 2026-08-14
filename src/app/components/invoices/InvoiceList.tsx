@@ -98,7 +98,10 @@ export function InvoiceList() {
     return {
       dbId: invoice.id,
       id: invoice.invoice_number,
-      customer: customer?.name || 'Customer not selected',
+      customer: customer?.name || invoice.customer_name || 'Customer not selected',
+      // An invoice made out to a typed name has no customer row behind it, so
+      // stand one in carrying just that name — the preview and PDF read the
+      // buyer from here, and everything else is genuinely blank for them.
       customerDetails: customer ? {
         id: customer.id || '',
         companyName: customer.name || '',
@@ -109,6 +112,16 @@ export function InvoiceList() {
         city: customer.city || '',
         state: customer.state || '',
         address: customer.address || '',
+      } : invoice.customer_name ? {
+        id: '',
+        companyName: invoice.customer_name,
+        gstin: '',
+        contactName: '',
+        email: '',
+        phone: '',
+        city: '',
+        state: '',
+        address: '',
       } : null,
       date: formatDate(invoice.invoice_date),
       rawDate: invoice.invoice_date || '',
@@ -153,6 +166,7 @@ export function InvoiceList() {
         total_amount,
         paid_amount,
         customer_id,
+        customer_name,
         status,
         is_manual_number,
         customer_type,

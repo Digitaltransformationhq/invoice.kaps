@@ -99,6 +99,10 @@ export function InvoiceCreate() {
   const [lineItemIdForNewItem, setLineItemIdForNewItem] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
+  // The text sitting in the customer box. Held here rather than inside the
+  // combobox so it survives clicking away or moving to another section — the
+  // combobox unmounting or blurring must not take a half-typed name with it.
+  const [customerQuery, setCustomerQuery] = useState('');
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
@@ -297,6 +301,9 @@ export function InvoiceCreate() {
     }
 
     setSelectedCustomer(invoice.customer_id || '');
+    // For a linked customer this is replaced with their current name once the
+    // customer list loads; for a detached one it's all we have.
+    setCustomerQuery(invoice.customer_name || '');
     setInvoiceNumber(invoice.invoice_number || '');
     setIsManualInvoiceNumber(true);
     if (invoice.invoice_date) setInvoiceDate(invoice.invoice_date);
@@ -507,7 +514,28 @@ export function InvoiceCreate() {
     amount: Number(item.amount) || 0,
   }));
   const selectedCustomerDetails = customers.find((customer) => customer.id === selectedCustomer) || null;
-  const selectedCustomerType = selectedCustomerDetails?.customerType || 'B2B';
+  // A name typed into the customer box without picking a saved customer still
+  // has to reach the invoice, so stand in a customer carrying only that name.
+  // Every other field prints blank, which is the truth: there is no GSTIN,
+  // address or state on file for them.
+  const typedCustomerName = selectedCustomerDetails ? '' : customerQuery.trim();
+  const detachedCustomer: Customer | null = typedCustomerName ? {
+    id: '',
+    companyName: typedCustomerName,
+    customerType: 'B2C',
+    gstin: '',
+    pan: '',
+    contactName: '',
+    email: '',
+    phone: '',
+    city: '',
+    state: '',
+    address: '',
+  } : null;
+  const invoiceCustomer = selectedCustomerDetails || detachedCustomer;
+  // An unregistered buyer is B2C, not B2B — stamping B2B on an invoice with no
+  // GSTIN would put an unfilable row into GSTR-1.
+  const selectedCustomerType = invoiceCustomer?.customerType || 'B2B';
   const supplyState = placeOfSupply === 'Auto from customer'
     ? selectedCustomerDetails?.state || getGstinStateName(selectedCustomerDetails?.gstin) || ''
     : placeOfSupply;
@@ -530,7 +558,7 @@ export function InvoiceCreate() {
         : 'goods+service';
 
   const getInvoiceShareMessage = () => (
-    `Invoice ${invoiceNumber} for ${selectedCustomerDetails?.companyName || 'your company'} has been created. Total amount: Rs. ${totalAmount.toFixed(2)}.`
+    `Invoice ${invoiceNumber} for ${invoiceCustomer?.companyName || 'your company'} has been created. Total amount: Rs. ${totalAmount.toFixed(2)}.`
   );
 
   const handleMailInvoice = () => {
@@ -672,11 +700,21 @@ export function InvoiceCreate() {
     setTerms(defaultTerms);
   }, [editId, defaultTerms, defaultsLoaded]);
 
+  // Keep the customer box reading as the selected customer's name — after the
+  // add-customer modal saves, and once customers finish loading in edit mode.
+  // Typing clears the selection, so this can never overwrite what's being typed.
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    const match = customers.find((customer) => customer.id === selectedCustomer);
+    if (match) setCustomerQuery(match.companyName);
+  }, [selectedCustomer, customers]);
+
   const saveInvoice = async (status: string) => {
     if (!user?.company_id) {
       toast.error('Company profile is not ready. Please refresh and try again.');
       return null;
     }
+
 
     if (lineItems.length === 0) {
       toast.error('Add at least one line item.');
@@ -696,6 +734,10 @@ export function InvoiceCreate() {
       const invoiceRecord = {
           company_id: user.company_id,
           customer_id: selectedCustomer || null,
+          // Written whether or not a customer is linked. With one it just
+          // matches their name; without one it is the only record of who the
+          // invoice was made out to.
+          customer_name: invoiceCustomer?.companyName || null,
           invoice_number: nextInvoiceNumber,
           invoice_date: invoiceDate,
           due_date: dueDate || null,
@@ -853,6 +895,7 @@ export function InvoiceCreate() {
   const resetInvoiceForm = () => {
     setInvoiceCreated(false);
     setSelectedCustomer('');
+    setCustomerQuery('');
     setIsManualInvoiceNumber(false);
     setInvoiceNumber('');
     // Re-seed directly rather than leaning on the seeding effects: if today's
@@ -895,12 +938,12 @@ export function InvoiceCreate() {
     }
   };
 
-  const handleCustomerChange = (value: string) => {
-    if (value === 'add-new') {
-      setShowAddCustomerModal(true);
-    } else {
-      setSelectedCustomer(value);
-    }
+  // Typing a name that matches no saved customer routes here: the add-customer
+  // modal opens with that name already filled in, so the typed text becomes a
+  // real customer row — which is what the invoice's customer_id has to point at.
+  const handleAddNewCustomerFromName = (typedName: string) => {
+    setNewCustomer((current) => ({ ...current, companyName: typedName }));
+    setShowAddCustomerModal(true);
   };
 
   const handleAddCustomer = async () => {
@@ -1044,15 +1087,22 @@ export function InvoiceCreate() {
               <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Customer</h3>
             </div>
             <div className="space-y-3.5">
-              <AppSelect
+              <CustomerCombobox
                 value={selectedCustomer}
-                onChange={handleCustomerChange}
+                query={customerQuery}
+                options={customers}
+                onType={(text) => {
+                  setCustomerQuery(text);
+                  // Editing the name drops the old selection, so the details
+                  // panel and tax calculation can't keep showing a customer the
+                  // box no longer names.
+                  setSelectedCustomer('');
+                }}
+                onSelect={setSelectedCustomer}
+                onAddNew={handleAddNewCustomerFromName}
                 disabled={isLoadingCustomers}
-                placeholder={isLoadingCustomers ? 'Loading customers…' : 'Select customer…'}
-                options={customers.map((customer) => ({ value: customer.id, label: `${customer.companyName} — ${customer.gstin}` }))}
-                onAddNew={() => handleCustomerChange('add-new')}
-                addLabel="Add new customer"
-                className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
+                placeholder={isLoadingCustomers ? 'Loading customers…' : 'Type or select a customer…'}
+                inputClassName="w-full pl-3.5 pr-9 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
               />
 
               <div className="min-h-[230px]">
@@ -1109,6 +1159,16 @@ export function InvoiceCreate() {
                       )}
                     </div>
                   )}
+                </div>
+              ) : typedCustomerName ? (
+                <div className="rounded-lg border border-dashed border-violet-300 dark:border-violet-400/30 bg-violet-50/40 dark:bg-violet-500/[0.04] p-4">
+                  <div className="text-[16px] font-semibold text-foreground leading-tight">{typedCustomerName}</div>
+                  <span className="mt-2 inline-flex px-2.5 py-1 rounded-md bg-card border border-violet-200 dark:border-violet-400/30 text-[10.5px] font-bold tracking-wider uppercase text-violet-600 dark:text-violet-300">
+                    B2C
+                  </span>
+                  <p className="mt-3.5 pt-3.5 border-t border-violet-200/70 dark:border-violet-400/15 text-[12.5px] text-muted-foreground">
+                    This name goes on the invoice as typed. It isn’t a saved customer, so there’s no GSTIN or address to print and the invoice is treated as B2C. To bill them with a GSTIN, pick them from the list or use <span className="font-medium text-violet-700 dark:text-violet-300">Add “{typedCustomerName}” as a new customer</span> at the bottom of the dropdown.
+                  </p>
                 </div>
               ) : (
                 <p className="text-[12.5px] text-muted-foreground px-1">Pick an existing customer or add a new one — their GSTIN drives the tax calculation below.</p>
@@ -1744,7 +1804,7 @@ export function InvoiceCreate() {
         invoiceNumber={invoiceNumber}
         invoiceDate={invoiceDate}
         dueDate={dueDate}
-        customer={selectedCustomerDetails}
+        customer={invoiceCustomer}
         customerType={selectedCustomerType}
         billType={derivedBillType}
         placeOfSupply={placeOfSupply}
@@ -1847,8 +1907,9 @@ export function InvoiceCreate() {
               <h3 className="text-xl font-semibold text-foreground">Add New Customer</h3>
               <button
                 onClick={() => {
+                  // Backing out of "add customer" only discards the draft — any
+                  // customer already chosen on the invoice stays chosen.
                   setShowAddCustomerModal(false);
-                  setSelectedCustomer('');
                   setNewCustomer({
                     companyName: '',
                     customerType: 'B2B',
@@ -2015,8 +2076,9 @@ export function InvoiceCreate() {
             <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
               <button
                 onClick={() => {
+                  // Backing out of "add customer" only discards the draft — any
+                  // customer already chosen on the invoice stays chosen.
                   setShowAddCustomerModal(false);
-                  setSelectedCustomer('');
                   setNewCustomer({
                     companyName: '',
                     customerType: 'B2B',
@@ -2382,6 +2444,204 @@ function ItemCombobox({ value, options, onType, onSelect, onAddNew, disabled, pl
               >
                 <Plus className="w-4 h-4 shrink-0" />
                 {value.trim() ? `Add “${value.trim()}” to items` : 'Add new item to catalog'}
+              </button>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+interface CustomerComboboxProps {
+  /** The selected customer's id, or '' when the typed text matches nothing. */
+  value: string;
+  /** The text in the box. Owned by the parent so it survives blur/unmount. */
+  query: string;
+  options: Customer[];
+  onType: (value: string) => void;
+  onSelect: (customerId: string) => void;
+  onAddNew: (typedName: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  inputClassName?: string;
+}
+
+// The customer field is a dropdown you can also type into: typing filters the
+// saved customers by name or GSTIN, matching how the item field above works.
+//
+// Unlike an item, a customer can't be kept as free text — an invoice stores only
+// customer_id, and the preview, PDF and GSTR-1 all read the name and GSTIN back
+// through that join. So a name matching nothing isn't dropped: the footer hands
+// it to the "add customer" modal, which turns it into a real customer row and
+// selects it. Typing is a way *into* the list, never a way around it.
+function CustomerCombobox({ value, query, options, onType, onSelect, onAddNew, disabled, placeholder, inputClassName }: CustomerComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const trimmedQuery = query.trim().toLowerCase();
+  // Once a customer is picked the box holds their exact name, so filtering on it
+  // would narrow the list to that one row. Show everything again in that case.
+  const isFiltering = trimmedQuery !== '' && !value;
+  const filtered = isFiltering
+    ? options.filter((o) =>
+        o.companyName.toLowerCase().includes(trimmedQuery) ||
+        o.gstin.toLowerCase().includes(trimmedQuery))
+    : options;
+  const exactMatch = trimmedQuery !== '' && options.some((o) => o.companyName.trim().toLowerCase() === trimmedQuery);
+
+  const updateRect = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+  };
+
+  const openMenu = () => {
+    if (disabled) return;
+    updateRect();
+    setHighlight(-1);
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => updateRect();
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      // Only the menu closes. Whatever was typed stays in the box — the parent
+      // owns that text, so clicking into another section can't discard it.
+      setOpen(false);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    document.addEventListener('mousedown', onDocDown);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+      document.removeEventListener('mousedown', onDocDown);
+    };
+  }, [open]);
+
+  const choose = (customerId: string) => {
+    onSelect(customerId);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    if (e.key === 'Escape') {
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!open) openMenu();
+      setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+      return;
+    }
+    if (e.key === 'Enter' && open && highlight >= 0 && filtered[highlight]) {
+      e.preventDefault();
+      choose(filtered[highlight].id);
+    }
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(e) => {
+          onType(e.target.value);
+          setHighlight(-1);
+          if (!open) openMenu();
+          else updateRect();
+        }}
+        onFocus={openMenu}
+        onKeyDown={handleKeyDown}
+        className={inputClassName}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        disabled={disabled}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          if (open) {
+            setOpen(false);
+          } else {
+            inputRef.current?.focus();
+            openMenu();
+          }
+        }}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-700 dark:text-slate-200 disabled:opacity-60"
+      >
+        <ChevronDown className="w-4 h-4" />
+      </button>
+
+      {open && rect && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 60 }}
+          className="max-h-60 overflow-auto rounded-lg border border-violet-200 dark:border-violet-400/30 bg-white dark:bg-[#0d0d2a] shadow-xl py-1"
+        >
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              {trimmedQuery ? `No customer matches “${query.trim()}”` : 'No customers yet'}
+            </div>
+          ) : (
+            filtered.map((option, index) => (
+              <button
+                key={option.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(option.id);
+                }}
+                onMouseEnter={() => setHighlight(index)}
+                className={`block w-full text-left px-3 py-2 text-sm transition-colors ${
+                  option.id === value ? 'font-semibold text-violet-700 dark:text-violet-300' : 'text-foreground'
+                } ${index === highlight ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10'}`}
+              >
+                <span className="block truncate">{option.companyName}</span>
+                {option.gstin && (
+                  <span className="block truncate text-[11.5px] font-mono text-muted-foreground">{option.gstin}</span>
+                )}
+              </button>
+            ))
+          )}
+
+          {!exactMatch && (
+            <div className="sticky bottom-0 border-t border-violet-100 dark:border-violet-400/15 bg-white dark:bg-[#0d0d2a]">
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  // The typed name stays in the box; the modal opens with it
+                  // filled in, and saving swaps it for the real customer.
+                  setOpen(false);
+                  onAddNew(query.trim());
+                }}
+                className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  {query.trim() ? `Add “${query.trim()}” as a new customer` : 'Add new customer'}
+                </span>
               </button>
             </div>
           )}

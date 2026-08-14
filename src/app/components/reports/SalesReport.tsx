@@ -151,6 +151,7 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
               total_tax,
               total_amount,
               paid_amount,
+              customer_name,
               customers(name),
               invoice_items(item_name, hsn, quantity, unit, taxable_amount, tax_amount)
             `)
@@ -177,7 +178,7 @@ export function SalesReport({ onBack, dateRange }: SalesReportProps) {
 
       invoices.forEach((inv: any, index: number) => {
         const customer = Array.isArray(inv.customers) ? inv.customers[0] : inv.customers;
-        const customerName = customer?.name || 'Unnamed customer';
+        const customerName = customer?.name || inv.customer_name || 'Unnamed customer';
         const invoiceKey = inv.invoice_number || `row-${index}`;
 
         const revenue = Number(inv.subtotal || 0);
