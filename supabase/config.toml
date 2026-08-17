@@ -1,8 +1,15 @@
 # Supabase project config — only the per-function overrides are needed for
-# the email integration. Keep this file checked in so deploys stay reproducible.
+# the email and MPIN integrations. Keep this file checked in so deploys stay
+# reproducible.
 
 [functions.send-invoice-email]
 # The frontend calls this function with the publishable anon key (not a JWT
 # session token), so the gateway-side JWT check has to be off. The function
 # does its own input validation.
+verify_jwt = false
+
+[functions.mpin-signin]
+# By definition this runs before there is a session — it is what creates one —
+# so the gateway JWT check must be off. The function verifies the MPIN itself
+# through a service-role-only RPC that rate-limits wrong attempts.
 verify_jwt = false

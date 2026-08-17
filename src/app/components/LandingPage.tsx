@@ -40,7 +40,20 @@ import { useAuth } from '../../contexts/AuthContext';
 import { toast, Toaster } from 'sonner';
 import { supabase } from '../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../lib/gstin';
-import { saveMpinVault, unlockWithMpin, hasMpinVault, getVaultEmail, markReturningUser, isValidMpin, clearMpinVault } from '../../lib/mpin';
+import {
+  isReturningUser,
+  markReturningUser,
+  getRememberedEmail,
+  rememberEmail,
+  isValidMpin,
+  setPendingMpin,
+  takePendingMpin,
+  clearPendingMpin,
+  adoptLegacyVaultEmail,
+  hasLegacyMpinVault,
+  unlockLegacyVault,
+  clearLegacyMpinVault,
+} from '../../lib/mpin';
 
 type Theme = 'dark' | 'light';
 const THEME_KEY = 'kaps-landing-theme';
@@ -67,6 +80,7 @@ export function LandingPage() {
   const [mpinLoading, setMpinLoading] = useState(false);
   const [mpinError, setMpinError] = useState('');
   const mpinInputsRef = useRef<Array<HTMLInputElement | null>>([]);
+  const mpinEmailInputRef = useRef<HTMLInputElement | null>(null);
   type AuditorCompanyOption = { auditor_id: string; company_id: string; company_name: string; company_logo: string | null; full_name: string };
   const [auditorStage, setAuditorStage] = useState<'email' | 'pick' | 'password'>('email');
   const [auditorCompanies, setAuditorCompanies] = useState<AuditorCompanyOption[]>([]);
@@ -165,17 +179,24 @@ export function LandingPage() {
     confirmMpin: ''
   });
 
-  const { login, lookupAuditorCompanies, loginAuditorById, requestPasswordReset, user } = useAuth();
+  const { login, loginWithMpin, saveMpin, hasMpin, lookupAuditorCompanies, loginAuditorById, requestPasswordReset, user } = useAuth();
   const navigate = useNavigate();
 
-  // Existing users (a saved MPIN exists on this device) never get dropped on
-  // the marketing page. If they still have an active session, send them into
-  // the app; otherwise open the sign-in modal straight to the MPIN screen.
+  // Recognise a browser that still holds a pre-central MPIN vault, so its owner
+  // is greeted by name on the PIN screen. The vault stays put until their next
+  // PIN entry upgrades it (see upgradeLegacyMpin).
+  useEffect(() => {
+    adoptLegacyVaultEmail();
+  }, []);
+
+  // Users who have signed in from this browser before never get dropped on the
+  // marketing page. If they still have an active session, send them into the
+  // app; otherwise open the sign-in modal straight to the MPIN screen.
   // Reacts to `user` so logging out (which lands back here) reopens the modal.
   // It won't re-trigger while a modal is already open, so closing it to browse
   // the page is fine.
   useEffect(() => {
-    if (!hasMpinVault()) {
+    if (!isReturningUser()) {
       return; // brand-new visitor → show the marketing page
     }
     if (user) {
@@ -187,7 +208,7 @@ export function LandingPage() {
       setUserLoginMode('mpin');
       setMpinDigits(['', '', '', '']);
       setMpinError('');
-      setLoginEmail(getVaultEmail() || '');
+      setLoginEmail(getRememberedEmail() || '');
       setShowLoginModal(true);
       setTimeout(() => mpinInputsRef.current[0]?.focus(), 50);
     }
@@ -273,11 +294,20 @@ export function LandingPage() {
       if (result.success) {
         if (loginRole === 'user') {
           markReturningUser();
-          // No vault on this device yet — either a first sign-in here, or the
-          // vault was dropped by a password reset / "Forgot MPIN". Ask for a PIN
-          // rather than provisioning a guessable default behind their back. The
-          // session is already live, so skipping just means no quick sign-in.
-          if (!hasMpinVault()) {
+          rememberEmail(loginEmail);
+
+          // Signup collects an MPIN but cannot store it until a session exists.
+          // There is one now, so apply the parked choice without asking again.
+          const pending = takePendingMpin(loginEmail);
+          if (pending) {
+            const saved = await saveMpin(pending);
+            if (!saved.success) {
+              toast.error(saved.error || 'Could not save your MPIN. You can set it after signing in.');
+            }
+          } else if (!(await hasMpin())) {
+            // The account has no MPIN at all — offer one rather than provisioning
+            // a guessable default behind their back. The session is already live,
+            // so skipping just means no quick sign-in.
             setNewMpin('');
             setConfirmNewMpin('');
             setUserLoginMode('set-mpin');
@@ -316,10 +346,10 @@ export function LandingPage() {
     }
   };
 
-  // The MPIN only ever encrypts credentials we already hold, so re-provisioning
-  // it is gated on the password rather than on the old PIN — that is what makes
-  // a forgotten PIN recoverable without any server-side record of it.
-  const saveNewMpin = async (email: string, password: string) => {
+  // Setting the PIN needs a live session, not the old PIN — the account stores
+  // only a hash of the digits, so a forgotten PIN is replaced by proving identity
+  // with the password. The new PIN then works on every device immediately.
+  const saveNewMpin = async (email: string) => {
     if (!isValidMpin(newMpin)) {
       toast.error('MPIN must be exactly 4 digits');
       return false;
@@ -329,14 +359,16 @@ export function LandingPage() {
       return false;
     }
 
-    try {
-      await saveMpinVault(email, password, newMpin);
-    } catch {
-      toast.error('Could not save the MPIN on this device');
+    const result = await saveMpin(newMpin);
+    if (!result.success) {
+      toast.error(result.error || 'Could not save your MPIN');
       return false;
     }
 
     markReturningUser();
+    rememberEmail(email);
+    clearPendingMpin();
+    clearLegacyMpinVault(); // the account copy governs now
     setNewMpin('');
     setConfirmNewMpin('');
     return true;
@@ -373,22 +405,22 @@ export function LandingPage() {
       return;
     }
 
-    const saved = await saveNewMpin(loginEmail, loginPassword);
+    const saved = await saveNewMpin(loginEmail);
     setMpinLoading(false);
     if (saved) {
       finishLogin('MPIN updated. Signed in.');
     }
   };
 
-  // Set MPIN: reached straight after a successful password login on a device
-  // with no vault, so the credentials in state are already verified.
+  // Set MPIN: reached straight after a successful password login on an account
+  // that has no MPIN yet, so the session needed to store it is already live.
   const handleSetMpin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMpinLoading(true);
-    const saved = await saveNewMpin(loginEmail, loginPassword);
+    const saved = await saveNewMpin(loginEmail);
     setMpinLoading(false);
     if (saved) {
-      finishLogin('MPIN set. Quick sign-in is ready on this device.');
+      finishLogin('MPIN set. Quick sign-in now works on any device.');
     }
   };
 
@@ -406,7 +438,7 @@ export function LandingPage() {
     setMpinError('');
     setMpinDigits(['', '', '', '']);
     if (!loginEmail) {
-      setLoginEmail(getVaultEmail() || '');
+      setLoginEmail(getRememberedEmail() || '');
     }
   };
 
@@ -416,7 +448,7 @@ export function LandingPage() {
     setMpinError('');
     setMpinDigits(['', '', '', '']);
     if (!loginEmail) {
-      setLoginEmail(getVaultEmail() || '');
+      setLoginEmail(getRememberedEmail() || '');
     }
   };
 
@@ -426,47 +458,99 @@ export function LandingPage() {
     setTimeout(() => mpinInputsRef.current[0]?.focus(), 0);
   };
 
+  // A PIN set before MPINs moved to the account exists only as an encrypted vault
+  // in this browser, and the digits the user just typed are its key. So rather
+  // than making a long-standing user invent a PIN again, decrypt the vault, sign
+  // in with the credentials inside, and store that same PIN on the account — from
+  // then on it works everywhere and the vault is gone.
+  const upgradeLegacyMpin = async (mpin: string): Promise<boolean> => {
+    const creds = await unlockLegacyVault(mpin);
+    if (!creds) {
+      return false; // wrong PIN for this vault, or no Web Crypto — fall through
+    }
+
+    // The vault's own address wins: the email field may have been edited.
+    const result = await login(creds.email, creds.password, 'owner');
+    if (!result.success) {
+      // The stored password is stale (changed on another device), so the vault is
+      // dead weight — drop it and let the caller fall back to the password form.
+      clearLegacyMpinVault();
+      return false;
+    }
+
+    const saved = await saveMpin(mpin);
+    markReturningUser();
+    rememberEmail(creds.email);
+
+    if (saved.success) {
+      clearLegacyMpinVault(); // upgraded — the device copy is no longer needed
+      toast.success('Signed in. Your MPIN now works on every device.');
+    } else {
+      // Keep the vault so the upgrade can be retried on the next sign-in.
+      toast.success('Login successful!');
+    }
+
+    setShowLoginModal(false);
+    navigate('/app');
+    return true;
+  };
+
+  // Quick sign-in: the account's PIN is verified server-side, so this works on a
+  // device that has never seen the account — the email is all we need alongside it.
   const submitMpin = async (mpin: string) => {
+    if (mpinLoading) {
+      return;
+    }
+    if (!isValidMpin(mpin)) {
+      setMpinError('Enter all 4 digits of your MPIN.');
+      return;
+    }
+    const email = loginEmail.trim();
+    if (!email) {
+      setMpinError('Enter the email address you signed up with.');
+      mpinEmailInputRef.current?.focus();
+      return;
+    }
+
     setMpinLoading(true);
     setMpinError('');
 
-    const creds = await unlockWithMpin(mpin);
-    if (!creds) {
-      setMpinLoading(false);
-      setMpinError('Incorrect MPIN. Try again or use email & password below.');
+    try {
+      const result = await loginWithMpin(email, mpin);
+
+      if (result.success) {
+        markReturningUser();
+        rememberEmail(email);
+        toast.success('Login successful!');
+        setShowLoginModal(false);
+        navigate('/app');
+        return;
+      }
+
+      // The account has no PIN stored centrally. Before sending them to the
+      // password form, try the pre-central vault in this browser — for a
+      // long-standing user the digits they just typed will open it, and that
+      // upgrades them silently instead of asking for a new PIN.
+      if (result.notSet) {
+        if (hasLegacyMpinVault() && (await upgradeLegacyMpin(mpin))) {
+          return;
+        }
+
+        setMpinDigits(['', '', '', '']);
+        setMpinError('');
+        setLoginPassword('');
+        setUserLoginMode('password');
+        toast.error(
+          'Quick sign-in is not set up on this account yet. Sign in with your password — you can pick an MPIN right after, and it will then work on every device.',
+        );
+        return;
+      }
+
+      setMpinError(result.error || 'Could not sign in. Use email & password below.');
       resetMpin();
-      return;
+    } finally {
+      setMpinLoading(false);
     }
-
-    const result = await login(creds.email, creds.password, 'owner');
-    setMpinLoading(false);
-
-    if (result.success) {
-      markReturningUser();
-      toast.success('Login successful!');
-      setShowLoginModal(false);
-      navigate('/app');
-      return;
-    }
-
-    // The PIN decrypted the vault, so the PIN was right — the server rejected the
-    // credentials inside it. That means the password changed elsewhere: the vault
-    // is device-local, so a reset done on another device or browser leaves this
-    // one holding the old password with nothing to clear it. Blaming the PIN here
-    // sends people in circles, so drop the dead vault and ask for the password.
-    if (/invalid login credentials|invalid credentials|invalid email or password/i.test(result.error || '')) {
-      clearMpinVault();
-      setMpinDigits(['', '', '', '']);
-      setMpinError('');
-      setLoginEmail(creds.email);
-      setLoginPassword('');
-      setUserLoginMode('password');
-      toast.error('Your password changed since this MPIN was set. Sign in with your password, then pick a new MPIN.');
-      return;
-    }
-
-    setMpinError(result.error || 'Could not sign in. Use email & password below.');
-    resetMpin();
   };
 
   const handleMpinChange = (index: number, raw: string) => {
@@ -490,7 +574,9 @@ export function LandingPage() {
     setMpinDigits(next);
     mpinInputsRef.current[Math.min(cursor, 3)]?.focus();
 
-    if (next.every((d) => d !== '')) {
+    // Auto-submit once the PIN is complete, but only when the email is already
+    // there — otherwise wait for the button rather than flashing an error.
+    if (next.every((d) => d !== '') && loginEmail.trim()) {
       submitMpin(next.join(''));
     }
   };
@@ -511,14 +597,15 @@ export function LandingPage() {
     setMobileMenuOpen(false);
     resetAuditorFlow();
     setLoginPassword('');
-    // Owners with a saved MPIN start on the quick MPIN screen; everyone else
-    // starts on email + password.
-    const vaultExists = hasMpinVault();
-    setUserLoginMode(role === 'user' && vaultExists ? 'mpin' : 'password');
+    // Owners who have signed in from this browser before start on the quick MPIN
+    // screen; a first-time visitor starts on email + password (they can still
+    // switch to the PIN screen, since the PIN lives on the account).
+    const returning = isReturningUser();
+    setUserLoginMode(role === 'user' && returning ? 'mpin' : 'password');
     setMpinDigits(['', '', '', '']);
     setMpinError('');
-    if (role === 'user' && vaultExists) {
-      setLoginEmail(getVaultEmail() || '');
+    if (role === 'user') {
+      setLoginEmail(getRememberedEmail() || '');
     }
   };
 
@@ -626,14 +713,35 @@ export function LandingPage() {
         toast.error('Signup failed. Please try again.');
         return;
       }
-      // Provision the MPIN vault on this device so quick sign-in works right
-      // after the user logs in. Falls back to the default 9999 if left blank.
-      try {
-        await saveMpinVault(signupData.email, signupData.password, signupData.mpin);
-        markReturningUser();
-      } catch {}
+      // The access token minted by signUp still embeds the metadata we just sent
+      // — including the base64 logo — which makes it ~100 KB and too large for
+      // the ~32 KB header limit, so every request with it is rejected upstream.
+      // The signup trigger strips the logo from the metadata, so refreshing here
+      // reissues a small token. Without this the very next call fails.
+      if (data.session) {
+        try {
+          await supabase.auth.refreshSession();
+        } catch {
+          /* a slim token is a bonus, not a precondition for the account */
+        }
+      }
+
+      // Store the chosen MPIN on the account so it works on every device. That
+      // needs a session: signUp returns one when email confirmation is off, and
+      // when it doesn't we park the PIN and apply it after the first sign-in.
+      markReturningUser();
+      rememberEmail(signupData.email);
+      if (data.session) {
+        const saved = await saveMpin(signupData.mpin);
+        if (!saved.success) {
+          setPendingMpin(signupData.email, signupData.mpin);
+        }
+      } else {
+        setPendingMpin(signupData.email, signupData.mpin);
+      }
       toast.success('Account created successfully! Please login to continue.');
       setShowSignupModal(false);
+      setUserLoginMode('password');
       setShowLoginModal(true);
       setLoginEmail(signupData.email);
       setSignupData({
@@ -1225,15 +1333,32 @@ export function LandingPage() {
                         : userLoginMode === 'forgot-sent'
                           ? `If an account exists for ${loginEmail}, a reset link is on its way.`
                           : userLoginMode === 'forgot-mpin'
-                            ? 'Confirm your password to replace the PIN saved on this device.'
+                            ? 'Confirm your password to choose a new PIN for your account.'
                             : userLoginMode === 'set-mpin'
-                              ? 'Pick a 4-digit PIN for faster sign-in on this device.'
+                              ? 'Pick a 4-digit PIN for faster sign-in on any device.'
                               : 'Sign in with the owner account you created at signup.'}
                   </p>
                 </div>
 
                 {loginRole === 'user' && userLoginMode === 'mpin' ? (
-                  <div className="p-6 space-y-5">
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); submitMpin(mpinDigits.join('')); }}
+                    className="p-6 space-y-5"
+                  >
+                    <div>
+                      <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
+                      <input
+                        ref={mpinEmailInputRef}
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => { setLoginEmail(e.target.value); setMpinError(''); }}
+                        className="kaps-input"
+                        placeholder="you@company.com"
+                        autoComplete="username"
+                        disabled={mpinLoading}
+                      />
+                    </div>
+
                     <div className="text-center">
                       <p className="text-[12px] font-medium text-slate-700 dark:text-white/70 mb-3">Enter your 4-digit MPIN</p>
                       <div className="flex justify-center gap-3">
@@ -1257,10 +1382,19 @@ export function LandingPage() {
                         <p className="mt-3 text-[12px] text-red-500">{mpinError}</p>
                       ) : (
                         <p className="mt-3 text-[12px] text-slate-500 dark:text-white/50">
-                          {mpinLoading ? 'Signing in…' : 'Quick sign-in with your PIN'}
+                          {mpinLoading ? 'Signing in…' : 'Your MPIN works on any device'}
                         </p>
                       )}
                     </div>
+
+                    <button
+                      type="submit"
+                      disabled={mpinLoading}
+                      className="group w-full inline-flex items-center justify-center gap-2 h-11 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_8px_30px_-8px_rgba(139,92,246,0.7)] transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {mpinLoading ? 'Signing in…' : 'Sign in with MPIN'}
+                      {!mpinLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
+                    </button>
 
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
@@ -1296,7 +1430,7 @@ export function LandingPage() {
                         Create one
                       </button>
                     </p>
-                  </div>
+                  </form>
                 ) : loginRole === 'user' && userLoginMode === 'forgot-mpin' ? (
                   <form onSubmit={handleForgotMpin} className="p-6 space-y-4">
                     <div>
@@ -1381,8 +1515,9 @@ export function LandingPage() {
                     </button>
 
                     <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
-                      The MPIN is stored encrypted on this device only — it is never sent to the
-                      server, which is why your password is needed to replace it.
+                      The new MPIN replaces the old one on your account and works on every device.
+                      Only a one-way hash of the digits is stored, so the password is what proves
+                      it is you.
                     </p>
 
                     <p className="text-[12px] text-center pt-1">
@@ -1437,10 +1572,18 @@ export function LandingPage() {
                       {!mpinLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />}
                     </button>
 
-                    <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
-                      You're already signed in. This just enables the 4-digit quick sign-in next
-                      time on this device.
-                    </p>
+                    {hasLegacyMpinVault() ? (
+                      <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
+                        Your earlier MPIN was saved only inside this browser, so it cannot be read
+                        and carried over. Enter the same 4 digits (or new ones) once — from now on
+                        the PIN lives on your account and works on every device.
+                      </p>
+                    ) : (
+                      <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
+                        You're already signed in. This just enables the 4-digit quick sign-in next
+                        time — on this device or any other.
+                      </p>
+                    )}
 
                     <p className="text-[12px] text-center pt-1">
                       <button
@@ -1483,7 +1626,7 @@ export function LandingPage() {
                     <p className="text-[12px] text-center pt-1">
                       <button
                         type="button"
-                        onClick={() => setUserLoginMode(hasMpinVault() ? 'mpin' : 'password')}
+                        onClick={() => setUserLoginMode(isReturningUser() ? 'mpin' : 'password')}
                         className="inline-flex items-center gap-1.5 text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
@@ -1515,7 +1658,7 @@ export function LandingPage() {
                     <p className="text-[12px] text-center">
                       <button
                         type="button"
-                        onClick={() => setUserLoginMode(hasMpinVault() ? 'mpin' : 'password')}
+                        onClick={() => setUserLoginMode(isReturningUser() ? 'mpin' : 'password')}
                         className="inline-flex items-center gap-1.5 text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-semibold"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
@@ -1575,22 +1718,20 @@ export function LandingPage() {
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
                     </button>
 
-                    {hasMpinVault() && (
-                      <>
-                        <div className="flex items-center gap-3">
-                          <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-                          <span className="text-[11px] text-slate-400 dark:text-white/40">or</span>
-                          <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { setUserLoginMode('mpin'); resetMpin(); }}
-                          className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-full border border-violet-300/60 dark:border-white/12 text-violet-700 dark:text-violet-200 text-[13px] font-semibold hover:bg-violet-50 dark:hover:bg-white/[0.04] transition-colors"
-                        >
-                          Sign in with MPIN
-                        </button>
-                      </>
-                    )}
+                    {/* The MPIN lives on the account, so quick sign-in is offered
+                        here even on a device that has never seen it. */}
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                      <span className="text-[11px] text-slate-400 dark:text-white/40">or</span>
+                      <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setUserLoginMode('mpin'); resetMpin(); }}
+                      className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-full border border-violet-300/60 dark:border-white/12 text-violet-700 dark:text-violet-200 text-[13px] font-semibold hover:bg-violet-50 dark:hover:bg-white/[0.04] transition-colors"
+                    >
+                      Sign in with MPIN
+                    </button>
 
                     <p className="text-[12px] text-center text-slate-500 dark:text-white/50 pt-1">
                       Don't have an account?{' '}
@@ -1806,7 +1947,7 @@ export function LandingPage() {
                             </button>
                           </div>
                         </Field>
-                        <Field label="MPIN" required hint="4-digit PIN for quick sign-in next time">
+                        <Field label="MPIN" required hint="4-digit PIN for quick sign-in on any device">
                           <input
                             type="password"
                             inputMode="numeric"

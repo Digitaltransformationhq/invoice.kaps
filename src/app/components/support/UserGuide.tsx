@@ -247,22 +247,22 @@ const SECTIONS: GuideSection[] = [
     id: 'signing-in',
     icon: Lock,
     title: 'Signing in & passwords',
-    summary: 'Your password is the master key; the MPIN is a shortcut on one device.',
+    summary: 'Your password is the master key; the MPIN is a shortcut that follows your account.',
     steps: [
       {
         title: 'MPIN quick sign-in',
         body:
-          'On your own device you can set a 4-digit MPIN and sign in with that instead of typing your password. The PIN is stored encrypted in that browser only and never reaches our servers — which is why it works on one device and not another.',
+          'Set a 4-digit MPIN once and sign in with your email and those digits instead of typing your password. The PIN belongs to your account, not to one browser, so the same PIN works on your laptop, your phone and any new device — you never have to create it again. Only a one-way hash of the digits is stored, and five wrong attempts lock quick sign-in for 15 minutes (your password still works).',
       },
       {
         title: 'Forgot your MPIN',
         body:
-          'Choose "Forgot MPIN?" on the sign-in screen and enter your email, password and a new PIN. Because the PIN protects your stored password, only the password can replace it.',
+          'Choose "Forgot MPIN?" on the sign-in screen and enter your email, password and a new PIN. The password is what proves it is you, since the PIN itself cannot be read back. The new PIN replaces the old one everywhere.',
       },
       {
         title: 'Forgot your password',
         body:
-          'Choose "Forgot password?" and we email a link that is valid for 15 minutes and works once. Open it, set a new password, then sign in — you will be asked to pick a new MPIN, since the old one was tied to the old password.',
+          'Choose "Forgot password?" and we email a link that is valid for 15 minutes and works once. Open it, set a new password, then sign in. Your MPIN is unaffected and keeps working.',
       },
       {
         where: 'Settings → Security',

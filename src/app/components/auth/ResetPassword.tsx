@@ -216,8 +216,8 @@ export function ResetPassword() {
               </button>
 
               <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
-                Your quick sign-in MPIN on this device will be cleared, since it still holds the old
-                password. You'll be asked to choose a new one after signing in.
+                Your 4-digit MPIN is not affected — it belongs to your account, not to the password,
+                so quick sign-in keeps working on every device.
               </p>
             </form>
           )}

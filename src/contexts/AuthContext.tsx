@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { clearMpinVault } from '../lib/mpin';
+import { clearLegacyMpinVault, isValidMpin } from '../lib/mpin';
 
 interface User {
   id: string;
@@ -44,6 +44,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isOwner: boolean;
   login: (email: string, password: string, role?: 'owner' | 'auditor') => Promise<{ success: boolean; error?: string }>;
+  loginWithMpin: (email: string, mpin: string) => Promise<{ success: boolean; error?: string; locked?: boolean; notSet?: boolean }>;
+  saveMpin: (mpin: string) => Promise<{ success: boolean; error?: string }>;
+  hasMpin: () => Promise<boolean>;
   lookupAuditorCompanies: (email: string) => Promise<{ success: boolean; companies?: AuditorCompany[]; error?: string }>;
   loginAuditorById: (auditorId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -342,26 +345,162 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: describeAuthError(error, 'Login failed') };
       }
 
-      const { data, error: profileError } = await supabase.rpc('get_current_profile');
-      if (profileError || !data?.success) {
-        if (isNetworkFailure(profileError)) {
-          return { success: false, error: NETWORK_ERROR_MESSAGE };
+      return finalizeOwnerSession(authData.user?.user_metadata as AuthMetadata);
+    } catch (error) {
+      return { success: false, error: describeAuthError(error, 'Login failed') };
+    }
+  };
+
+  /**
+   * Turns a live Supabase session into an app session. Shared by the password
+   * and MPIN sign-in paths, which differ only in how the session was obtained.
+   */
+  const finalizeOwnerSession = async (metadata: AuthMetadata = {}) => {
+    const { data, error: profileError } = await supabase.rpc('get_current_profile');
+    if (profileError || !data?.success) {
+      if (isNetworkFailure(profileError)) {
+        return { success: false, error: NETWORK_ERROR_MESSAGE };
+      }
+      await supabase.auth.signOut();
+      return { success: false, error: data?.error || profileError?.message || 'Profile not found' };
+    }
+
+    const profile = data.profile;
+    const nextUser = buildOwnerUser(profile, metadata);
+    storeSession(nextUser, ownerPermissions);
+
+    if (!profile.company_gstin) {
+      repairCompanyGstin(nextUser);
+    }
+
+    return { success: true };
+  };
+
+  /**
+   * Quick sign-in with the account's 4-digit MPIN. The PIN is checked by the
+   * `mpin-signin` Edge Function (which alone can reach the service-role verify
+   * RPC and its lockout counter); on a match it returns a single-use token that
+   * verifyOtp() exchanges for a real session. No password is involved, so this
+   * works on any device — including one that has never seen this account.
+   */
+  const loginWithMpin = async (email: string, mpin: string) => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.' };
+    }
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      return { success: false, error: 'Enter the email address you signed up with' };
+    }
+    if (!isValidMpin(mpin)) {
+      return { success: false, error: 'MPIN must be exactly 4 digits' };
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke<{
+        success: boolean;
+        token_hash?: string;
+        error?: string;
+        locked?: boolean;
+        notSet?: boolean;
+      }>('mpin-signin', { body: { email: trimmedEmail, mpin } });
+
+      if (error) {
+        // A wrong PIN comes back as HTTP 200, so anything here is a real fault.
+        // FunctionsHttpError hides the body on the original Response.
+        let serverError: string | undefined;
+        const context: any = (error as any).context;
+        if (context && typeof context.clone === 'function') {
+          try {
+            serverError = (await context.clone().json())?.error;
+          } catch {
+            /* non-JSON body */
+          }
         }
-        await supabase.auth.signOut();
-        return { success: false, error: data?.error || profileError?.message || 'Profile not found' };
+
+        const message = (error.message || '').toLowerCase();
+        if (!serverError && (message.includes('not found') || message.includes('404'))) {
+          serverError =
+            'MPIN sign-in is not deployed yet. Run: npx supabase functions deploy mpin-signin --no-verify-jwt';
+        }
+        if (!serverError && isNetworkFailure(error)) {
+          serverError = NETWORK_ERROR_MESSAGE;
+        }
+
+        return { success: false, error: serverError || 'Could not sign in with your MPIN. Use your password.' };
       }
 
-      const profile = data.profile;
-      const nextUser = buildOwnerUser(profile, authData.user?.user_metadata as AuthMetadata);
-      storeSession(nextUser, ownerPermissions);
+      if (!data?.success || !data.token_hash) {
+        return {
+          success: false,
+          error: data?.error || 'Incorrect MPIN',
+          locked: Boolean(data?.locked),
+          notSet: Boolean(data?.notSet),
+        };
+      }
 
-      if (!profile.company_gstin) {
-        repairCompanyGstin(nextUser);
+      const { data: authData, error: otpError } = await supabase.auth.verifyOtp({
+        type: 'magiclink',
+        token_hash: data.token_hash,
+      });
+
+      if (otpError || !authData?.session) {
+        return { success: false, error: describeAuthError(otpError, 'Could not start your session. Use your password.') };
+      }
+
+      return finalizeOwnerSession(authData.user?.user_metadata as AuthMetadata);
+    } catch (error) {
+      return { success: false, error: describeAuthError(error, 'Could not sign in with your MPIN') };
+    }
+  };
+
+  /**
+   * Stores (or replaces) the signed-in owner's MPIN on the account. Only the
+   * bcrypt hash is kept server-side, and it is not tied to the password — a
+   * password reset leaves the MPIN working.
+   */
+  const saveMpin = async (mpin: string) => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured.' };
+    }
+    if (!isValidMpin(mpin)) {
+      return { success: false, error: 'MPIN must be exactly 4 digits' };
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('set_user_mpin', { p_mpin: mpin });
+
+      if (error || !data?.success) {
+        if (isNetworkFailure(error)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
+        if (/could not find the function|does not exist/i.test(error?.message || '')) {
+          return {
+            success: false,
+            error: 'MPIN storage is not set up yet. Run supabase/sql/supabase_mpin_central.sql in the Supabase SQL Editor.',
+          };
+        }
+        return { success: false, error: data?.error || error?.message || 'Could not save your MPIN' };
       }
 
       return { success: true };
     } catch (error) {
-      return { success: false, error: describeAuthError(error, 'Login failed') };
+      return { success: false, error: describeAuthError(error, 'Could not save your MPIN') };
+    }
+  };
+
+  /** Whether the signed-in owner already has an MPIN on the account. */
+  const hasMpin = async () => {
+    try {
+      const { data, error } = await supabase.rpc('mpin_status');
+      if (error || !data?.success) {
+        // Unknown either way — treat it as "already set" so a transient failure
+        // never nags a user who has had an MPIN for months.
+        return true;
+      }
+      return Boolean(data.mpin_set);
+    } catch {
+      return true;
     }
   };
 
@@ -405,8 +544,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Sets the new password using the short-lived session the recovery link
    * created. Afterwards the user is signed out so they have to sign in with the
-   * new password, and the device MPIN vault is dropped because it still holds
-   * the old credentials.
+   * new password. The MPIN is unaffected — it is stored on the account as its own
+   * secret rather than as a wrapper around the password — so it keeps working.
    */
   const completePasswordReset = async (newPassword: string) => {
     if (!isSupabaseConfigured) {
@@ -427,7 +566,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: describeAuthError(error, 'Could not update your password') };
       }
 
-      clearMpinVault();
+      // Only the obsolete device vault goes: it wrapped the old password.
+      clearLegacyMpinVault();
       await supabase.auth.signOut();
       clearSession();
 
@@ -524,6 +664,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isOwner: user?.role === 'owner',
         login,
+        loginWithMpin,
+        saveMpin,
+        hasMpin,
         lookupAuditorCompanies,
         loginAuditorById,
         requestPasswordReset,

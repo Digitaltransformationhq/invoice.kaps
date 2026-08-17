@@ -23,12 +23,12 @@ built-in credentials if the variables are absent.
 src/
   app/components/    feature screens, one folder per module (invoices, receipts, …)
   contexts/          AuthContext — owner (Supabase Auth) and auditor (RPC) sessions
-  lib/               shared helpers: PDF generation, MPIN vault, GSTIN, email
+  lib/               shared helpers: PDF generation, MPIN quick sign-in, GSTIN, email
   styles/            Tailwind entry + the print/A4 stylesheet
 api/proxy.ts         Vercel edge proxy — the browser reaches Supabase via /api/sb
 supabase/
   config.toml        Supabase CLI config (Edge Function JWT overrides)
-  functions/         Deno Edge Functions — send-invoice-email uses AWS SES
+  functions/         Deno Edge Functions — send-invoice-email (AWS SES), mpin-signin
   sql/               schema and migration scripts, run by hand in the SQL editor
 docs/                setup guides, plans and design notes
 public/              PWA manifest, service worker, icons
@@ -47,6 +47,8 @@ push` would otherwise run them in filename order — and several overlap or drop
 | --- | --- |
 | [docs/PASSWORD_RESET_SETUP.md](docs/PASSWORD_RESET_SETUP.md) | Owner password reset — the Supabase dashboard settings it needs |
 | [docs/reset-password-email.html](docs/reset-password-email.html) | Branded template for the reset email |
+| [docs/MPIN_SETUP.md](docs/MPIN_SETUP.md) | Account-level MPIN quick sign-in — SQL + Edge Function to deploy |
+| `supabase/sql/supabase_owner_profile_repair.sql` | Fix "Profile not found" / "User already registered" — reinstalls the signup trigger and backfills half-created owners |
 | [docs/PROXY_SETUP.md](docs/PROXY_SETUP.md) | Why traffic goes through `/api/sb` instead of `supabase.co` |
 | [docs/AUDITOR_SYSTEM_SETUP.md](docs/AUDITOR_SYSTEM_SETUP.md) | Auditor accounts, permissions and multi-company access |
 | [docs/QUICK_START_AUDITOR.md](docs/QUICK_START_AUDITOR.md) | Short version of the above |
