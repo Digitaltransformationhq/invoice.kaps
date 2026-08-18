@@ -51,6 +51,7 @@ import {
   clearPendingMpin,
   adoptLegacyVaultEmail,
   hasLegacyMpinVault,
+  getLegacyVaultEmail,
   unlockLegacyVault,
   clearLegacyMpinVault,
 } from '../../lib/mpin';
@@ -304,14 +305,18 @@ export function LandingPage() {
             if (!saved.success) {
               toast.error(saved.error || 'Could not save your MPIN. You can set it after signing in.');
             }
-          } else if (!(await hasMpin())) {
-            // The account has no MPIN at all — offer one rather than provisioning
-            // a guessable default behind their back. The session is already live,
-            // so skipping just means no quick sign-in.
-            setNewMpin('');
-            setConfirmNewMpin('');
-            setUserLoginMode('set-mpin');
-            return;
+          } else {
+            // Offer a PIN when the account has none — and also when the check
+            // itself failed, since guessing "already set" would quietly leave
+            // this account without quick sign-in and no way to notice. The step
+            // is skippable either way.
+            const status = await hasMpin();
+            if (!status.set) {
+              setNewMpin('');
+              setConfirmNewMpin('');
+              setUserLoginMode('set-mpin');
+              return;
+            }
           }
         }
         toast.success('Login successful!');
@@ -463,7 +468,16 @@ export function LandingPage() {
   // than making a long-standing user invent a PIN again, decrypt the vault, sign
   // in with the credentials inside, and store that same PIN on the account — from
   // then on it works everywhere and the vault is gone.
-  const upgradeLegacyMpin = async (mpin: string): Promise<boolean> => {
+  const upgradeLegacyMpin = async (email: string, mpin: string): Promise<boolean> => {
+    // The vault is locked by the PIN alone, so it must only ever be opened for
+    // the account it belongs to. On a shared device — several customers signing
+    // in from one browser — skipping this check could sign someone in as the
+    // vault's owner instead of themselves.
+    const vaultEmail = getLegacyVaultEmail();
+    if (!vaultEmail || vaultEmail.trim().toLowerCase() !== email.trim().toLowerCase()) {
+      return false;
+    }
+
     const creds = await unlockLegacyVault(mpin);
     if (!creds) {
       return false; // wrong PIN for this vault, or no Web Crypto — fall through
@@ -532,7 +546,7 @@ export function LandingPage() {
       // long-standing user the digits they just typed will open it, and that
       // upgrades them silently instead of asking for a new PIN.
       if (result.notSet) {
-        if (hasLegacyMpinVault() && (await upgradeLegacyMpin(mpin))) {
+        if (hasLegacyMpinVault() && (await upgradeLegacyMpin(email, mpin))) {
           return;
         }
 

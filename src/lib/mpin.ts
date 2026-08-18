@@ -130,6 +130,16 @@ export function hasLegacyMpinVault(): boolean {
 }
 
 /**
+ * Which account the pre-central vault belongs to. The vault is keyed only by the
+ * PIN, so callers must check this before unlocking it — otherwise, on a shared
+ * device, someone signing in to a different account could be handed the vault
+ * owner's session instead of their own.
+ */
+export function getLegacyVaultEmail(): string | null {
+  return readLegacyVault()?.email || null;
+}
+
+/**
  * Picks up the email from any pre-central vault so the PIN screen still greets
  * long-standing users by address. The vault itself is left in place — it is what
  * lets their existing PIN be upgraded without asking for a new one.

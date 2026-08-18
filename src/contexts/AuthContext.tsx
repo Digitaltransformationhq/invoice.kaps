@@ -46,7 +46,8 @@ interface AuthContextType {
   login: (email: string, password: string, role?: 'owner' | 'auditor') => Promise<{ success: boolean; error?: string }>;
   loginWithMpin: (email: string, mpin: string) => Promise<{ success: boolean; error?: string; locked?: boolean; notSet?: boolean }>;
   saveMpin: (mpin: string) => Promise<{ success: boolean; error?: string }>;
-  hasMpin: () => Promise<boolean>;
+  hasMpin: () => Promise<{ set: boolean; known: boolean }>;
+  clearMpin: () => Promise<{ success: boolean; error?: string }>;
   lookupAuditorCompanies: (email: string) => Promise<{ success: boolean; companies?: AuditorCompany[]; error?: string }>;
   loginAuditorById: (auditorId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -489,18 +490,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /** Whether the signed-in owner already has an MPIN on the account. */
-  const hasMpin = async () => {
+  /** Turns quick sign-in off for the signed-in owner, on every device. */
+  const clearMpin = async () => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured.' };
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('clear_user_mpin');
+      if (error || !data?.success) {
+        if (isNetworkFailure(error)) {
+          return { success: false, error: NETWORK_ERROR_MESSAGE };
+        }
+        return { success: false, error: data?.error || error?.message || 'Could not remove your MPIN' };
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: describeAuthError(error, 'Could not remove your MPIN') };
+    }
+  };
+
+  /**
+   * Whether the signed-in owner already has an MPIN on the account.
+   *
+   * `known: false` means the check itself failed, which must NOT be read as
+   * "already set": doing that silently denies the user the chance to create a
+   * PIN, and quick sign-in then reports "not set up" forever with nothing in the
+   * UI to fix it. Callers offer the (skippable) set-MPIN step in that case.
+   */
+  const hasMpin = async (): Promise<{ set: boolean; known: boolean }> => {
     try {
       const { data, error } = await supabase.rpc('mpin_status');
       if (error || !data?.success) {
-        // Unknown either way — treat it as "already set" so a transient failure
-        // never nags a user who has had an MPIN for months.
-        return true;
+        console.warn('MPIN status check failed:', error?.message || data?.error);
+        return { set: false, known: false };
       }
-      return Boolean(data.mpin_set);
-    } catch {
-      return true;
+      return { set: Boolean(data.mpin_set), known: true };
+    } catch (error) {
+      console.warn('MPIN status check failed:', error);
+      return { set: false, known: false };
     }
   };
 
@@ -667,6 +695,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithMpin,
         saveMpin,
         hasMpin,
+        clearMpin,
         lookupAuditorCompanies,
         loginAuditorById,
         requestPasswordReset,

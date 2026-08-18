@@ -996,11 +996,71 @@ function SecuritySettings({
   isSaving: boolean;
   setIsSaving: (saving: boolean) => void;
 }) {
+  const { saveMpin, hasMpin, clearMpin } = useAuth();
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
+  const [mpin, setMpin] = useState('');
+  const [confirmMpin, setConfirmMpin] = useState('');
+  const [mpinSet, setMpinSet] = useState<boolean | null>(null);
+  const [mpinBusy, setMpinBusy] = useState(false);
+
+  // Auditors sign in through their own RPC and have no auth session, so there is
+  // no account for a PIN to hang off.
+  const canUseMpin = user?.role !== 'auditor';
+
+  useEffect(() => {
+    if (!canUseMpin) return;
+    let active = true;
+    hasMpin().then((status) => {
+      if (active) setMpinSet(status.known ? status.set : null);
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseMpin, user?.id]);
+
+  const updateMpin = async () => {
+    if (!/^\d{4}$/.test(mpin)) {
+      toast.error('MPIN must be exactly 4 digits');
+      return;
+    }
+    if (mpin !== confirmMpin) {
+      toast.error('MPIN and confirmation do not match');
+      return;
+    }
+
+    setMpinBusy(true);
+    const result = await saveMpin(mpin);
+    setMpinBusy(false);
+
+    if (!result.success) {
+      toast.error(result.error || 'Could not save your MPIN');
+      return;
+    }
+
+    setMpin('');
+    setConfirmMpin('');
+    setMpinSet(true);
+    toast.success('MPIN saved. It works on every device you sign in from.');
+  };
+
+  const removeMpin = async () => {
+    setMpinBusy(true);
+    const result = await clearMpin();
+    setMpinBusy(false);
+
+    if (!result.success) {
+      toast.error(result.error || 'Could not remove your MPIN');
+      return;
+    }
+
+    setMpinSet(false);
+    toast.success('MPIN removed. Quick sign-in is off for this account.');
+  };
 
   const updatePassword = async () => {
     if (!user?.id) return;
@@ -1077,6 +1137,61 @@ function SecuritySettings({
           <SaveButton onSave={updatePassword} isSaving={isSaving} label="Update Password" />
         </div>
       </SectionCard>
+
+      {canUseMpin && (
+        <SectionCard
+          icon={Lock}
+          title="Quick sign-in (MPIN)"
+          subtitle="A 4-digit PIN for this account. Set it once and it works on every device you sign in from."
+        >
+          <p className="mb-4 text-sm text-foreground/70">
+            {mpinSet === null
+              ? 'Checking whether this account has an MPIN…'
+              : mpinSet
+                ? 'An MPIN is set for this account. Entering a new one below replaces it everywhere.'
+                : 'No MPIN yet. Choose one to sign in with your email and 4 digits instead of your password.'}
+          </p>
+
+          <div className="space-y-4">
+            <SettingsInput
+              label={mpinSet ? 'New MPIN' : 'MPIN'}
+              type="password"
+              value={mpin}
+              onChange={(value) => setMpin(value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="4 digits"
+            />
+            <SettingsInput
+              label="Confirm MPIN"
+              type="password"
+              value={confirmMpin}
+              onChange={(value) => setConfirmMpin(value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="Re-enter"
+            />
+          </div>
+
+          <p className="mt-4 text-xs leading-relaxed text-foreground/55">
+            Only a one-way hash of the digits is stored, so the PIN can be replaced but never read
+            back. Five wrong attempts lock quick sign-in for 15 minutes — your password always works.
+          </p>
+
+          <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15 flex flex-wrap items-center gap-3">
+            <SaveButton
+              onSave={updateMpin}
+              isSaving={mpinBusy}
+              label={mpinSet ? 'Update MPIN' : 'Save MPIN'}
+            />
+            {mpinSet && (
+              <button
+                onClick={removeMpin}
+                disabled={mpinBusy}
+                className="text-sm font-medium text-foreground/60 hover:text-foreground disabled:opacity-60"
+              >
+                Turn quick sign-in off
+              </button>
+            )}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }
