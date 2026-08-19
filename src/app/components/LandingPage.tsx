@@ -457,9 +457,14 @@ export function LandingPage() {
     }
   };
 
-  const resetMpin = () => {
+  // Clears the boxes and puts the cursor back on the first one. `keepError`
+  // keeps a just-set message on screen — a wrong PIN has to say so, and the
+  // digits it clears would otherwise take the explanation with them.
+  const resetMpin = (keepError = false) => {
     setMpinDigits(['', '', '', '']);
-    setMpinError('');
+    if (!keepError) {
+      setMpinError('');
+    }
     setTimeout(() => mpinInputsRef.current[0]?.focus(), 0);
   };
 
@@ -561,7 +566,7 @@ export function LandingPage() {
       }
 
       setMpinError(result.error || 'Could not sign in. Use email & password below.');
-      resetMpin();
+      resetMpin(true);
     } finally {
       setMpinLoading(false);
     }
@@ -1388,12 +1393,16 @@ export function LandingPage() {
                             disabled={mpinLoading}
                             onChange={(e) => handleMpinChange(index, e.target.value)}
                             onKeyDown={(e) => handleMpinKeyDown(index, e)}
-                            className="w-12 h-14 text-center text-2xl font-semibold rounded-xl border border-violet-300/50 dark:border-white/10 bg-white dark:bg-white/[0.03] text-slate-900 dark:text-white focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50 transition"
+                            className={`w-12 h-14 text-center text-2xl font-semibold rounded-xl border bg-white dark:bg-white/[0.03] text-slate-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 transition ${
+                              mpinError
+                                ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20'
+                                : 'border-violet-300/50 dark:border-white/10 focus:border-violet-500 focus:ring-violet-500/20'
+                            }`}
                           />
                         ))}
                       </div>
                       {mpinError ? (
-                        <p className="mt-3 text-[12px] text-red-500">{mpinError}</p>
+                        <p className="mt-3 text-[12px] font-medium text-red-500">{mpinError}</p>
                       ) : (
                         <p className="mt-3 text-[12px] text-slate-500 dark:text-white/50">
                           {mpinLoading ? 'Signing in…' : 'Your MPIN works on any device'}
