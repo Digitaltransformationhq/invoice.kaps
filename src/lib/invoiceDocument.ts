@@ -54,6 +54,7 @@ export interface InvoiceCompanyDetails {
   bankAccountNumber: string;
   bankIfsc: string;
   bankBranch: string;
+  bankAccountType: string;
   logo: string;
   esignImage: string;
   stampImage: string;
@@ -112,6 +113,8 @@ export interface InvoiceDocument {
     bankAccountNumber: string;
     bankIfsc: string;
     bankBranch: string;
+    /** Savings / Current / Cash Credit / Overdraft. Blank prints no line. */
+    bankAccountType: string;
   };
   buyer: {
     name: string;
@@ -313,6 +316,7 @@ export function buildInvoiceDocument(input: InvoiceDocumentInput): InvoiceDocume
       bankAccountNumber: company.bankAccountNumber || '',
       bankIfsc: company.bankIfsc || '',
       bankBranch: company.bankBranch || '',
+      bankAccountType: company.bankAccountType || '',
     },
     buyer: {
       name: input.customer?.companyName || 'Customer not selected',

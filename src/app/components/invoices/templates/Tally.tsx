@@ -388,6 +388,12 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
                     <td className="pr-1 align-top">A/c No.</td>
                     <td className="align-top">: <span className="font-bold">{company.bankAccountNumber || '-'}</span></td>
                   </tr>
+                  {company.bankAccountType && (
+                    <tr>
+                      <td className="pr-1 align-top">A/c Type</td>
+                      <td className="align-top">: <span className="font-bold">{company.bankAccountType}</span></td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="pr-1 align-top">Branch &amp; IFS Code</td>
                     <td className="align-top">

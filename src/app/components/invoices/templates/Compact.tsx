@@ -327,6 +327,7 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
           <div>A/c: {company.bankAccountNumber || '-'}</div>
           <div>IFSC: {company.bankIfsc || '-'}</div>
           {company.bankBranch && <div>Branch: {company.bankBranch}</div>}
+          {company.bankAccountType && <div>A/c Type: {company.bankAccountType}</div>}
         </div>
         <div className="p-2 border-r border-foreground leading-snug">
           <div className="font-semibold">DECLARATION</div>

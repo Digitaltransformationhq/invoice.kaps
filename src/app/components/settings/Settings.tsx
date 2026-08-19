@@ -21,6 +21,7 @@ interface CompanyForm {
   bank_account_number: string;
   bank_ifsc: string;
   bank_branch: string;
+  bank_account_type: string;
   company_logo: string;
   esign_image: string;
   stamp_image: string;
@@ -54,6 +55,7 @@ const emptyCompany: CompanyForm = {
   bank_account_number: '',
   bank_ifsc: '',
   bank_branch: '',
+  bank_account_type: '',
   company_logo: '',
   esign_image: '',
   stamp_image: '',
@@ -72,6 +74,16 @@ const defaultSettings: SettingsForm = {
   taxpayer_type: 'regular',
   invoice_template: DEFAULT_INVOICE_TEMPLATE_ID,
 };
+
+// Blank first: a company that has not said which kind of account it holds should
+// print nothing rather than be defaulted into the wrong one.
+const BANK_ACCOUNT_TYPES = [
+  { value: '', label: 'Not specified' },
+  { value: 'Savings', label: 'Savings' },
+  { value: 'Current', label: 'Current' },
+  { value: 'Cash Credit', label: 'Cash Credit (CC)' },
+  { value: 'Overdraft', label: 'Overdraft (OD)' },
+];
 
 const SETTINGS_REQUEST_TIMEOUT_MS = 12000;
 const SIGNATURE_IMAGE_MAX_SIZE = 900;
@@ -291,7 +303,7 @@ export function Settings() {
       const [companyResponse, settingsResponse] = await Promise.all([
         supabase
           .from('companies')
-          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo, esign_image, stamp_image')
+          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, company_logo, esign_image, stamp_image')
           .eq('id', user.company_id)
           .single(),
         supabase.rpc('get_company_settings', {
@@ -318,6 +330,7 @@ export function Settings() {
         bank_account_number: companyResponse.data?.bank_account_number || '',
         bank_ifsc: companyResponse.data?.bank_ifsc || '',
         bank_branch: companyResponse.data?.bank_branch || '',
+        bank_account_type: companyResponse.data?.bank_account_type || '',
         company_logo: companyResponse.data?.company_logo || '',
         esign_image: companyResponse.data?.esign_image || '',
         stamp_image: companyResponse.data?.stamp_image || '',
@@ -379,6 +392,7 @@ export function Settings() {
       bank_account_number: company.bank_account_number.trim() || null,
       bank_ifsc: company.bank_ifsc.trim().toUpperCase() || null,
       bank_branch: company.bank_branch.trim() || null,
+      bank_account_type: company.bank_account_type.trim() || null,
       company_logo: company.company_logo || null,
       esign_image: company.esign_image || null,
       stamp_image: company.stamp_image || null,
@@ -392,7 +406,7 @@ export function Settings() {
           .from('companies')
           .update(nextCompany)
           .eq('id', user.company_id)
-          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, company_logo, esign_image, stamp_image')
+          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, company_logo, esign_image, stamp_image')
           .single(),
         'Saving company settings'
       );
@@ -415,6 +429,7 @@ export function Settings() {
         bank_account_number: data?.bank_account_number || '',
         bank_ifsc: data?.bank_ifsc || '',
         bank_branch: data?.bank_branch || '',
+        bank_account_type: data?.bank_account_type || '',
         company_logo: data?.company_logo || '',
         esign_image: data?.esign_image || '',
         stamp_image: data?.stamp_image || '',
@@ -768,6 +783,17 @@ function CompanySettings({
           <SettingsInput label="Account Number" value={company.bank_account_number} disabled={!canEdit} inputClassName="font-mono" onChange={(bank_account_number) => setCompany({ ...company, bank_account_number })} />
           <SettingsInput label="IFSC Code" value={company.bank_ifsc} disabled={!canEdit} inputClassName="font-mono uppercase" placeholder="SBIN0001234" onChange={(bank_ifsc) => setCompany({ ...company, bank_ifsc })} />
           <SettingsInput label="Branch Name" value={company.bank_branch} disabled={!canEdit} onChange={(bank_branch) => setCompany({ ...company, bank_branch })} />
+          <div>
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Account Type</label>
+            <AppSelect
+              value={company.bank_account_type}
+              onChange={(bank_account_type) => setCompany({ ...company, bank_account_type })}
+              disabled={!canEdit}
+              options={BANK_ACCOUNT_TYPES}
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            />
+            <p className="text-[11.5px] text-muted-foreground mt-1.5">Banks ask for this on an NEFT/RTGS transfer, so printing it saves the customer a phone call. Leave blank to keep it off the invoice.</p>
+          </div>
         </div>
         {canEdit && (
           <div className="mt-6 pt-5 border-t border-violet-100 dark:border-violet-400/15">

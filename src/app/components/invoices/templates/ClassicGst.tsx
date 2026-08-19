@@ -356,6 +356,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
             <div>A/c No.: {company.bankAccountNumber || '-'}</div>
             <div>IFSC: {company.bankIfsc || '-'}</div>
             {company.bankBranch && <div>Branch: {company.bankBranch}</div>}
+            {company.bankAccountType && <div>A/c Type: {company.bankAccountType}</div>}
           </div>
         </div>
         <div className="p-4 text-xs">

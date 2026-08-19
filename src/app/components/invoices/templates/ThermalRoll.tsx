@@ -199,6 +199,7 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
             <div>{company.bankName}</div>
             {company.bankAccountNumber && <div>A/c: {company.bankAccountNumber}</div>}
             {company.bankIfsc && <div>IFSC: {company.bankIfsc}</div>}
+            {company.bankAccountType && <div>Type: {company.bankAccountType}</div>}
           </div>
         </>
       )}
