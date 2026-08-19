@@ -53,3 +53,25 @@ export const getGstinStateName = (gstin?: string | null) => {
   const normalizedGstin = normalizeGstin(gstin || '');
   return normalizedGstin.length >= 2 ? GSTIN_STATE_CODES[normalizedGstin.slice(0, 2)] || '' : '';
 };
+
+/** The two-digit state code a GSTIN opens with, e.g. "24" for Gujarat. */
+export const getGstinStateCode = (gstin?: string | null) => {
+  const normalizedGstin = normalizeGstin(gstin || '');
+  const prefix = normalizedGstin.slice(0, 2);
+  return GSTIN_STATE_CODES[prefix] ? prefix : '';
+};
+
+/**
+ * Reverse lookup for parties with no GSTIN on file (unregistered buyers), so
+ * "State Name : Gujarat, Code : 24" can still print in full. Two codes map to
+ * Andhra Pradesh — 37 is the current one, and the table is scanned in order, so
+ * the legacy 28 wins. Prefer `getGstinStateCode` whenever a GSTIN exists.
+ */
+export const getStateCodeByName = (state?: string | null) => {
+  const target = normalizeIndianState(state);
+  if (!target) return '';
+  const match = Object.entries(GSTIN_STATE_CODES).find(
+    ([, name]) => normalizeIndianState(name) === target,
+  );
+  return match ? match[0] : '';
+};

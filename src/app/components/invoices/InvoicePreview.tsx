@@ -6,32 +6,10 @@ import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 import { generateInvoicePdfBlob, printPdfBlob } from '../../../lib/invoicePdf';
+import { buildInvoiceDocument } from '../../../lib/invoiceDocument';
+import { DEFAULT_INVOICE_TEMPLATE_ID, INVOICE_TEMPLATES, getInvoiceTemplate } from '../../../lib/invoiceTemplates';
 
-interface LineItem {
-  id: string;
-  type?: 'product' | 'service';
-  item: string;
-  description: string;
-  hsn: string;
-  qty: number;
-  unit: string;
-  rate: number;
-  discount: number;
-  gst: number;
-  amount: number;
-}
-
-interface Customer {
-  id: string;
-  companyName: string;
-  gstin: string;
-  contactName: string;
-  email: string;
-  phone: string;
-  city: string;
-  state?: string;
-  address: string;
-}
+import type { InvoiceCustomer as Customer, InvoiceLineItem as LineItem } from '../../../lib/invoiceDocument';
 
 interface InvoicePreviewProps {
   isOpen: boolean;
@@ -55,6 +33,12 @@ interface InvoicePreviewProps {
   // The terms this invoice was issued with — snapshotted on the invoice row,
   // not read live from company settings. See supabase/sql/supabase_invoice_terms.sql.
   terms?: string;
+  /**
+   * Which format to draw. An invoice carries the format it was issued with, so
+   * a reprint years later looks like the copy the customer holds; unset (or
+   * unknown) falls back to the default format.
+   */
+  templateId?: string;
   autoOpenSend?: boolean;
 }
 
@@ -78,11 +62,15 @@ export function InvoicePreview({
   transportMode,
   remarks,
   terms,
+  templateId,
   autoOpenSend = false,
 }: InvoicePreviewProps) {
   const { user } = useAuth();
   const [showSendOptions, setShowSendOptions] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  // Which format is on screen. Seeded from the invoice's own format; the picker
+  // in the header changes only this view, never the stored invoice.
+  const [activeTemplateId, setActiveTemplateId] = useState(templateId || DEFAULT_INVOICE_TEMPLATE_ID);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const pdfBlobRef = useRef<Blob | null>(null);
   const pdfPromiseRef = useRef<Promise<Blob> | null>(null);
@@ -142,6 +130,10 @@ export function InvoicePreview({
     loadCompanyDetails();
   }, [isOpen, sellerState, user?.company_id, user?.company_name, user?.company_gstin, user?.company_logo, user?.email]);
 
+  useEffect(() => {
+    setActiveTemplateId(templateId || DEFAULT_INVOICE_TEMPLATE_ID);
+  }, [templateId, invoiceNumber]);
+
   // When opened straight from the "share" flow (e.g. the create success modal),
   // surface the send sheet immediately.
   useEffect(() => {
@@ -165,7 +157,7 @@ export function InvoicePreview({
 
     let cancelled = false;
     pdfBlobRef.current = null;
-    const promise = generateInvoicePdfBlob(pages);
+    const promise = generateInvoicePdfBlob(pages, getInvoiceTemplate(activeTemplateId).paper);
     pdfPromiseRef.current = promise;
     promise
       .then((blob) => {
@@ -176,122 +168,64 @@ export function InvoicePreview({
     return () => {
       cancelled = true;
     };
-  }, [showSendOptions]);
+    // Switching format re-renders the pages, so any blob built from the previous
+    // one is stale — rebuild rather than sharing a PDF of a layout nobody sees.
+  }, [showSendOptions, activeTemplateId]);
 
   if (!isOpen) return null;
 
-  const getBillTypeFromItems = () => {
-    const hasProductItems = lineItems.some((item) => item.type === 'product');
-    const hasServiceItems = lineItems.some((item) => item.type === 'service');
-
-    if (hasProductItems && hasServiceItems) return 'goods+service';
-    if (hasProductItems) return 'only goods';
-    if (hasServiceItems) return 'only service';
-    return billType || '';
-  };
-
-  const getInvoiceCopies = () => {
-    const effectiveBillType = getBillTypeFromItems().trim().toLowerCase();
-
-    if (effectiveBillType === 'only service') {
-      return [
-        'ORIGINAL FOR BUYER',
-        'DUPLICATE FOR SUPPLIER',
-      ];
-    }
-
-    return [
-      'ORIGINAL FOR BUYER',
-      'DUPLICATE FOR TRANSPORTER',
-      'TRIPLICATE FOR SUPPLIER',
-    ];
-  };
-
-  const displayInvoiceNumber = invoiceNumber || 'Auto-generated on save';
-  const formatDate = (value?: string) => {
-    if (!value) return '-';
-    const parsedDate = new Date(value);
-    if (Number.isNaN(parsedDate.getTime())) {
-      return value;
-    }
-    return parsedDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  };
-  const formatCurrency = (value: number) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const companyName = companyDetails.name || user?.company_name || 'Your Company';
+  // Everything the printed document needs, derived once here and handed to
+  // whichever format draws it. Formats never compute tax or totals themselves —
+  // see lib/invoiceDocument.ts — so they can't disagree about what is due.
   const companyGstin = companyDetails.gstin || user?.company_gstin || '-';
-  const companyState = companyDetails.state || sellerState || getGstinStateName(companyGstin) || '';
-  const companyEmail = companyDetails.email || user?.email || '';
-  const companyPhone = companyDetails.phone || '';
-  const companyAddress = [
-    companyDetails.address,
-    [companyDetails.city, companyState, companyDetails.pinCode].filter(Boolean).join(', '),
-  ].filter(Boolean);
-  const companyPan = companyDetails.pan || (companyGstin.length >= 12 ? companyGstin.slice(2, 12) : '');
-  const companyLogo = companyDetails.logo || user?.company_logo || '';
-  const companyEsign = companyDetails.esignImage || '';
-  const companyStamp = companyDetails.stampImage || '';
-  const buyerName = customer?.companyName || 'Customer not selected';
-  const buyerAddress = customer?.address || '-';
-  const buyerCity = customer?.city || '-';
-  const buyerState = customer?.state || getGstinStateName(customer?.gstin) || '';
-  const effectivePlaceOfSupply = placeOfSupply === 'Auto from customer'
-    ? buyerState || buyerCity || 'Auto from customer'
-    : placeOfSupply || buyerState || buyerCity || '-';
-  const buyerGstin = customer?.gstin || '-';
-  const buyerContact = customer?.contactName || '';
-  const buyerPhone = customer?.phone || '';
-  const buyerEmail = customer?.email || '';
-  const effectiveBillType = getBillTypeFromItems();
-  const invoiceCopies = getInvoiceCopies();
-  const supplyState = placeOfSupply === 'Auto from customer'
-    ? buyerState
-    : placeOfSupply || buyerState;
+  const companyState =
+    companyDetails.state || sellerState || getGstinStateName(companyGstin) || '';
+  const resolvedBuyerState = customer?.state || getGstinStateName(customer?.gstin) || '';
+  const supplyState =
+    placeOfSupply === 'Auto from customer' ? resolvedBuyerState : placeOfSupply || resolvedBuyerState;
   const isInterStateSupply = Boolean(
     companyState &&
     supplyState &&
     normalizeIndianState(companyState) !== normalizeIndianState(supplyState)
   );
 
-  // Calculate totals
-  const subtotal = lineItems.reduce((sum, item) => {
-    return sum + (item.qty * item.rate) - ((item.qty * item.rate) * item.discount / 100);
-  }, 0);
+  const doc = buildInvoiceDocument({
+    lineItems,
+    invoiceNumber,
+    invoiceDate,
+    dueDate,
+    customer: customer ? { ...customer, state: resolvedBuyerState } : customer,
+    customerType,
+    billType,
+    placeOfSupply,
+    reverseCharge,
+    poNumber,
+    poDate,
+    vehicleNo,
+    transportMode,
+    remarks,
+    terms,
+    company: {
+      ...companyDetails,
+      name: companyDetails.name || user?.company_name || 'Your Company',
+      gstin: companyGstin,
+      email: companyDetails.email || user?.email || '',
+      logo: companyDetails.logo || user?.company_logo || '',
+    },
+    isComposition,
+    companyState,
+    isInterStateSupply,
+  });
 
-  const totalTax = lineItems.reduce((sum, item) => {
-    const baseAmount = item.qty * item.rate;
-    const afterDiscount = baseAmount - (baseAmount * item.discount / 100);
-    return sum + (afterDiscount * item.gst / 100);
-  }, 0);
+  const Template = getInvoiceTemplate(activeTemplateId).component;
 
-  const cgstTotal = isInterStateSupply ? 0 : totalTax / 2;
-  const sgstTotal = isInterStateSupply ? 0 : totalTax / 2;
-  const igstTotal = isInterStateSupply ? totalTax : 0;
-  // A composition dealer cannot collect tax, so the total is the taxable value.
-  const grandTotal = subtotal + (isComposition ? 0 : totalTax);
-
-  // HSN/SAC-wise tax bifurcation summary (regular / non-composition invoices).
-  // Rows are grouped by HSN code + GST rate.
-  const taxSummaryRows = (() => {
-    const map = new Map<string, { hsn: string; rate: number; taxable: number; tax: number }>();
-    for (const item of lineItems) {
-      const base = item.qty * item.rate;
-      const taxable = base - (base * item.discount / 100);
-      const tax = taxable * item.gst / 100;
-      const key = `${item.hsn || '-'}|${item.gst}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.taxable += taxable;
-        existing.tax += tax;
-      } else {
-        map.set(key, { hsn: item.hsn || '-', rate: item.gst, taxable, tax });
-      }
-    }
-    return Array.from(map.values());
-  })();
-  const taxSummaryTotals = taxSummaryRows.reduce(
-    (acc, r) => ({ taxable: acc.taxable + r.taxable, tax: acc.tax + r.tax }),
-    { taxable: 0, tax: 0 },
-  );
+  // The share, mail and file-naming handlers below read these directly.
+  const displayInvoiceNumber = doc.meta.number;
+  const companyName = doc.company.name;
+  const buyerName = doc.buyer.name;
+  const buyerPhone = doc.buyer.phone;
+  const buyerEmail = doc.buyer.email;
+  const grandTotal = doc.totals.grandTotal;
 
   const getInvoiceShareMessage = () => (
     `Invoice ${displayInvoiceNumber} for ${buyerName} is ready. Total amount: Rs. ${grandTotal.toFixed(2)}.`
@@ -341,7 +275,7 @@ export function InvoicePreview({
     ) as HTMLElement[];
     if (!pages.length) return null;
     try {
-      return await generateInvoicePdfBlob(pages);
+      return await generateInvoicePdfBlob(pages, getInvoiceTemplate(activeTemplateId).paper);
     } catch {
       return null;
     }
@@ -459,27 +393,6 @@ export function InvoicePreview({
     setShowSendOptions(false);
   };
 
-  // Convert number to words (simplified version)
-  const numberToWords = (num: number): string => {
-    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
-    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-
-    if (num === 0) return 'Zero';
-
-    const convert = (n: number): string => {
-      if (n < 10) return ones[n];
-      if (n < 20) return teens[n - 10];
-      if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
-      if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + convert(n % 100) : '');
-      if (n < 100000) return convert(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + convert(n % 1000) : '');
-      if (n < 10000000) return convert(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + convert(n % 100000) : '');
-      return convert(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + convert(n % 10000000) : '');
-    };
-
-    return 'Rupees ' + convert(Math.floor(num)) + ' Only';
-  };
-
   return (
     <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[96vh] sm:max-h-[90vh] flex flex-col">
@@ -488,6 +401,20 @@ export function InvoicePreview({
           <h2 className="hidden sm:block text-lg font-semibold text-foreground shrink-0">{title}</h2>
           <h2 className="sm:hidden text-sm font-semibold text-foreground shrink-0">{title.replace(/^Invoice\s+/, '')}</h2>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+            {/* Format picker — changes this view only. Which format an invoice
+              * is actually issued with is a stored setting, not a preview
+              * choice, so nothing here writes back to the invoice. */}
+            <select
+              value={activeTemplateId}
+              onChange={(e) => setActiveTemplateId(e.target.value)}
+              className="kaps-compact-select h-9 max-w-[9.5rem] px-2 text-[12px] border border-border rounded bg-card text-foreground"
+              title="Invoice format"
+              aria-label="Invoice format"
+            >
+              {INVOICE_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
             <button
               onClick={handleDownloadPdf}
               disabled={isSharing}
@@ -598,385 +525,17 @@ export function InvoicePreview({
           </div>
         )}
 
-        {/* Invoice Content */}
+        {/* Invoice Content — one `.invoice-print-page` per copy, drawn by the
+          * selected format. `generateInvoicePdfBlob` finds the pages by that
+          * class, so the format is the only thing that varies here. */}
         <div ref={printAreaRef} className="invoice-print-area flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-          {invoiceCopies.map((copyLabel, copyIndex) => (
-          <div
-            key={copyLabel}
-            className={`invoice-print-page bg-white border border-foreground mx-auto max-w-[210mm] ${copyIndex > 0 ? 'mt-8 print:mt-0' : ''}`}
-            style={{ fontFamily: 'Arial, sans-serif' }}
-          >
-            {/* Header */}
-            <div className="text-right px-4 pt-2 text-xs">
-              <div className="font-semibold">{copyLabel}</div>
-            </div>
-
-            <div className="text-center py-2 border-b border-foreground">
-              <h1 className="text-xl font-bold">{isComposition ? 'BILL OF SUPPLY' : 'TAX INVOICE'}</h1>
-            </div>
-
-            {/* Company & Invoice Details */}
-            <div className="grid grid-cols-2 border-b border-foreground">
-              <div className="p-4 border-r border-foreground">
-                <div className="flex gap-4 items-start">
-                  <div className={`w-28 h-28 flex items-center justify-center flex-shrink-0 ${companyLogo ? '' : 'bg-primary/10 border border-border rounded'}`}>
-                    {companyLogo ? (
-                      <img src={companyLogo} alt={`${companyName} logo`} className="w-full h-full object-contain" />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">LOGO</span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="font-bold text-sm mb-1">{companyName}</h2>
-                    <div className="text-xs leading-relaxed">
-                      {companyAddress.length > 0 ? (
-                        companyAddress.map((line) => <div key={line}>{line}</div>)
-                      ) : (
-                        <div>Registered address: -</div>
-                      )}
-                      {companyPhone && <div>Phone: {companyPhone}</div>}
-                      <div>Email: {companyEmail || '-'}</div>
-                      <div className="font-semibold mt-1">GSTIN: {companyGstin}</div>
-                      {companyPan && <div>PAN: {companyPan}</div>}
-                      <div>State: {companyState || '-'}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4">
-                <table className="w-full text-xs">
-                  <tbody>
-                    <tr>
-                      <td className="py-1 font-semibold">INVOICE NO.</td>
-                      <td className="py-1">{displayInvoiceNumber}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">DATED</td>
-                      <td className="py-1">{formatDate(invoiceDate)}</td>
-                    </tr>
-                    {dueDate && (
-                      <tr>
-                        <td className="py-1 font-semibold">DUE DATE</td>
-                        <td className="py-1">{formatDate(dueDate)}</td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td className="py-1 font-semibold">PLACE OF SUPPLY</td>
-                      <td className="py-1">{effectivePlaceOfSupply}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">REVERSE CHARGE</td>
-                      <td className="py-1">{reverseCharge ? 'YES' : 'NO'}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">CUSTOMER TYPE</td>
-                      <td className="py-1">{customerType || '-'}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">BILL TYPE</td>
-                      <td className="py-1">{effectiveBillType || '-'}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">PO NO. / DATE</td>
-                      <td className="py-1">{poNumber || '-'} {poDate ? `/ ${formatDate(poDate)}` : ''}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 font-semibold">TRANSPORT</td>
-                      <td className="py-1">{transportMode || '-'} {vehicleNo ? `/ ${vehicleNo}` : ''}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Bill To & Ship To */}
-            <div className="grid grid-cols-2 border-b border-foreground">
-              <div className="p-4 border-r border-foreground">
-                <div className="text-xs font-semibold mb-2">BILL TO</div>
-                <div className="text-xs leading-relaxed">
-                  <div className="font-bold">{buyerName}</div>
-                  <div>Address:- {buyerAddress}</div>
-                  <div>{buyerCity}</div>
-                  {buyerContact && <div>Contact: {buyerContact}</div>}
-                  {buyerPhone && <div>Phone: {buyerPhone}</div>}
-                  {buyerEmail && <div>Email: {buyerEmail}</div>}
-                  <div className="mt-1">Place of Supply: {effectivePlaceOfSupply}</div>
-                  <div className="font-semibold">GSTIN: {buyerGstin}</div>
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="text-xs font-semibold mb-2">SHIP TO</div>
-                <div className="text-xs leading-relaxed">
-                  <div className="font-bold">{buyerName}</div>
-                  <div>Address:- {buyerAddress}</div>
-                  <div>{buyerCity}</div>
-                  <div className="mt-1">Place of Supply: {effectivePlaceOfSupply}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Line Items Table */}
-            <table className="print-grid w-full text-xs border-b border-foreground">
-              <thead>
-                <tr className="border-b border-foreground bg-muted/30">
-                  <th className="p-2 text-left border-r border-foreground w-8">Sr.</th>
-                  <th className="p-2 text-left border-r border-foreground">Description of Goods/Services</th>
-                  <th className="p-2 text-left border-r border-foreground w-20">HSN/SAC</th>
-                  <th className="p-2 text-right border-r border-foreground w-12">Qty</th>
-                  <th className="p-2 text-left border-r border-foreground w-12">Unit</th>
-                  <th className="p-2 text-right border-r border-foreground w-20">Rate</th>
-                  {!isComposition && (
-                    <>
-                      <th className="p-2 text-right border-r border-foreground w-24">Taxable</th>
-                      {isInterStateSupply ? (
-                        <th className="p-2 text-right border-r border-foreground w-20">IGST</th>
-                      ) : (
-                        <>
-                          <th className="p-2 text-right border-r border-foreground w-20">CGST</th>
-                          <th className="p-2 text-right border-r border-foreground w-20">SGST</th>
-                        </>
-                      )}
-                    </>
-                  )}
-                  <th className="p-2 text-right w-24">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lineItems.map((item, index) => {
-                  const baseAmount = item.qty * item.rate;
-                  const afterDiscount = baseAmount - (baseAmount * item.discount / 100);
-                  const tax = afterDiscount * item.gst / 100;
-                  const cgst = isInterStateSupply ? 0 : tax / 2;
-                  const sgst = isInterStateSupply ? 0 : tax / 2;
-                  const igst = isInterStateSupply ? tax : 0;
-
-                  return (
-                    <tr key={item.id} className="border-b border-foreground">
-                      <td className="p-2 border-r border-foreground">{index + 1}</td>
-                      <td className="p-2 border-r border-foreground">
-                        <div className="font-semibold">{item.item || '-'}</div>
-                        {item.description && <div className="text-[10px] mt-1">{item.description}</div>}
-                        {item.discount > 0 && <div className="text-[10px] mt-1">Discount: {item.discount}%</div>}
-                      </td>
-                      <td className="p-2 border-r border-foreground">{item.hsn || '-'}</td>
-                      <td className="p-2 text-right border-r border-foreground">{item.qty.toFixed(2)}</td>
-                      <td className="p-2 border-r border-foreground">{item.unit}</td>
-                      <td className="p-2 text-right border-r border-foreground">{formatCurrency(item.rate)}</td>
-                      {!isComposition && (
-                        <>
-                          <td className="p-2 text-right border-r border-foreground">{formatCurrency(afterDiscount)}</td>
-                          {isInterStateSupply ? (
-                            <td className="p-2 text-right border-r border-foreground">{formatCurrency(igst)}</td>
-                          ) : (
-                            <>
-                              <td className="p-2 text-right border-r border-foreground">{formatCurrency(cgst)}</td>
-                              <td className="p-2 text-right border-r border-foreground">{formatCurrency(sgst)}</td>
-                            </>
-                          )}
-                        </>
-                      )}
-                      <td className="p-2 text-right">{formatCurrency(isComposition ? afterDiscount : afterDiscount + tax)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {/* Totals */}
-            <div className="border-b border-foreground">
-              <table className="print-rows w-full text-xs">
-                <tbody>
-                  {!isComposition && (
-                    <>
-                      <tr className="border-b border-foreground">
-                        <td className="p-2 font-semibold">Sub-Total (Taxable)</td>
-                        <td className="p-2 text-right font-semibold">₹{formatCurrency(subtotal)}</td>
-                      </tr>
-                      {isInterStateSupply ? (
-                        <tr className="border-b border-foreground">
-                          <td className="p-2">Add: IGST</td>
-                          <td className="p-2 text-right">₹{formatCurrency(igstTotal)}</td>
-                        </tr>
-                      ) : (
-                        <>
-                          <tr className="border-b border-foreground">
-                            <td className="p-2">Add: CGST</td>
-                            <td className="p-2 text-right">₹{formatCurrency(cgstTotal)}</td>
-                          </tr>
-                          <tr className="border-b border-foreground">
-                            <td className="p-2">Add: SGST</td>
-                            <td className="p-2 text-right">₹{formatCurrency(sgstTotal)}</td>
-                          </tr>
-                        </>
-                      )}
-                    </>
-                  )}
-                  <tr className="border-b border-foreground bg-muted/20">
-                    <td className="p-2 font-bold">GRAND TOTAL</td>
-                    <td className="p-2 text-right font-bold">₹{formatCurrency(grandTotal)}</td>
-                  </tr>
-                  {isComposition && (
-                    <>
-                      <tr className="border-b border-foreground">
-                        <td className="p-2 font-semibold" colSpan={2}>Tax Amount (in words) : NIL</td>
-                      </tr>
-                      <tr className="border-b border-foreground">
-                        <td className="p-2 font-semibold" colSpan={2}>Composition taxable person. Not eligible to collect tax on supplies.</td>
-                      </tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Amount in Words */}
-            <div className="border-b border-foreground p-3 text-xs">
-              <span className="font-semibold">Invoice Amount in Words:</span> {numberToWords(grandTotal)}
-              <div className="text-right mt-2">E. & O.E.</div>
-            </div>
-
-            {/* HSN/SAC-wise Tax Bifurcation (regular / non-composition only) */}
-            {!isComposition && taxSummaryRows.length > 0 && (
-              <div className="border-b border-foreground">
-                <table className="w-full text-xs">
-                  {/* Every rule here is owned by a cell, never by the <tr>. A row
-                      border would be painted straight through the rowSpan={2}
-                      headings when html2canvas rasterises this for the PDF, which
-                      is what struck a line across "Taxable" and "Total". */}
-                  <thead>
-                    <tr className="bg-muted/30">
-                      <th rowSpan={2} className="p-2 border-r border-b border-foreground text-left align-bottom">HSN/SAC</th>
-                      <th rowSpan={2} className="p-2 border-r border-b border-foreground text-right align-bottom">Taxable<br />Value</th>
-                      {isInterStateSupply ? (
-                        <th colSpan={2} className="p-2 border-r border-b border-foreground text-center">Integrated Tax</th>
-                      ) : (
-                        <>
-                          <th colSpan={2} className="p-2 border-r border-b border-foreground text-center">Central Tax</th>
-                          <th colSpan={2} className="p-2 border-r border-b border-foreground text-center">State Tax</th>
-                        </>
-                      )}
-                      <th rowSpan={2} className="p-2 border-b border-foreground text-right align-bottom">Total<br />Tax Amount</th>
-                    </tr>
-                    <tr className="bg-muted/30">
-                      {isInterStateSupply ? (
-                        <>
-                          <th className="p-2 border-r border-b border-foreground text-right">Rate</th>
-                          <th className="p-2 border-r border-b border-foreground text-right">Amount</th>
-                        </>
-                      ) : (
-                        <>
-                          <th className="p-2 border-r border-b border-foreground text-right">Rate</th>
-                          <th className="p-2 border-r border-b border-foreground text-right">Amount</th>
-                          <th className="p-2 border-r border-b border-foreground text-right">Rate</th>
-                          <th className="p-2 border-r border-b border-foreground text-right">Amount</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxSummaryRows.map((row, index) => (
-                      <tr key={index} className="border-b border-foreground">
-                        <td className="p-2 border-r border-foreground">{row.hsn}</td>
-                        <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.taxable)}</td>
-                        {isInterStateSupply ? (
-                          <>
-                            <td className="p-2 border-r border-foreground text-right">{row.rate}%</td>
-                            <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.tax)}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="p-2 border-r border-foreground text-right">{row.rate / 2}%</td>
-                            <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.tax / 2)}</td>
-                            <td className="p-2 border-r border-foreground text-right">{row.rate / 2}%</td>
-                            <td className="p-2 border-r border-foreground text-right">{formatCurrency(row.tax / 2)}</td>
-                          </>
-                        )}
-                        <td className="p-2 text-right">{formatCurrency(row.tax)}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-b border-foreground bg-muted/20 font-semibold">
-                      <td className="p-2 border-r border-foreground text-right">Total</td>
-                      <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.taxable)}</td>
-                      {isInterStateSupply ? (
-                        <>
-                          <td className="p-2 border-r border-foreground"></td>
-                          <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.tax)}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="p-2 border-r border-foreground"></td>
-                          <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.tax / 2)}</td>
-                          <td className="p-2 border-r border-foreground"></td>
-                          <td className="p-2 border-r border-foreground text-right">{formatCurrency(taxSummaryTotals.tax / 2)}</td>
-                        </>
-                      )}
-                      <td className="p-2 text-right">{formatCurrency(taxSummaryTotals.tax)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="p-2 border-t border-foreground text-xs">
-                  <span className="font-semibold">Tax Amount (in words) :</span> {numberToWords(taxSummaryTotals.tax)}
-                </div>
-              </div>
-            )}
-
-            {remarks && (
-              <div className="border-b border-foreground p-3 text-xs">
-                <span className="font-semibold">Remarks / Narration:</span> {remarks}
-              </div>
-            )}
-
-            {/* The terms this invoice was issued under, copied onto it at
-              * creation. Invoices predating the column have none and simply
-              * print no block, exactly as before. `whitespace-pre-line` keeps
-              * the line breaks the user typed. */}
-            {terms?.trim() && (
-              <div className="border-b border-foreground p-3 text-xs">
-                <div className="font-semibold mb-1">TERMS &amp; CONDITIONS</div>
-                <div className="leading-relaxed whitespace-pre-line">{terms}</div>
-              </div>
-            )}
-
-            {/* Bank Details & Declaration */}
-            <div className="grid grid-cols-2">
-              <div className="p-4 border-r border-foreground text-xs">
-                <div className="font-semibold mb-2">BANK DETAILS</div>
-                <div className="leading-relaxed">
-                  <div>Bank: {companyDetails.bankName || '-'}</div>
-                  <div>A/c No.: {companyDetails.bankAccountNumber || '-'}</div>
-                  <div>IFSC: {companyDetails.bankIfsc || '-'}</div>
-                  {companyDetails.bankBranch && <div>Branch: {companyDetails.bankBranch}</div>}
-                </div>
-              </div>
-              <div className="p-4 text-xs">
-                <div className="font-semibold mb-2">DECLARATION</div>
-                <p className="leading-relaxed mb-8">
-                  We declare that this invoice shows the actual price of the goods/services described
-                  and that all particulars are true and correct.
-                </p>
-                <div className="mt-6 text-right">
-                  <div className="relative ml-auto h-24 w-full max-w-[300px] overflow-hidden">
-                    <div className="relative z-10 pr-1">For {companyName}</div>
-                    {companyStamp && (
-                      <img
-                        src={companyStamp}
-                        alt={`${companyName} stamp`}
-                        className="absolute left-0 -top-2 z-20 max-h-24 max-w-[180px] object-contain opacity-90"
-                      />
-                    )}
-                    {companyEsign && (
-                      <img
-                        src={companyEsign}
-                        alt={`${companyName} signature`}
-                        className="absolute right-4 top-1 z-20 max-h-20 max-w-[230px] object-contain"
-                      />
-                    )}
-                    <div className="absolute bottom-0 right-0 z-10 border-t border-foreground inline-block min-w-[184px] px-8 pt-1 text-center">Authorised Signatory</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {doc.copies.map((copyLabel, copyIndex) => (
+            <Template
+              key={copyLabel}
+              doc={doc}
+              copyLabel={copyLabel}
+              className={copyIndex > 0 ? 'mt-8 print:mt-0' : ''}
+            />
           ))}
         </div>
       </div>

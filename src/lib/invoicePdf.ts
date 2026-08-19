@@ -20,8 +20,47 @@ export function canSharePdfFile(): boolean {
   }
 }
 
-// Rasterise each invoice "page" element into an A4 PDF (one copy per page).
-export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob> {
+/**
+ * The stationery a document prints on.
+ *
+ * Most formats are A4 sheets. A thermal-roll receipt is not: it is a fixed-width
+ * strip of continuous paper with no page height at all — the printer just feeds
+ * until the document ends. `heightMm: 'auto'` says exactly that, and the page is
+ * cut to whatever the content measures.
+ */
+export interface InvoicePaper {
+  widthMm: number;
+  /** Fixed sheet height, or 'auto' to grow the page to fit the content. */
+  heightMm: number | 'auto';
+  marginMm: number;
+  /**
+   * Apply the `print-compact` padding scale while rasterising. The rules behind
+   * it are tuned to A4 in millimetres, so a narrow roll — where 2mm is a far
+   * bigger share of the width — is rendered at its own screen padding instead.
+   */
+  compact: boolean;
+}
+
+export const A4_PAPER: InvoicePaper = { widthMm: 210, heightMm: 297, marginMm: 8, compact: true };
+
+/** 80mm thermal till roll, the size retail counters print receipts on. */
+export const ROLL_80MM_PAPER: InvoicePaper = { widthMm: 80, heightMm: 'auto', marginMm: 3, compact: false };
+
+const MM_PER_INCH = 25.4;
+const CSS_DPI = 96;
+
+/**
+ * Rasterise each "page" element into a PDF, one copy per page.
+ *
+ * Each copy is cloned into an off-screen holder forced to the paper's pixel
+ * width, so the export always matches the full desktop layout regardless of the
+ * device's screen width — otherwise a phone captures the document at its narrow
+ * on-screen size and the result comes out distorted.
+ */
+export async function generateInvoicePdfBlob(
+  pages: HTMLElement[],
+  paper: InvoicePaper = A4_PAPER,
+): Promise<Blob> {
   // html2canvas-pro (not the original html2canvas) because this app uses
   // Tailwind v4, whose CSS uses oklch()/color-mix() colours that the original
   // html2canvas can't parse — it throws and no PDF is produced.
@@ -30,28 +69,25 @@ export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob
     import('jspdf'),
   ]);
 
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  const pageWmm = pdf.internal.pageSize.getWidth();  // 210
-  const pageHmm = pdf.internal.pageSize.getHeight(); // 297
+  const renderWidthPx = Math.round((paper.widthMm / MM_PER_INCH) * CSS_DPI); // 794px at A4
 
-  // Render each copy in an off-screen clone forced to a fixed A4 pixel width, so
-  // the export always matches the full (desktop) invoice layout regardless of
-  // the device's screen width — otherwise a phone captures the invoice at its
-  // narrow on-screen size and the result looks distorted.
-  const A4_WIDTH_PX = 794; // 210mm @ 96dpi
+  // Rasterise everything BEFORE opening the PDF: on continuous paper the page
+  // size is derived from the content, so it isn't known until the copy is drawn.
+  const shots: Array<{ data: string; wPx: number; hPx: number }> = [];
 
-  for (let i = 0; i < pages.length; i++) {
+  for (const page of pages) {
     const holder = document.createElement('div');
-    holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${A4_WIDTH_PX}px;background:#ffffff;z-index:-1;`;
-    const clone = pages[i].cloneNode(true) as HTMLElement;
-    clone.style.width = `${A4_WIDTH_PX}px`;
+    holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${renderWidthPx}px;background:#ffffff;z-index:-1;`;
+    const clone = page.cloneNode(true) as HTMLElement;
+    clone.style.width = `${renderWidthPx}px`;
     clone.style.maxWidth = 'none';
     clone.style.margin = '0';
     // Render with the paper padding scale rather than the screen one. Without
-    // this the copy rasterises tall and narrow, and fitting it to A4 below
-    // shrinks it to ~80% width with wide empty margins. The rules are keyed on
-    // a class (not `@media print`) precisely so they can be applied here.
-    clone.classList.add('print-compact');
+    // this the copy rasterises tall and narrow, and fitting it to the sheet
+    // below shrinks it to ~80% width with wide empty margins. The rules are
+    // keyed on a class (not `@media print`) precisely so they can be applied
+    // here.
+    if (paper.compact) clone.classList.add('print-compact');
     // `printFit` may have left an inline fit-to-sheet zoom on the source page,
     // which cloneNode copies. This render does its own fitting, so drop it.
     clone.style.zoom = '1';
@@ -63,30 +99,59 @@ export async function generateInvoicePdfBlob(pages: HTMLElement[]): Promise<Blob
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        width: A4_WIDTH_PX,
-        windowWidth: A4_WIDTH_PX,
+        width: renderWidthPx,
+        windowWidth: renderWidthPx,
         logging: false,
       });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      // Leave a margin around the invoice (matching the padding shown in the
-      // app) and fit the copy inside it, preserving aspect ratio (no stretch).
-      const margin = 8; // mm
-      const maxW = pageWmm - margin * 2;
-      const maxH = pageHmm - margin * 2;
-      let w = maxW;
-      let h = (canvas.height * w) / canvas.width;
-      if (h > maxH) {
-        h = maxH;
-        w = (canvas.width * h) / canvas.height;
-      }
-
-      if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', (pageWmm - w) / 2, margin, w, h);
+      shots.push({
+        data: canvas.toDataURL('image/jpeg', 0.95),
+        wPx: canvas.width,
+        hPx: canvas.height,
+      });
     } finally {
       document.body.removeChild(holder);
     }
   }
+
+  if (!shots.length) {
+    throw new Error('Nothing to render');
+  }
+
+  const contentWmm = paper.widthMm - paper.marginMm * 2;
+
+  // On continuous paper each copy gets its own page height. A sheet keeps the
+  // fixed size and the copy is fitted inside it, preserving aspect ratio.
+  const sizeOf = (shot: { wPx: number; hPx: number }) => {
+    if (paper.heightMm !== 'auto') {
+      const maxH = paper.heightMm - paper.marginMm * 2;
+      let w = contentWmm;
+      let h = (shot.hPx * w) / shot.wPx;
+      if (h > maxH) {
+        h = maxH;
+        w = (shot.wPx * h) / shot.hPx;
+      }
+      return { pageW: paper.widthMm, pageH: paper.heightMm, w, h };
+    }
+    const w = contentWmm;
+    const h = (shot.hPx * w) / shot.wPx;
+    // jsPDF flips a page whose height is under its width when the orientation
+    // is portrait, which would lay a very short receipt on its side.
+    const pageH = Math.max(h + paper.marginMm * 2, paper.widthMm + 1);
+    return { pageW: paper.widthMm, pageH, w, h };
+  };
+
+  const first = sizeOf(shots[0]);
+  const pdf = new jsPDF({
+    unit: 'mm',
+    format: [first.pageW, first.pageH],
+    orientation: 'portrait',
+  });
+
+  shots.forEach((shot, index) => {
+    const { pageW, pageH, w, h } = sizeOf(shot);
+    if (index > 0) pdf.addPage([pageW, pageH], 'portrait');
+    pdf.addImage(shot.data, 'JPEG', (pageW - w) / 2, paper.marginMm, w, h);
+  });
 
   return pdf.output('blob');
 }

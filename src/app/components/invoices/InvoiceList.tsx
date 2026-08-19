@@ -3,6 +3,7 @@ import { Plus, Search, Filter, Download, Send, Eye, Edit, MoreVertical, Trash2, 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { InvoicePreview } from './InvoicePreview';
+import { storedInvoiceTemplateId } from '../../../lib/invoiceTemplates';
 import { RecordPaymentDialog, PaymentInvoice } from './RecordPaymentDialog';
 import { toast } from 'sonner';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
@@ -142,6 +143,9 @@ export function InvoiceList() {
       transportMode: invoice.transport_mode || '',
       remarks: invoice.remarks || '',
       terms: invoice.terms || '',
+      // The layout this invoice went out in. Empty means it predates formats,
+      // so it keeps printing in the legacy one rather than today's default.
+      templateId: storedInvoiceTemplateId(invoice.invoice_template),
       lineItems,
     };
   };
@@ -179,6 +183,7 @@ export function InvoiceList() {
         transport_mode,
         remarks,
         terms,
+        invoice_template,
         customers(id, name, customer_type, gstin, contact_name, email, phone, city, state, address),
         invoice_items(id, item_name, description, hsn, quantity, unit, rate, discount_percent, gst_rate, total_amount, sort_order, items(type))
       `)
@@ -1134,6 +1139,7 @@ export function InvoiceList() {
           transportMode={selectedInvoice.transportMode}
           remarks={selectedInvoice.remarks}
           terms={selectedInvoice.terms}
+          templateId={selectedInvoice.templateId}
         />
       )}
 

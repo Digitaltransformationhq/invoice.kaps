@@ -149,6 +149,14 @@
     page-break-inside: avoid;
   }
 
+  /* A receipt roll is 80mm of continuous stock, not a 198mm sheet — exempt it
+   * from the A4 sizing above. Printing goes through the PDF path, which sizes
+   * the page from `ROLL_80MM_PAPER`; this only covers a direct browser print. */
+  .invoice-print-page.invoice-print-roll {
+    width: 80mm !important;
+    max-width: 80mm !important;
+  }
+
   .invoice-print-page:last-child {
     break-after: auto;
     page-break-after: auto;
@@ -263,6 +271,36 @@
   padding-bottom: 0.8mm !important;
 }
 
+/* An invoice page is a sheet of white paper, in every theme. Pin the design
+ * tokens to their LIGHT values inside it so `text-foreground`, `border-border`
+ * and friends resolve to ink-on-paper even while the app is in dark mode.
+ *
+ * Without this the document inherits `--foreground` from the theme, which is
+ * near-white under `.dark` — the preview renders white text and white rules on
+ * a white page, and html2canvas clones that straight into the PDF (the clone is
+ * appended to document.body, so it inherits the dark theme too). The @media
+ * print block below forces black borders for the same reason; this covers the
+ * screen preview and the generated PDF, which never go through it.
+ *
+ * The values are copied from `:root` in theme.css, so this is a no-op in light
+ * mode — keep the two in sync if the light palette ever changes. */
+.invoice-print-page {
+  --background: #FAFBFD;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --primary: #1F1B47;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F4F3FB;
+  --secondary-foreground: #0F172A;
+  --muted: #F4F3FB;
+  --muted-foreground: #64748B;
+  --accent: #8B5CF6;
+  --accent-foreground: #FFFFFF;
+  --border: #E2E8F0;
+  color: #0F172A;
+}
+
 /* Screen-only: shrink the A4 invoice page so it fits inside the preview
  * modal on phones and tablets without changing the document's internal
  * layout. The print stylesheet above resets `zoom` and `transform` so
@@ -291,6 +329,19 @@
   .invoice-preview-modal .invoice-print-page {
     zoom: 0.9;
   }
+}
+
+/* The zoom steps above shrink a 210mm sheet to fit the preview modal. A receipt
+ * roll is 80mm wide — it already fits at any screen size, and scaling it to 40%
+ * would leave a strip too small to read. Kept after the media queries so it wins
+ * regardless of viewport. */
+.invoice-preview-modal .invoice-print-page.invoice-print-roll {
+  zoom: 1;
+  transform: none;
+  /* The Firefox fallback below pairs each scale with a negative bottom margin to
+   * reclaim the space the transform leaves behind. Nothing is scaled here, so
+   * that correction has to go too. */
+  margin-bottom: 0;
 }
 
 /* Firefox <126 doesn't support `zoom`; fall back to transform-scale for

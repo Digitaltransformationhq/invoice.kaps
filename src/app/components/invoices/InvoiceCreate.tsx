@@ -10,6 +10,8 @@ import { insertForUser, selectForUser, updateForUser, deleteForUser } from '../.
 import { extractPanFromGstin, getGstinStateName, normalizeGstin, normalizeIndianState } from '../../../lib/gstin';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 import { useInvoiceDefaults } from '../../../lib/useInvoiceDefaults';
+import { useInvoiceTemplate } from '../../../lib/useInvoiceTemplate';
+import { storedInvoiceTemplateId } from '../../../lib/invoiceTemplates';
 import { AppSelect } from '../common/AppSelect';
 
 // Today as yyyy-mm-dd in the user's own timezone. Built from the local parts
@@ -91,6 +93,11 @@ export function InvoiceCreate() {
   const { isComposition } = useTaxpayerType();
   // Company defaults that seed a new invoice: due days and Terms & Conditions.
   const { dueDays, terms: defaultTerms, isLoaded: defaultsLoaded } = useInvoiceDefaults();
+  // The company's default layout, stamped onto the invoice as it is created so
+  // a later change of default never restyles this one.
+  const { templateId: companyTemplateId } = useInvoiceTemplate();
+  // In edit mode, the format the invoice was ISSUED with — not today's default.
+  const [issuedTemplateId, setIssuedTemplateId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewAutoSend, setPreviewAutoSend] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -314,6 +321,9 @@ export function InvoiceCreate() {
     dueDateTouched.current = true;
     setTerms(invoice.terms || '');
     termsTouched.current = true;
+    // Empty means the invoice predates formats, which `storedInvoiceTemplateId`
+    // resolves to the legacy layout rather than to the current default.
+    setIssuedTemplateId(storedInvoiceTemplateId(invoice.invoice_template));
     setPlaceOfSupply(invoice.place_of_supply || 'Auto from customer');
     setReverseCharge(Boolean(invoice.reverse_charge));
     setPoNumber(invoice.po_number || '');
@@ -760,15 +770,18 @@ export function InvoiceCreate() {
           paid_amount: 0,
           status,
           is_manual_number: isManualInvoiceNumber,
+          invoice_template: companyTemplateId,
           created_by: user.id,
         };
 
       let invoice: any;
 
       if (isEditMode && editId) {
-        // Keep the original creator and the original manual/auto flag (edit mode
-        // force-enables the manual field for editability); only update the rest.
-        const { created_by, is_manual_number, ...updateRecord } = invoiceRecord;
+        // Keep the original creator, the original manual/auto flag (edit mode
+        // force-enables the manual field for editability) and the format the
+        // invoice was issued in; only update the rest. Re-stamping the format on
+        // an edit would restyle an invoice the customer already holds.
+        const { created_by, is_manual_number, invoice_template, ...updateRecord } = invoiceRecord;
         const { data, error: invoiceError } = await updateForUser<any>(user, 'invoices', 'invoices', () =>
           supabase
             .from('invoices')
@@ -1823,6 +1836,7 @@ export function InvoiceCreate() {
         transportMode={transportMode}
         remarks={remarks}
         terms={terms}
+        templateId={issuedTemplateId || companyTemplateId}
       />
 
       {/* Success Modal */}

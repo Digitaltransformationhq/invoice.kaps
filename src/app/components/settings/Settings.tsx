@@ -5,6 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { extractPanFromGstin, normalizeGstin } from '../../../lib/gstin';
 import { AppSelect } from '../common/AppSelect';
+import { DEFAULT_INVOICE_TEMPLATE_ID, INVOICE_TEMPLATES } from '../../../lib/invoiceTemplates';
 
 interface CompanyForm {
   company_name: string;
@@ -36,6 +37,7 @@ interface SettingsForm {
   enable_reverse_charge: boolean;
   invoice_defaults_enabled: boolean;
   taxpayer_type: string;
+  invoice_template: string;
 }
 
 const emptyCompany: CompanyForm = {
@@ -68,6 +70,7 @@ const defaultSettings: SettingsForm = {
   enable_reverse_charge: false,
   invoice_defaults_enabled: true,
   taxpayer_type: 'regular',
+  invoice_template: DEFAULT_INVOICE_TEMPLATE_ID,
 };
 
 const SETTINGS_REQUEST_TIMEOUT_MS = 12000;
@@ -85,6 +88,7 @@ function mapSettings(row: any): SettingsForm {
     enable_reverse_charge: Boolean(row?.enable_reverse_charge),
     invoice_defaults_enabled: row?.invoice_defaults_enabled !== false,
     taxpayer_type: row?.taxpayer_type || 'regular',
+    invoice_template: row?.invoice_template || defaultSettings.invoice_template,
   };
 }
 
@@ -446,6 +450,7 @@ export function Settings() {
       enable_reverse_charge: settings.enable_reverse_charge,
       invoice_defaults_enabled: settings.invoice_defaults_enabled,
       taxpayer_type: settings.taxpayer_type,
+      invoice_template: settings.invoice_template,
     };
 
     setIsSaving(true);
@@ -463,6 +468,7 @@ export function Settings() {
           p_enable_reverse_charge: payload.enable_reverse_charge,
           p_invoice_defaults_enabled: payload.invoice_defaults_enabled,
           p_taxpayer_type: payload.taxpayer_type,
+          p_invoice_template: payload.invoice_template,
         }),
         `Saving ${section} settings`
       );
@@ -892,6 +898,21 @@ function InvoiceSettings({
               className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <p className="text-[11.5px] text-muted-foreground mt-1.5">Choose Composition Scheme / Unregistered User if you are registered under the GST Composition Scheme or are not registered under GST.</p>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Invoice Format</label>
+            <AppSelect
+              value={settings.invoice_template}
+              onChange={(v) => setSettings({ ...settings, invoice_template: v })}
+              disabled={!canEdit}
+              options={INVOICE_TEMPLATES.map((t) => ({ value: t.id, label: t.name }))}
+              className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            />
+            <p className="text-[11.5px] text-muted-foreground mt-1.5">
+              {INVOICE_TEMPLATES.find((t) => t.id === settings.invoice_template)?.description}
+              {' '}Applies to invoices created from now on — each invoice keeps the format it was
+              issued with, so changing this never alters one you have already sent.
+            </p>
           </div>
           <SettingsInput label="Invoice Prefix" value={settings.invoice_prefix} disabled={prefixDisabled} inputClassName="font-mono uppercase" onChange={(invoice_prefix) => setSettings({ ...settings, invoice_prefix })} />
           <SettingsInput
