@@ -67,6 +67,8 @@ export function InvoicePreview({
 }: InvoicePreviewProps) {
   const { user } = useAuth();
   const [showSendOptions, setShowSendOptions] = useState(false);
+  // Which action is asking "which copy?" — null while the chooser is closed.
+  const [copyChooser, setCopyChooser] = useState<'print' | 'download' | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   // Which format is on screen. Seeded from the invoice's own format; the picker
   // in the header changes only this view, never the stored invoice.
@@ -257,7 +259,15 @@ export function InvoicePreview({
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
-  const pdfFileName = () => `${displayInvoiceNumber || 'invoice'}.pdf`.replace(/[^\w.-]+/g, '-');
+  /** "DUPLICATE FOR TRANSPORTER" reads better as "Duplicate — Transporter". */
+  const shortCopyLabel = (copyLabel: string) => {
+    const [rank, party] = copyLabel.split(/\s+FOR\s+/i);
+    const titled = (word: string) => word.charAt(0) + word.slice(1).toLowerCase();
+    return party ? `${titled(rank)} — ${titled(party)}` : titled(rank);
+  };
+
+  const pdfFileName = (suffix = '') =>
+    `${displayInvoiceNumber || 'invoice'}${suffix}.pdf`.replace(/[^\w.-]+/g, '-');
 
   // The PDF the send sheet pre-builds, or a fresh one. Print and Download go
   // through here rather than window.print() on the live DOM: jsPDF fits each
@@ -283,6 +293,26 @@ export function InvoicePreview({
     }
   };
 
+  /**
+   * A PDF of one copy rather than the whole set.
+   *
+   * Deliberately bypasses the cached blob: that one is built from every page for
+   * sharing, and handing it to a single-copy print would silently print all
+   * three. Rasterising one page is also the cheaper half of the work.
+   */
+  const buildSingleCopyPdf = async (copyIndex: number): Promise<Blob | null> => {
+    const pages = Array.from(
+      printAreaRef.current?.querySelectorAll('.invoice-print-page') ?? []
+    ) as HTMLElement[];
+    const page = pages[copyIndex];
+    if (!page) return null;
+    try {
+      return await generateInvoicePdfBlob([page], getInvoiceTemplate(activeTemplateId).paper);
+    } catch {
+      return null;
+    }
+  };
+
   const withPdf = async (use: (blob: Blob) => void | Promise<void>, failure: string) => {
     if (isSharing) return;
     setIsSharing(true);
@@ -298,20 +328,74 @@ export function InvoicePreview({
     }
   };
 
-  const handlePrint = () =>
-    withPdf(
-      async (blob) => {
-        const how = await printPdfBlob(blob);
-        if (how === 'opened') toast.info('Opened the invoice PDF in a new tab — print it from there.');
-      },
-      'Could not prepare the invoice for printing.'
-    );
+  const sendToPrinter = async (blob: Blob) => {
+    const how = await printPdfBlob(blob);
+    if (how === 'opened') toast.info('Opened the invoice PDF in a new tab — print it from there.');
+  };
 
-  const handleDownloadPdf = () =>
-    withPdf(
-      (blob) => downloadFile(new File([blob], pdfFileName(), { type: 'application/pdf' })),
-      'Could not build the invoice PDF.'
-    );
+  // Downloading copies one at a time would otherwise write INV-001.pdf three
+  // times over; name each after the copy it holds.
+  const saveToDisk = (blob: Blob, copyIndex: number | null) => {
+    const suffix = copyIndex === null ? '' : `-${shortCopyLabel(doc.copies[copyIndex]).replace(/\s*—\s*/g, '-')}`;
+    downloadFile(new File([blob], pdfFileName(suffix), { type: 'application/pdf' }));
+  };
+
+  /**
+   * Run `action` over the chosen copy, or over the whole set when `copyIndex`
+   * is null.
+   *
+   * The full set reuses the cached blob the send sheet pre-builds; a single copy
+   * must NOT — that cache holds every page, so using it here would quietly print
+   * or save all three under the name of one.
+   */
+  const runOnCopies = async (action: 'print' | 'download', copyIndex: number | null) => {
+    const use = async (blob: Blob) => {
+      if (action === 'print') await sendToPrinter(blob);
+      else saveToDisk(blob, copyIndex);
+    };
+
+    if (copyIndex === null) {
+      await withPdf(
+        use,
+        action === 'print'
+          ? 'Could not prepare the invoice for printing.'
+          : 'Could not build the invoice PDF.',
+      );
+      setCopyChooser(null);
+      return;
+    }
+
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const blob = await buildSingleCopyPdf(copyIndex);
+      if (!blob) {
+        toast.error(
+          action === 'print'
+            ? 'Could not prepare that copy for printing.'
+            : 'Could not build that copy.',
+        );
+        return;
+      }
+      await use(blob);
+      setCopyChooser(null);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // An invoice with a single copy has nothing to choose between, so it acts
+  // straight away rather than asking.
+  const openCopyChooser = (action: 'print' | 'download') => {
+    if (doc.copies.length <= 1) {
+      runOnCopies(action, null);
+      return;
+    }
+    setCopyChooser(action);
+  };
+
+  const handlePrint = () => openCopyChooser('print');
+  const handleDownloadPdf = () => openCopyChooser('download');
 
   // Return the pre-built invoice PDF as a File (waiting on the in-flight build if
   // the user acted before it finished). Web Share only needs share() to fire
@@ -448,6 +532,102 @@ export function InvoicePreview({
             </button>
           </div>
         </div>
+
+        {copyChooser && (
+          <div
+            className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+            onClick={() => !isSharing && setCopyChooser(null)}
+          >
+            <div
+              className="bg-card rounded-2xl border border-violet-200 dark:border-violet-400/30 max-w-md w-full overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="relative px-6 pt-6 pb-5 border-b border-violet-100 dark:border-violet-400/15">
+                <button
+                  onClick={() => setCopyChooser(null)}
+                  disabled={isSharing}
+                  className="absolute right-5 top-5 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-lg bg-violet-500 flex items-center justify-center shrink-0">
+                    {copyChooser === 'print' ? (
+                      <Printer className="w-4 h-4 text-white" strokeWidth={2.25} />
+                    ) : (
+                      <Download className="w-4 h-4 text-white" strokeWidth={2.25} />
+                    )}
+                  </div>
+                  <div className="min-w-0 pr-8">
+                    <div className="text-[10.5px] font-semibold tracking-[0.16em] uppercase text-violet-600 dark:text-violet-300">
+                      {copyChooser === 'print' ? 'Print Invoice' : 'Download Invoice'}
+                    </div>
+                    <h2 className="text-[16px] font-semibold tracking-tight text-foreground leading-tight truncate">
+                      {displayInvoiceNumber} <span className="text-muted-foreground font-normal">— which copy?</span>
+                    </h2>
+                  </div>
+                </div>
+              </div>
+
+              {/* Which copies */}
+              <div className="px-6 py-5 space-y-2.5">
+                <button
+                  onClick={() => runOnCopies(copyChooser, null)}
+                  disabled={isSharing}
+                  className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-300 dark:border-violet-400/40 bg-violet-50/60 dark:bg-violet-500/[0.08] rounded-lg hover:bg-violet-100/70 dark:hover:bg-violet-500/[0.14] transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0">
+                    {isSharing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.25} />
+                    ) : (
+                      copyChooser === 'print' ? (
+                        <Printer className="w-4 h-4" strokeWidth={2.25} />
+                      ) : (
+                        <Download className="w-4 h-4" strokeWidth={2.25} />
+                      )
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-semibold text-foreground">All copies</div>
+                    <div className="text-[11.5px] text-muted-foreground">
+                      {doc.copies.length} pages — {doc.copies.map(shortCopyLabel).join(', ')}
+                    </div>
+                  </div>
+                </button>
+
+                {doc.copies.map((copyLabel, copyIndex) => (
+                  <button
+                    key={copyLabel}
+                    onClick={() => runOnCopies(copyChooser, copyIndex)}
+                    disabled={isSharing}
+                    className="w-full inline-flex items-center gap-3 px-4 py-3 border border-violet-200 dark:border-violet-400/25 bg-card rounded-lg hover:bg-violet-50/60 dark:hover:bg-violet-500/[0.06] hover:border-violet-400 dark:hover:border-violet-400/45 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-white/70 flex items-center justify-center shrink-0 text-[13px] font-semibold tabular-nums">
+                      {copyIndex + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-semibold text-foreground">{shortCopyLabel(copyLabel)}</div>
+                      <div className="text-[11.5px] text-muted-foreground">1 page — {copyLabel.toLowerCase()}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 bg-violet-50/40 dark:bg-violet-500/[0.04] flex items-center justify-end">
+                <button
+                  onClick={() => setCopyChooser(null)}
+                  disabled={isSharing}
+                  className="h-10 px-5 rounded-full text-[13px] font-medium text-foreground border border-violet-200 dark:border-violet-400/25 bg-card hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showSendOptions && (
           <div
