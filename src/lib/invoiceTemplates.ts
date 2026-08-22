@@ -38,7 +38,7 @@ export interface InvoiceTemplate {
  * The format a NEW invoice starts in when the company has no setting stored.
  * The company default in `company_settings.invoice_template` normally wins.
  */
-export const DEFAULT_INVOICE_TEMPLATE_ID = 'tally';
+export const DEFAULT_INVOICE_TEMPLATE_ID = 'modern';
 
 /**
  * The format an ALREADY-SAVED invoice with no stored format was issued in.
