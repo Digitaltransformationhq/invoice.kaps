@@ -80,7 +80,37 @@ function fit(area: HTMLElement) {
     const paperWidth = page.classList.contains('invoice-print-roll')
       ? ROLL_WIDTH_PX
       : SHEET_WIDTH_PX;
-    const exact = available / paperWidth;
+
+    // Scale against what the copy actually needs, not what the paper nominally
+    // is. Not every format fits its sheet: a line-item table won't lay out
+    // narrower than its own min-content, and formats with more columns or
+    // longer headers (Classic GST) demand more than 210mm while others
+    // (Compact) sit inside it. Assuming the paper width scaled the sheet to fit
+    // and let the table hang off the edge of it, which is why one format came
+    // out clean on a phone and another came out shaved down its left side.
+    //
+    // Measured two ways at zoom 1 and unclamped, because neither property is
+    // airtight on its own: `scrollWidth` reports what spilled past the sheet,
+    // but its behaviour on an `overflow: visible` box is a corner of the CSSOM
+    // spec, while `min-content` gives the narrowest width the layout tolerates
+    // but reads short for prose, which it collapses to its longest word. The
+    // widest of the two and the paper itself is the honest answer, and if
+    // either reads low the result is simply today's behaviour, not a
+    // regression.
+    page.style.zoom = '1';
+    page.style.maxWidth = 'none';
+    page.style.width = `${paperWidth}px`;
+    const spilled = page.scrollWidth;
+    page.style.width = 'min-content';
+    const minContent = page.getBoundingClientRect().width;
+    const natural = Math.max(paperWidth, spilled, minContent);
+
+    // Hold the copy at that width so its background covers everything drawn on
+    // it; `max-width: 210mm` would otherwise pull the sheet back to A4 and
+    // leave the wide table overflowing onto the modal behind it.
+    page.style.width = `${natural}px`;
+
+    const exact = available / natural;
     const scale = Math.min(1, Math.max(MIN_SCALE, exact));
     // Whole percent, so a resize of a pixel or two can't churn the layout.
     const zoom = String(Math.floor(scale * 100) / 100);
