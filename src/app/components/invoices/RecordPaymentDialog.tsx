@@ -239,7 +239,7 @@ export function RecordPaymentDialog({ isOpen, invoice, onClose, onRecorded }: Re
     'w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition';
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay [--kaps-overlay-pad:0.75rem] sm:[--kaps-overlay-pad:1rem]">
       <div className="bg-card rounded-xl shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col border border-violet-200 dark:border-violet-400/20">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-violet-100 dark:border-violet-400/15">

@@ -1071,7 +1071,7 @@ export function InvoiceCreate() {
   return (
     <div className="pb-8 bg-muted/30 min-h-screen">
       {/* Header */}
-      <div className="bg-white border-b border-border px-4 md:px-8 py-4 md:py-6 sticky top-0 z-10">
+      <div className="bg-white border-b border-border px-4 md:px-8 py-4 md:py-6 sticky kaps-sticky-below-header z-10">
         <div className="flex items-center">
           <div className="flex items-center gap-4">
             <Link
@@ -1237,9 +1237,11 @@ export function InvoiceCreate() {
                 )}
               </div>
 
-              {/* Document Date + Due Date */}
+              {/* Document Date + Due Date — `min-w-0` on the tracks keeps a wide
+                * field (WebKit sizes date inputs from their value) from
+                * stretching its column past the card on a phone. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-[14px] font-semibold text-foreground mb-2">Document Date</label>
                   <input
                     type="date"
@@ -1248,7 +1250,7 @@ export function InvoiceCreate() {
                     className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-[14px] font-semibold text-foreground mb-2">Due Date</label>
                   <input
                     type="date"
@@ -1841,7 +1843,7 @@ export function InvoiceCreate() {
 
       {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay">
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <button
               onClick={() => {
@@ -1922,7 +1924,7 @@ export function InvoiceCreate() {
 
       {/* Add Customer Modal */}
       {showAddCustomerModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <h3 className="text-xl font-semibold text-foreground">Add New Customer</h3>
@@ -2162,7 +2164,7 @@ function InvoiceItemModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay">
       <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-lg font-semibold text-foreground">Add New Item</h2>

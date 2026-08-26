@@ -471,7 +471,7 @@ function AddCustomerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (cus
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white">
@@ -687,7 +687,7 @@ function EditCustomerModal({ customer, onClose, onSave }: { customer: any; onClo
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 kaps-safe-overlay"
       onClick={onClose}
     >
       <div
@@ -881,7 +881,7 @@ function FieldRow({
 function DeleteConfirmationModal({ customer, onClose, onConfirm }: { customer: any; onClose: () => void; onConfirm: () => void }) {
   return (
     <div
-      className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 kaps-safe-overlay"
       onClick={onClose}
     >
       <div

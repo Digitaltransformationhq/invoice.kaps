@@ -1,6 +1,8 @@
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 96px;
+  /* Clears the sticky header plus whatever the notch/island covers, so an
+   * anchored jump doesn't land under either. */
+  scroll-padding-top: calc(96px + env(safe-area-inset-top, 0px));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -38,4 +40,196 @@ html {
 }
 .dark .kaps-modal-scroll::-webkit-scrollbar-thumb:hover {
   background-color: rgba(167, 139, 250, 0.40);
+}
+
+/* Date/time inputs on iOS Safari size themselves from their rendered value
+ * rather than their container: `width: 100%` is applied, but the control's
+ * min-content width stays larger than the box, so the field spills out past
+ * the right edge of whatever card holds it (and drags the grid column with
+ * it). `min-width: 0` lets it actually shrink, `appearance: none` drops the
+ * native intrinsic sizing, and clearing the value pseudo-element's own
+ * width/alignment stops WebKit reserving space for the widest possible date.
+ *
+ * Applied globally because every create form — invoices, credit & debit
+ * notes, delivery challans, receipts, payment vouchers, report filters —
+ * uses the same `w-full h-11` date field and breaks the same way. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"] {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value {
+  min-width: 0;
+  width: auto;
+  margin: 0;
+  text-align: left;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit {
+  padding: 0;
+  min-width: 0;
+}
+
+/* ============================================================================
+ * iPhone safe areas — notch, Dynamic Island, and the home indicator.
+ *
+ * `index.html` ships `viewport-fit=cover`, and the iOS home-screen build runs
+ * with a `black-translucent` status bar. Both are deliberate (the app paints
+ * edge to edge instead of sitting in letterbox bars), but together they mean
+ * the layout viewport starts at the physical top of the screen — underneath
+ * the island. Nothing compensated for that, so the app header slid up behind
+ * the camera cutout and its controls (the sidebar toggle, the search box, the
+ * account menu) stopped receiving taps: the island swallows them.
+ *
+ * `env(safe-area-inset-*)` reports how far in the usable area actually starts.
+ * It is 0px on every non-notched device and inside desktop browsers, so these
+ * rules are inert everywhere else — no media or user-agent test needed. The
+ * `, 0px` fallback covers browsers that know the function but not the keyword;
+ * browsers that don't support `env()` at all drop the declaration entirely and
+ * fall back to whatever Tailwind utility the element already carries.
+ *
+ * These are plain, unlayered rules, so they win over Tailwind's `@layer
+ * utilities` output regardless of source order.
+ * ========================================================================= */
+
+/* App chrome — the sticky dashboard header. Padding (not a `top` offset) is
+ * what's wanted here: the translucent background still paints up behind the
+ * island so there's no bare strip beside it, while the 4rem control row is
+ * pushed down into the clickable area. The height grows by the same inset so
+ * the inner `h-full` row still measures exactly 4rem. */
+.kaps-app-header {
+  height: calc(4rem + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* App chrome — the full-height sidebar drawer. Its logo/close row would sit
+ * under the island and its account block under the home indicator. Padding
+ * keeps the violet panel full-bleed while insetting the contents. */
+.kaps-app-sidebar {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+/* Full-viewport modal overlays. The backdrop stays edge to edge; the padding
+ * that centres the dialog absorbs the insets, so a tall dialog's header row
+ * and its close button can never end up beneath the island, nor its footer
+ * actions beneath the home indicator.
+ *
+ * `--kaps-overlay-pad` is read with a 1rem fallback rather than being declared
+ * on this class, so an element can still override it (`[--kaps-overlay-pad:…]`
+ * or a utility) despite unlayered rules outranking Tailwind's. */
+.kaps-safe-overlay {
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--kaps-overlay-pad, 1rem));
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--kaps-overlay-pad, 1rem));
+  padding-left: calc(env(safe-area-inset-left, 0px) + var(--kaps-overlay-pad, 1rem));
+  padding-right: calc(env(safe-area-inset-right, 0px) + var(--kaps-overlay-pad, 1rem));
+
+  /* The insets shrink the box these dialogs are centred in, so a tall one (the
+   * panels cap at `max-h-[90vh]`, which is measured against the *unreduced*
+   * viewport) can now outgrow it. A centred flex child that overflows spills
+   * past both ends at once and neither end can be scrolled to — the dialog's
+   * header and its footer buttons would both be stranded off-screen.
+   *
+   * `safe` centring falls back to flex-start exactly in that case, and the
+   * scroll container makes the rest reachable. Every one of these overlays
+   * still carries Tailwind's `items-center`; an engine too old to parse the
+   * `safe` keyword drops this declaration and lands back on that, i.e. on
+   * today's behaviour. (Writing a plain `align-items: center` here as the
+   * fallback doesn't survive — the minifier folds the duplicate away.) */
+  align-items: safe center;
+  overflow-y: auto;
+}
+
+/* Generic single-edge helpers, for chrome that already owns its own padding
+ * (the landing navbar) and just needs the inset added above it. */
+.kaps-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.kaps-safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Page sub-headers that stick while the content scrolls. `top-0` pins them to
+ * the viewport, which is behind the app header (z-30 to their z-10) — and, on
+ * a notched iPhone, behind the island as well. Offset them by the header's own
+ * safe-area-aware height so they come to rest just below it. */
+.kaps-sticky-below-header {
+  top: calc(4rem + env(safe-area-inset-top, 0px));
+}
+
+/* ----------------------------------------------------------------------------
+ * Sideways scrolling on phones.
+ *
+ * Sonner's own mobile rules set the toast viewport to `position: fixed` with
+ * BOTH `left: var(--mobile-offset-left)` and `right: var(--mobile-offset-right)`
+ * — and then `width: 100%`. An explicit width wins over the pair of offsets, so
+ * the element measures a full viewport starting 16px in, i.e. it hangs 16px off
+ * the right edge. That is enough to make the whole app scroll left-and-right,
+ * and it appears and disappears with the toast, which is why it came and went.
+ *
+ * Letting the offsets size it (`width: auto`) is the fix; the toast inside then
+ * wants the full width of that already-inset box rather than sonner's
+ * `100% - offset*2`, which assumed a full-bleed parent.
+ *
+ * Prefixed with `html` purely for specificity: sonner injects its stylesheet at
+ * runtime, so it can land after this file and would otherwise win the tie. */
+@media (max-width: 600px) {
+  html [data-sonner-toaster] {
+    width: auto;
+  }
+
+  html [data-sonner-toaster] [data-sonner-toast] {
+    width: 100%;
+  }
+}
+
+/* Backstop for the same class of bug. Any single element that can't shrink —
+ * an unbreakable GSTIN, a wide grid, a mis-measured fixed overlay — otherwise
+ * widens the document and lets the entire page slide sideways, which reads as
+ * the app being broken rather than as one element being too wide.
+ *
+ * `clip` rather than `hidden` on purpose: `overflow-x: hidden` forces the
+ * computed `overflow-y` to `auto`, turning the root into a scroll container and
+ * putting `position: sticky` at the mercy of viewport-propagation quirks.
+ * `overflow-x: clip` leaves `overflow-y: visible` genuinely visible, so the
+ * sticky header and vertical scrolling are untouched. It also doesn't establish
+ * a containing block for fixed-position descendants, so the sidebar, the modal
+ * overlays and the toasts still measure against the viewport.
+ *
+ * Deliberately NOT applied to `body` as well — overflow only propagates to the
+ * viewport from the root element, and setting it on both makes `body` a scroll
+ * container, which is what actually breaks sticky positioning.
+ *
+ * Content that is legitimately wider than a phone (the list tables, the invoice
+ * preview) already sits in its own `overflow-x-auto` scroller, so it keeps
+ * scrolling on its own and nothing becomes unreachable.
+ *
+ * The `hidden` line is the fallback for engines without `clip` (iOS 15 and
+ * earlier); browsers that support `clip` take the @supports block instead. */
+html {
+  overflow-x: hidden;
+}
+
+@supports (overflow-x: clip) {
+  html {
+    overflow-x: clip;
+    overflow-y: visible;
+  }
 }

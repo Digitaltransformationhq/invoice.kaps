@@ -26,6 +26,7 @@ import { AuditorManagement } from './components/auditor/AuditorManagement';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { InstallPrompt } from './components/common/InstallPrompt';
+import { TOAST_MOBILE_OFFSET } from '../lib/safeArea';
 
 export default function App() {
   return (
@@ -60,7 +61,7 @@ export default function App() {
             </Route>
           </Routes>
           <InstallPrompt />
-          <Toaster position="top-right" richColors />
+          <Toaster position="top-right" richColors mobileOffset={TOAST_MOBILE_OFFSET} />
         </BrowserRouter>
       </AuthProvider>
     </AppErrorBoundary>

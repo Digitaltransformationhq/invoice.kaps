@@ -55,6 +55,7 @@ import {
   unlockLegacyVault,
   clearLegacyMpinVault,
 } from '../../lib/mpin';
+import { TOAST_MOBILE_OFFSET } from '../../lib/safeArea';
 
 type Theme = 'dark' | 'light';
 const THEME_KEY = 'kaps-landing-theme';
@@ -780,7 +781,7 @@ export function LandingPage() {
 
   return (
     <>
-      <Toaster position="top-right" richColors theme={theme} />
+      <Toaster position="top-right" richColors theme={theme} mobileOffset={TOAST_MOBILE_OFFSET} />
       <div className={`kaps-root ${isDark ? 'dark' : ''} min-h-screen w-full text-slate-900 dark:text-white antialiased relative [overflow-x:clip]`}>
         {/* ============================== AMBIENT BG ============================== */}
         <div aria-hidden className="fixed inset-0 -z-10 kaps-bg" />
@@ -788,7 +789,7 @@ export function LandingPage() {
         <div aria-hidden className="fixed inset-x-0 top-0 -z-10 h-[60vh] kaps-glow-top" />
 
         {/* ============================== NAVBAR ============================== */}
-        <header className="sticky top-0 z-40">
+        <header className="kaps-safe-top kaps-safe-x sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
             <nav className="flex items-center justify-between gap-2 rounded-full border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/[0.04] backdrop-blur-xl pl-3 pr-1.5 sm:pl-4 sm:pr-2 py-1.5 shadow-[0_4px_24px_-6px_rgba(15,23,42,0.10)] dark:shadow-[0_4px_24px_-6px_rgba(0,0,0,0.55)]">
               <a href="#" className="flex items-center gap-2.5 shrink-0">
@@ -1311,7 +1312,7 @@ export function LandingPage() {
         {/* ============================== LOGIN MODAL ============================== */}
         {showLoginModal && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center kaps-safe-overlay bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
             onClick={closeLoginModal}
           >
             <div
@@ -1911,7 +1912,7 @@ export function LandingPage() {
         {/* ============================== SIGNUP MODAL ============================== */}
         {showSignupModal && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center kaps-safe-overlay bg-slate-900/40 dark:bg-black/70 backdrop-blur-md"
             onClick={() => {
               setShowSignupModal(false);
               setSignupData({

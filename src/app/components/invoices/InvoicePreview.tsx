@@ -480,7 +480,7 @@ export function InvoicePreview({
   };
 
   return (
-    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4">
+    <div className="invoice-preview-modal fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay [--kaps-overlay-pad:0.5rem] sm:[--kaps-overlay-pad:1rem]">
       <div className="invoice-preview-shell bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[96vh] sm:max-h-[90vh] flex flex-col">
         {/* Modal Header */}
         <div className="invoice-preview-actions flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 border-b border-border">
@@ -535,7 +535,7 @@ export function InvoicePreview({
 
         {copyChooser && (
           <div
-            className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-[60] flex items-center justify-center kaps-safe-overlay"
             onClick={() => !isSharing && setCopyChooser(null)}
           >
             <div
@@ -631,7 +631,7 @@ export function InvoicePreview({
 
         {showSendOptions && (
           <div
-            className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 bg-slate-900/50 dark:bg-black/65 backdrop-blur-sm z-[60] flex items-center justify-center kaps-safe-overlay"
             onClick={() => setShowSendOptions(false)}
           >
             <div

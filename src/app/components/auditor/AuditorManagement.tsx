@@ -581,7 +581,7 @@ function AuditorFormModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-violet-100 dark:border-violet-400/15">
           <h3 className="text-lg font-semibold text-foreground tracking-tight">{title}</h3>
@@ -687,7 +687,7 @@ function PermissionsModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-violet-100 dark:border-violet-400/15">
           <div className="min-w-0">
@@ -789,7 +789,7 @@ function DeleteAuditorModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-2xl max-w-md w-full">
         <div className="flex items-center justify-between px-6 py-4 border-b border-violet-100 dark:border-violet-400/15">
           <h2 className="text-lg font-semibold text-foreground tracking-tight">Delete Auditor</h2>

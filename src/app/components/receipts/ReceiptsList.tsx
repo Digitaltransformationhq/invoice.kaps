@@ -730,7 +730,7 @@ export function ReceiptsList() {
 
       {/* Delete Confirmation Modal */}
       {showBulkDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay">
           <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-2xl max-w-md w-full">
             <div className="p-6">
               <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
@@ -954,7 +954,7 @@ function SendReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-violet-100 dark:border-violet-400/15">
           <h2 className="text-lg font-semibold text-foreground">Send Receipt</h2>
@@ -1031,7 +1031,7 @@ function MarkClearedModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-violet-100 dark:border-violet-400/15">
           <h2 className="text-lg font-semibold text-foreground">Mark as Cleared</h2>
@@ -1091,7 +1091,7 @@ function DeleteConfirmationModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 kaps-safe-overlay">
       <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-violet-100 dark:border-violet-400/15">
           <h2 className="text-lg font-semibold text-foreground">Delete Receipt</h2>

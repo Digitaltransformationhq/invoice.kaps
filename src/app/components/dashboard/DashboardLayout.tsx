@@ -28,6 +28,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { selectForUser } from '../../../lib/auditorData';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
+import { TOAST_MOBILE_OFFSET } from '../../../lib/safeArea';
 
 const PAYMENT_VOUCHERS_ENABLED = false;
 const DELIVERY_CHALLANS_ENABLED = true;
@@ -272,11 +273,11 @@ export function DashboardLayout() {
 
   return (
     <>
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-right" richColors mobileOffset={TOAST_MOBILE_OFFSET} />
       <div className="min-h-screen bg-background">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-primary transform transition-transform duration-200 lg:translate-x-0 ${
+        className={`kaps-app-sidebar fixed inset-y-0 left-0 z-50 w-64 bg-primary transform transition-transform duration-200 lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -369,7 +370,7 @@ export function DashboardLayout() {
       {/* Main Content */}
       <div className="lg:pl-64">
         {/* Top Navigation */}
-        <header className="sticky top-0 z-30 h-16 bg-background/75 backdrop-blur-xl border-b border-border">
+        <header className="kaps-app-header sticky top-0 z-30 h-16 bg-background/75 backdrop-blur-xl border-b border-border">
           <div className="flex items-center justify-between h-full px-4 sm:px-6">
             <div className="flex items-center gap-3 flex-1">
               <button
