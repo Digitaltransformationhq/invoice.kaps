@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase';
 import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { usePdfActions } from '../../../lib/usePdfActions';
 import { CHALLAN_COPIES, challanPurposeMeta } from '../../../lib/deliveryChallans';
+import { usePreviewFit } from '../../../lib/usePreviewFit';
 
 interface LineItem {
   id: string;
@@ -88,6 +89,11 @@ export function DeliveryChallanPreview({
   const { printAreaRef, isExporting, handlePrint, handleDownloadPdf } = usePdfActions(
     () => `${challanNumber || 'challan'}.pdf`
   );
+
+
+  // Scale each copy to the modal's real width; see usePreviewFit.
+
+  usePreviewFit(printAreaRef);
 
   useEffect(() => {
     if (!isOpen || !user?.company_id) return;

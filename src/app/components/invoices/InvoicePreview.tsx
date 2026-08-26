@@ -10,6 +10,7 @@ import { buildInvoiceDocument } from '../../../lib/invoiceDocument';
 import { DEFAULT_INVOICE_TEMPLATE_ID, INVOICE_TEMPLATES, getInvoiceTemplate } from '../../../lib/invoiceTemplates';
 
 import type { InvoiceCustomer as Customer, InvoiceLineItem as LineItem } from '../../../lib/invoiceDocument';
+import { usePreviewFit } from '../../../lib/usePreviewFit';
 
 interface InvoicePreviewProps {
   isOpen: boolean;
@@ -74,6 +75,9 @@ export function InvoicePreview({
   // in the header changes only this view, never the stored invoice.
   const [activeTemplateId, setActiveTemplateId] = useState(templateId || DEFAULT_INVOICE_TEMPLATE_ID);
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  // Scale each copy to the modal's real width; see usePreviewFit.
+  usePreviewFit(printAreaRef, [activeTemplateId]);
   const pdfBlobRef = useRef<Blob | null>(null);
   const pdfPromiseRef = useRef<Promise<Blob> | null>(null);
   // Composition dealers issue a "Bill of Supply" with no tax breakup.

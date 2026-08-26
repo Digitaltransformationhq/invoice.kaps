@@ -152,6 +152,7 @@ input[type="month"]::-webkit-datetime-edit {
    * today's behaviour. (Writing a plain `align-items: center` here as the
    * fallback doesn't survive — the minifier folds the duplicate away.) */
   align-items: safe center;
+  justify-content: safe center;
   overflow-y: auto;
 }
 

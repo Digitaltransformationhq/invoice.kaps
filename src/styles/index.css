@@ -301,88 +301,13 @@
   color: #0F172A;
 }
 
-/* Screen-only: shrink the A4 invoice page so it fits inside the preview
- * modal on phones and tablets without changing the document's internal
- * layout. The print stylesheet above resets `zoom` and `transform` so
- * printing always happens at full scale. */
-@media screen and (max-width: 380px) {
-  .invoice-preview-modal .invoice-print-page {
-    zoom: 0.4;
-  }
-}
-@media screen and (min-width: 381px) and (max-width: 480px) {
-  .invoice-preview-modal .invoice-print-page {
-    zoom: 0.48;
-  }
-}
-@media screen and (min-width: 481px) and (max-width: 640px) {
-  .invoice-preview-modal .invoice-print-page {
-    zoom: 0.62;
-  }
-}
-@media screen and (min-width: 641px) and (max-width: 820px) {
-  .invoice-preview-modal .invoice-print-page {
-    zoom: 0.78;
-  }
-}
-@media screen and (min-width: 821px) and (max-width: 1024px) {
-  .invoice-preview-modal .invoice-print-page {
-    zoom: 0.9;
-  }
-}
-
-/* The zoom steps above shrink a 210mm sheet to fit the preview modal. A receipt
- * roll is 80mm wide — it already fits at any screen size, and scaling it to 40%
- * would leave a strip too small to read. Kept after the media queries so it wins
- * regardless of viewport. */
-.invoice-preview-modal .invoice-print-page.invoice-print-roll {
-  zoom: 1;
-  transform: none;
-  /* The Firefox fallback below pairs each scale with a negative bottom margin to
-   * reclaim the space the transform leaves behind. Nothing is scaled here, so
-   * that correction has to go too. */
-  margin-bottom: 0;
-}
-
-/* Firefox <126 doesn't support `zoom`; fall back to transform-scale for
- * those builds. Modern Firefox (126+, the current channel) implements zoom
- * natively, so this @supports negation cleanly targets only the old engines.
- * `transform-origin: top center` keeps the document centred while the
- * surrounding scroll container measures the unscaled box, which we then
- * correct with the matching negative bottom margin. */
-@media screen and (max-width: 380px) {
-  @supports (-moz-appearance: none) and (not (zoom: 1)) {
-    .invoice-preview-modal .invoice-print-page {
-      transform: scale(0.4);
-      transform-origin: top center;
-      margin-bottom: -60%;
-    }
-  }
-}
-@media screen and (min-width: 381px) and (max-width: 480px) {
-  @supports (-moz-appearance: none) and (not (zoom: 1)) {
-    .invoice-preview-modal .invoice-print-page {
-      transform: scale(0.48);
-      transform-origin: top center;
-      margin-bottom: -52%;
-    }
-  }
-}
-@media screen and (min-width: 481px) and (max-width: 640px) {
-  @supports (-moz-appearance: none) and (not (zoom: 1)) {
-    .invoice-preview-modal .invoice-print-page {
-      transform: scale(0.62);
-      transform-origin: top center;
-      margin-bottom: -38%;
-    }
-  }
-}
-@media screen and (min-width: 641px) and (max-width: 820px) {
-  @supports (-moz-appearance: none) and (not (zoom: 1)) {
-    .invoice-preview-modal .invoice-print-page {
-      transform: scale(0.78);
-      transform-origin: top center;
-      margin-bottom: -22%;
-    }
-  }
-}
+/* The A4 sheet is far wider than a phone, so the preview scales each copy down
+ * to the width actually available inside the modal. That number is measured at
+ * runtime by `usePreviewFit`, which writes an inline `zoom` — it depends on the
+ * modal's padding and the notch insets, not just the viewport, so it cannot be
+ * expressed as a ladder of width breakpoints here (that is what this block used
+ * to be, and it overflowed by ~20px on a 393pt iPhone). The print stylesheet
+ * above resets `zoom` so printing always happens at full scale.
+ *
+ * A receipt roll is 80mm and already fits any screen; `usePreviewFit` caps the
+ * scale at 1 so it is never blown up. */

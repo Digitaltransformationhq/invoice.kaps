@@ -7,6 +7,7 @@ import { getGstinStateName, normalizeIndianState } from '../../../lib/gstin';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
 import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 import { usePdfActions } from '../../../lib/usePdfActions';
+import { usePreviewFit } from '../../../lib/usePreviewFit';
 
 interface LineItem {
   id: string;
@@ -82,6 +83,9 @@ export function CreditNotePreview({
   const { printAreaRef, isExporting, handlePrint, handleDownloadPdf } = usePdfActions(
     () => `${noteNumber || 'note'}.pdf`
   );
+
+  // Scale each copy to the modal's real width; see usePreviewFit.
+  usePreviewFit(printAreaRef);
 
   useEffect(() => {
     if (!isOpen || !user?.company_id) return;
