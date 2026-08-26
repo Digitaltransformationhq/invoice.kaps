@@ -131,6 +131,19 @@ function fit(area: HTMLElement) {
       page.style.removeProperty('margin-bottom');
     }
 
+    // A top-left origin is what keeps a copy that is too wide from losing its
+    // left edge, but it also pins a copy that is too NARROW hard against the
+    // left with all the slack piled up on the right — which is what an 80mm
+    // receipt roll does, since it is capped at scale 1 and never fills a phone.
+    //
+    // Centre it with a measured margin rather than `auto`. An explicit value
+    // can be clamped at zero, so when the copy does fill the box this is 0 and
+    // the left-edge guarantee is untouched; `auto` would go back to splitting
+    // any overflow across both sides, which is the failure this whole hook has
+    // been chasing.
+    const slack = Math.max(0, available - natural * scale);
+    page.style.marginLeft = `${Math.round(slack / 2)}px`;
+
     if (DEBUG) {
       notes.push(
         `avail ${Math.round(available)} · area ${Math.round(innerWidth(area))} · ` +
