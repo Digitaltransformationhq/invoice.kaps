@@ -41,12 +41,37 @@ const ROLL_WIDTH_PX = 80 * PX_PER_MM;
  */
 const MIN_SCALE = 0.3;
 
-function fit(area: HTMLElement) {
-  const style = getComputedStyle(area);
-  // `clientWidth` counts padding, and the padding is what the page must fit
+function innerWidth(el: HTMLElement) {
+  const style = getComputedStyle(el);
+  // `clientWidth` counts padding, and the padding is what must be fitted
   // inside. It already excludes a scrollbar, if the platform draws one.
-  const available =
-    area.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+}
+
+function fit(area: HTMLElement) {
+  // Two independent measurements, and the smaller wins. Neither is redundant.
+  //
+  // The print area is the box the copy actually sits in, so on a desktop —
+  // where the shell stops at max-w-5xl well short of the window — it is the
+  // only one that knows the real figure.
+  //
+  // But it is a flex item several levels down, and a descendant that refuses
+  // to shrink can widen it; measuring it alone means measuring a box the copy
+  // has already stretched, which reads back as "there is plenty of room" and
+  // settles at roughly full size — the copy then renders ~2.2x too large and
+  // spills off the left. The overlay cannot lie the same way: it is
+  // `position: fixed` with `inset: 0`, so its width comes from the insets and
+  // no content can push it wider than the viewport.
+  //
+  // Subtract the print area's own padding from the overlay figure too, since
+  // the copy has to fit inside that as well. The shell in between contributes
+  // no horizontal border or padding of its own.
+  const outer = area.closest<HTMLElement>('.invoice-preview-modal');
+  const areaPadding = area.clientWidth - innerWidth(area);
+  const available = Math.min(
+    innerWidth(area),
+    outer ? innerWidth(outer) - areaPadding : Infinity,
+  );
   if (available <= 0) return; // Not laid out yet, or the modal is closed.
 
   for (const page of Array.from(
@@ -80,10 +105,19 @@ export function usePreviewFit(areaRef: RefObject<HTMLElement>, deps: unknown[] =
 
     fit(area);
 
-    // Catches rotation, the iOS URL bar collapsing, and a format switch that
-    // swaps in a copy of a different width.
-    const observer = new ResizeObserver(() => fit(area));
-    observer.observe(area);
+    // Catches rotation and the iOS URL bar collapsing.
+    const resize = new ResizeObserver(() => fit(area));
+    resize.observe(area);
+
+    // Catches the copies themselves changing — a format switch, a different
+    // number of copies, or content that only arrives once a fetch settles. The
+    // resize observer cannot stand in for this: the print area is a flex child
+    // with its own scrollbar, so its box does not move when what's inside it
+    // is replaced, and a copy that mounted after the first measurement would
+    // simply never be scaled. Deliberately no `attributes` — this writes
+    // inline styles on those same nodes and would otherwise retrigger itself.
+    const mutations = new MutationObserver(() => fit(area));
+    mutations.observe(area, { childList: true, subtree: true });
 
     // `printFit` strips every inline zoom on afterprint — it owns the property
     // while a print is in flight and can't tell its own value from this one.
@@ -92,7 +126,8 @@ export function usePreviewFit(areaRef: RefObject<HTMLElement>, deps: unknown[] =
     window.addEventListener('afterprint', refit);
 
     return () => {
-      observer.disconnect();
+      resize.disconnect();
+      mutations.disconnect();
       window.removeEventListener('afterprint', refit);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

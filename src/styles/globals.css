@@ -234,3 +234,20 @@ html {
     overflow-y: visible;
   }
 }
+
+/* The preview modal's two inner boxes are flex items, and a flex item's
+ * automatic minimum size lets a descendant that refuses to shrink widen it
+ * rather than overflow it. An invoice copy is authored at 210mm and its table
+ * has a large min-content width, so it can push these open — and then
+ * `usePreviewFit` measures a box the copy has already stretched, concludes
+ * there is room for a full-size sheet, and leaves it at ~2.2x too large with
+ * its left edge off the screen.
+ *
+ * Pinning both to zero minimum makes the chain size top-down from the modal,
+ * which is what the fitting maths assumes: the copy scales to the box instead
+ * of the box growing to the copy. `usePreviewFit` also bounds its measurement
+ * against the fixed overlay, so the two protect the same thing from both ends. */
+.invoice-preview-shell,
+.invoice-print-area {
+  min-width: 0;
+}
