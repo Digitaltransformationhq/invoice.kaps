@@ -89,8 +89,15 @@ export async function generateInvoicePdfBlob(
     // here.
     if (paper.compact) clone.classList.add('print-compact');
     // `printFit` may have left an inline fit-to-sheet zoom on the source page,
-    // which cloneNode copies. This render does its own fitting, so drop it.
+    // and `usePreviewFit` leaves a scale transform plus the negative margins
+    // that collapse its layout box. cloneNode copies all of it, and
+    // html2canvas honours a transform — a preview scaled to 0.4 for a phone
+    // would rasterise at 0.4 and the PDF would come out a quarter-size image
+    // in the corner of the sheet. This render does its own fitting at the full
+    // paper width, so both have to go. The negative margins are already
+    // covered by the `margin = '0'` above.
     clone.style.zoom = '1';
+    clone.style.transform = 'none';
     holder.appendChild(clone);
     document.body.appendChild(holder);
 

@@ -48,6 +48,8 @@ function innerWidth(el: HTMLElement) {
   return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
 }
 
+const DEBUG = typeof location !== 'undefined' && /(?:\?|&)fit=debug/.test(location.search);
+
 function fit(area: HTMLElement) {
   // Two independent measurements, and the smaller wins. Neither is redundant.
   //
@@ -57,15 +59,9 @@ function fit(area: HTMLElement) {
   //
   // But it is a flex item several levels down, and a descendant that refuses
   // to shrink can widen it; measuring it alone means measuring a box the copy
-  // has already stretched, which reads back as "there is plenty of room" and
-  // settles at roughly full size — the copy then renders ~2.2x too large and
-  // spills off the left. The overlay cannot lie the same way: it is
+  // has already stretched. The overlay cannot lie the same way: it is
   // `position: fixed` with `inset: 0`, so its width comes from the insets and
   // no content can push it wider than the viewport.
-  //
-  // Subtract the print area's own padding from the overlay figure too, since
-  // the copy has to fit inside that as well. The shell in between contributes
-  // no horizontal border or padding of its own.
   const outer = area.closest<HTMLElement>('.invoice-preview-modal');
   const areaPadding = area.clientWidth - innerWidth(area);
   const available = Math.min(
@@ -74,6 +70,8 @@ function fit(area: HTMLElement) {
   );
   if (available <= 0) return; // Not laid out yet, or the modal is closed.
 
+  const notes: string[] = [];
+
   for (const page of Array.from(
     area.querySelectorAll<HTMLElement>('.invoice-print-page'),
   )) {
@@ -81,51 +79,86 @@ function fit(area: HTMLElement) {
       ? ROLL_WIDTH_PX
       : SHEET_WIDTH_PX;
 
-    // Scale against what the copy actually needs, not what the paper nominally
-    // is. Not every format fits its sheet: a line-item table won't lay out
-    // narrower than its own min-content, and formats with more columns or
-    // longer headers (Classic GST) demand more than 210mm while others
-    // (Compact) sit inside it. Assuming the paper width scaled the sheet to fit
-    // and let the table hang off the edge of it, which is why one format came
-    // out clean on a phone and another came out shaved down its left side.
-    //
-    // Measured two ways at zoom 1 and unclamped, because neither property is
-    // airtight on its own: `scrollWidth` reports what spilled past the sheet,
-    // but its behaviour on an `overflow: visible` box is a corner of the CSSOM
-    // spec, while `min-content` gives the narrowest width the layout tolerates
-    // but reads short for prose, which it collapses to its longest word. The
-    // widest of the two and the paper itself is the honest answer, and if
-    // either reads low the result is simply today's behaviour, not a
-    // regression.
-    page.style.zoom = '1';
+    // Measure clean: no transform, no zoom, no max-width clamp.
+    page.style.transform = 'none';
+    page.style.removeProperty('zoom');
     page.style.maxWidth = 'none';
+    page.style.marginInline = '0';
+
+    // Scale against what the copy actually needs, not what the paper nominally
+    // is. Not every format fits its sheet: a line-item table will not lay out
+    // narrower than its own min-content, and the formats differ — Compact sits
+    // inside 210mm, Classic GST does not.
+    //
+    // Measured two ways, because neither property is airtight alone:
+    // `scrollWidth` reports what spilled past the sheet, but its behaviour on
+    // an `overflow: visible` box is a corner of the CSSOM spec, while
+    // `min-content` gives the narrowest width the layout tolerates but reads
+    // short for prose, which it collapses to its longest word.
     page.style.width = `${paperWidth}px`;
     const spilled = page.scrollWidth;
     page.style.width = 'min-content';
     const minContent = page.getBoundingClientRect().width;
     const natural = Math.max(paperWidth, spilled, minContent);
 
-    // Hold the copy at that width so its background covers everything drawn on
-    // it; `max-width: 210mm` would otherwise pull the sheet back to A4 and
-    // leave the wide table overflowing onto the modal behind it.
     page.style.width = `${natural}px`;
+    const naturalHeight = page.getBoundingClientRect().height;
 
-    const exact = available / natural;
-    const scale = Math.min(1, Math.max(MIN_SCALE, exact));
-    // Whole percent, so a resize of a pixel or two can't churn the layout.
-    const zoom = String(Math.floor(scale * 100) / 100);
-    // Writing an unchanged value would still be a style mutation, and the
-    // observer below fires on the copy's height as well as the modal's width.
-    if (page.style.zoom !== zoom) page.style.zoom = zoom;
+    const scale = Math.min(1, Math.max(MIN_SCALE, available / natural));
 
-    // Below the readability floor the copy is deliberately wider than the box,
-    // so it has to be scrolled. The page centres itself with `mx-auto`, and a
-    // centred box that overflows puts half of that overflow at negative scroll
-    // offsets, which nothing can reach — the bug this hook exists to fix, one
-    // level down. Pin it to the left edge instead, so scrolling reaches all of
-    // it. (Only possible on a viewport under ~270px; no iPhone is that narrow.)
-    page.style.marginInline = exact < MIN_SCALE ? '0' : '';
+    // `transform`, not `zoom`. Four attempts at this used `zoom`, and each one
+    // still shaved the left edge on a phone: `zoom` re-runs layout, so the copy
+    // is re-measured against a containing block that is itself derived from the
+    // zoom factor, and any error there leaves the copy a little wider than its
+    // box — where `mx-auto` splits the excess across both sides and puts the
+    // left half at a negative scroll offset that nothing can reach.
+    //
+    // A transform cannot do that. It is applied after layout, it re-measures
+    // nothing, and `transform-origin: top left` pins the copy's top-left corner
+    // to the container's content origin by construction. Whatever the scale
+    // turns out to be, the left edge is never the part that goes missing —
+    // worst case the right edge overflows, and that direction is reachable by
+    // scrolling. The negative margins collapse the layout box the untransformed
+    // copy still occupies, so the scroll area matches what is on screen.
+    page.style.transformOrigin = 'top left';
+    if (scale < 1) {
+      page.style.transform = `scale(${scale})`;
+      page.style.marginRight = `${-Math.round(natural * (1 - scale))}px`;
+      page.style.marginBottom = `${-Math.round(naturalHeight * (1 - scale))}px`;
+    } else {
+      page.style.transform = 'none';
+      page.style.removeProperty('margin-right');
+      page.style.removeProperty('margin-bottom');
+    }
+
+    if (DEBUG) {
+      notes.push(
+        `avail ${Math.round(available)} · area ${Math.round(innerWidth(area))} · ` +
+          `outer ${outer ? Math.round(innerWidth(outer)) : '-'} · paper ${Math.round(paperWidth)} · ` +
+          `spill ${Math.round(spilled)} · min ${Math.round(minContent)} · ` +
+          `natural ${Math.round(natural)} · scale ${scale.toFixed(3)}`,
+      );
+    }
   }
+
+  if (DEBUG) showDebug(area, notes);
+}
+
+/**
+ * Opt-in readout for `?fit=debug`, so the numbers behind a bad fit can be read
+ * off a phone that has no inspector attached. Renders nothing otherwise.
+ */
+function showDebug(area: HTMLElement, notes: string[]) {
+  let box = area.querySelector<HTMLElement>('[data-fit-debug]');
+  if (!box) {
+    box = document.createElement('div');
+    box.setAttribute('data-fit-debug', '');
+    box.style.cssText =
+      'position:sticky;top:0;z-index:5;background:#0f172a;color:#fff;font:11px/1.5 monospace;' +
+      'padding:6px 8px;border-radius:6px;margin-bottom:8px;word-break:break-all;';
+    area.prepend(box);
+  }
+  box.textContent = `vw ${document.documentElement.clientWidth} | ${notes.join(' || ')}`;
 }
 
 export function usePreviewFit(areaRef: RefObject<HTMLElement>, deps: unknown[] = []) {
