@@ -1486,16 +1486,6 @@ export function LandingPage() {
                   </form>
                 ) : loginRole === 'user' && userLoginMode === 'forgot-mpin' ? (
                   <form onSubmit={handleForgotMpin} className="p-6 space-y-4">
-                    {mpinSetupIsNew && (
-                      <div className="flex gap-2.5 px-3.5 py-3 rounded-xl bg-amber-50 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-400/25">
-                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
-                        <p className="text-[12px] leading-relaxed text-amber-800 dark:text-amber-200">
-                          No MPIN is set up on this account yet, so quick sign-in has nothing to
-                          check. Enter your password and pick 4 digits below — from then on the PIN
-                          works on every device you sign in from.
-                        </p>
-                      </div>
-                    )}
                     <div>
                       <label className="block text-[12px] font-medium text-slate-700 dark:text-white/70 mb-1.5">Email address</label>
                       <input
@@ -1534,7 +1524,7 @@ export function LandingPage() {
                           onClick={openForgotPassword}
                           className="text-violet-600 dark:text-violet-300 hover:text-violet-700 dark:hover:text-violet-200 font-medium"
                         >
-                          Forgot password too?
+                          Forgot password?
                         </button>
                       </p>
                     </div>
@@ -1550,7 +1540,7 @@ export function LandingPage() {
                           maxLength={4}
                           value={newMpin}
                           onChange={(e) => setNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em]"
+                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
                           placeholder="4 digits"
                           required
                         />
@@ -1563,8 +1553,8 @@ export function LandingPage() {
                           maxLength={4}
                           value={confirmNewMpin}
                           onChange={(e) => setConfirmNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em]"
-                          placeholder="Re-enter"
+                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
+                          placeholder="Repeat"
                           required
                         />
                       </div>
@@ -1581,8 +1571,8 @@ export function LandingPage() {
 
                     <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
                       {mpinSetupIsNew
-                        ? 'The MPIN is stored on your account, not on this phone or laptop, so it works everywhere you sign in. Only a one-way hash of the digits is kept, which is why the password is what proves it is you.'
-                        : 'The new MPIN replaces the old one on your account and works on every device. Only a one-way hash of the digits is stored, so the password is what proves it is you.'}
+                        ? 'Works on every device you sign in from. Only a hash of the digits is stored.'
+                        : 'Replaces your current MPIN everywhere. Only a hash of the digits is stored.'}
                     </p>
 
                     <p className="text-[12px] text-center pt-1">
@@ -1607,7 +1597,7 @@ export function LandingPage() {
                           maxLength={4}
                           value={newMpin}
                           onChange={(e) => setNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em]"
+                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
                           placeholder="4 digits"
                           autoFocus
                           required
@@ -1621,8 +1611,8 @@ export function LandingPage() {
                           maxLength={4}
                           value={confirmNewMpin}
                           onChange={(e) => setConfirmNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em]"
-                          placeholder="Re-enter"
+                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
+                          placeholder="Repeat"
                           required
                         />
                       </div>
@@ -1639,14 +1629,12 @@ export function LandingPage() {
 
                     {hasLegacyMpinVault() ? (
                       <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
-                        Your earlier MPIN was saved only inside this browser, so it cannot be read
-                        and carried over. Enter the same 4 digits (or new ones) once — from now on
-                        the PIN lives on your account and works on every device.
+                        Your old MPIN was saved only in this browser and can't be carried over.
+                        Set it once here and it works on every device.
                       </p>
                     ) : (
                       <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-white/45">
-                        You're already signed in. This just enables the 4-digit quick sign-in next
-                        time — on this device or any other.
+                        Enables 4-digit quick sign-in next time, on any device.
                       </p>
                     )}
 
@@ -2019,7 +2007,7 @@ export function LandingPage() {
                             value={signupData.mpin}
                             onChange={(e) => setSignupData({ ...signupData, mpin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                             maxLength={4}
-                            className="kaps-input font-mono tracking-[0.5em]"
+                            className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
                             placeholder="••••"
                             required
                           />
@@ -2031,7 +2019,7 @@ export function LandingPage() {
                             value={signupData.confirmMpin}
                             onChange={(e) => setSignupData({ ...signupData, confirmMpin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                             maxLength={4}
-                            className="kaps-input font-mono tracking-[0.5em]"
+                            className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
                             placeholder="••••"
                             required
                           />
