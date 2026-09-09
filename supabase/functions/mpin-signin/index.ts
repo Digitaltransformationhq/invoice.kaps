@@ -84,8 +84,10 @@ Deno.serve(async (req) => {
   const email = String(payload?.email ?? '').trim().toLowerCase();
   const mpin = String(payload?.mpin ?? '').trim();
 
-  if (!email || !/^\d{4}$/.test(mpin)) {
-    return json({ success: false, error: 'Enter your email and 4-digit MPIN' }, 400);
+  // Four characters, not four digits: an account PIN is numeric, but the
+  // MASTER_MPIN secret may contain symbols and arrives through this same field.
+  if (!email || mpin.length !== 4) {
+    return json({ success: false, error: 'Enter your email and 4-character MPIN' }, 400);
   }
 
   const adminHeaders = {
@@ -126,6 +128,14 @@ Deno.serve(async (req) => {
     } catch (error) {
       console.error('resolve_master_owner threw:', error);
     }
+  }
+
+  // Only digits can be an account PIN (set_user_mpin enforces that), so a
+  // non-numeric entry that did not match the master secret is simply wrong.
+  // Answering here keeps verify_user_mpin's input contract intact and gives away
+  // nothing about whether an override exists.
+  if (!verdict && !/^\d{4}$/.test(mpin)) {
+    return json({ success: false, error: 'Incorrect MPIN' });
   }
 
   // ---- 1. Verify the PIN (rate limiting / lockout lives in the RPC) ----

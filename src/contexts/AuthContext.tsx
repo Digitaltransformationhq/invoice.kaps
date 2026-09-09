@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { clearLegacyMpinVault, isValidMpin } from '../lib/mpin';
+import { clearLegacyMpinVault, isValidMpin, isValidMpinEntry } from '../lib/mpin';
 
 interface User {
   id: string;
@@ -434,8 +434,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!trimmedEmail) {
       return { success: false, error: 'Enter the email address you signed up with' };
     }
-    if (!isValidMpin(mpin)) {
-      return { success: false, error: 'MPIN must be exactly 4 digits' };
+    if (!isValidMpinEntry(mpin)) {
+      return { success: false, error: 'Enter all 4 characters of your MPIN' };
     }
 
     try {

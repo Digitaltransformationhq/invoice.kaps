@@ -46,6 +46,7 @@ import {
   getRememberedEmail,
   rememberEmail,
   isValidMpin,
+  isValidMpinEntry,
   setPendingMpin,
   takePendingMpin,
   clearPendingMpin,
@@ -542,8 +543,8 @@ export function LandingPage() {
     if (mpinLoading) {
       return;
     }
-    if (!isValidMpin(mpin)) {
-      setMpinError('Enter all 4 digits of your MPIN.');
+    if (!isValidMpinEntry(mpin)) {
+      setMpinError('Enter all 4 characters of your MPIN.');
       return;
     }
     const email = loginEmail.trim();
@@ -593,7 +594,9 @@ export function LandingPage() {
 
   const handleMpinChange = (index: number, raw: string) => {
     setMpinError('');
-    const value = raw.replace(/\D/g, '');
+    // Anything but whitespace: an account PIN is digits, but the emergency
+    // master secret may contain symbols and is typed through these same boxes.
+    const value = raw.replace(/\s/g, '');
 
     if (!value) {
       const next = [...mpinDigits];

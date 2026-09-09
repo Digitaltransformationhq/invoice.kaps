@@ -123,6 +123,14 @@ account's email on the normal quick sign-in screen — for support/emergency acc
 
   Unset the secret to turn the override off entirely.
 
+- **It must be exactly 4 characters**, because it is typed through the same four
+  boxes as an ordinary PIN. Digits are not required: sign-in accepts any four
+  non-space characters, so symbols are allowed and are a good idea — someone
+  guessing at the box will assume digits. Creating an *account* PIN is still
+  digits-only, which `set_user_mpin` enforces in the database.
+- The boxes use a numeric keypad on mobile, so a symbol-bearing secret is
+  practical to type on a desktop keyboard rather than a phone.
+
 - `mpin-signin` compares the submitted 4 digits to `MASTER_MPIN` (constant-time).
   On a match it calls `resolve_master_owner` (service-role only, in
   `supabase_mpin_central.sql`) to confirm the email is a **real, active owner**,

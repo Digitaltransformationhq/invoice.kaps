@@ -25,8 +25,21 @@ const EMAIL_KEY = 'kaps-mpin-email';
 const LEGACY_VAULT_KEY = 'kaps-mpin-vault';
 const PENDING_KEY = 'kaps-pending-mpin';
 
+/** What an account's PIN may be SET to. The database enforces the same rule. */
 export function isValidMpin(mpin: string): boolean {
   return /^\d{4}$/.test(mpin);
+}
+
+/**
+ * What the sign-in screen may ACCEPT, which is deliberately wider: four
+ * non-space characters rather than four digits. The emergency MASTER_MPIN
+ * secret is typed through these same boxes and may contain symbols, so
+ * restricting entry to digits would make it impossible to enter. Ordinary
+ * account PINs are still digits-only — that is enforced where a PIN is created
+ * (isValidMpin, and set_user_mpin in the database).
+ */
+export function isValidMpinEntry(mpin: string): boolean {
+  return /^\S{4}$/.test(mpin);
 }
 
 // ---- "returning user" flag (controls landing-page vs sign-in routing) ----
