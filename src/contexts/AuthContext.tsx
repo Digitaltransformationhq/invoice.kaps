@@ -144,7 +144,26 @@ function isNetworkFailure(error: unknown): boolean {
   return /failed to fetch|networkerror|load failed|fetch failed|err_/i.test(message);
 }
 
+const HEADER_TOO_LARGE_MESSAGE =
+  "This account's sign-in token is too large for the server to accept, so the request " +
+  'is rejected before it arrives. Run supabase/sql/supabase_fix_header_too_large.sql ' +
+  'once in the Supabase SQL Editor, then sign in again.';
+
+/**
+ * The base64 company logo used to be written into auth metadata, and Supabase
+ * embeds metadata in every JWT — so those accounts send a ~100 KB Authorization
+ * header that the edge refuses outright. It surfaces as a raw hosting error
+ * ("REQUEST_HEADER_TOO_LARGE bom1::"), which tells the user nothing.
+ */
+function isHeaderTooLargeFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /REQUEST_HEADER_TOO_LARGE|header\w*\s+(?:fields\s+)?too\s+large|(?:^|\D)431(?:\D|$)/i.test(message);
+}
+
 function describeAuthError(error: unknown, fallback: string): string {
+  if (isHeaderTooLargeFailure(error)) {
+    return HEADER_TOO_LARGE_MESSAGE;
+  }
   if (isNetworkFailure(error)) {
     return NETWORK_ERROR_MESSAGE;
   }
@@ -378,6 +397,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const finalizeOwnerSession = async (metadata: AuthMetadata = {}) => {
     const { data, error: profileError } = await supabase.rpc('get_current_profile');
     if (profileError || !data?.success) {
+      if (isHeaderTooLargeFailure(profileError)) {
+        return { success: false, error: HEADER_TOO_LARGE_MESSAGE };
+      }
       if (isNetworkFailure(profileError)) {
         return { success: false, error: NETWORK_ERROR_MESSAGE };
       }
