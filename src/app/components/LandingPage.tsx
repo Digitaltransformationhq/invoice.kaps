@@ -1540,8 +1540,8 @@ export function LandingPage() {
                           maxLength={4}
                           value={newMpin}
                           onChange={(e) => setNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
-                          placeholder="4 digits"
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="••••"
                           required
                         />
                       </div>
@@ -1553,8 +1553,8 @@ export function LandingPage() {
                           maxLength={4}
                           value={confirmNewMpin}
                           onChange={(e) => setConfirmNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
-                          placeholder="Repeat"
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="••••"
                           required
                         />
                       </div>
@@ -1597,8 +1597,8 @@ export function LandingPage() {
                           maxLength={4}
                           value={newMpin}
                           onChange={(e) => setNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
-                          placeholder="4 digits"
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="••••"
                           autoFocus
                           required
                         />
@@ -1611,8 +1611,8 @@ export function LandingPage() {
                           maxLength={4}
                           value={confirmNewMpin}
                           onChange={(e) => setConfirmNewMpin(e.target.value.replace(/\D/g, ''))}
-                          className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
-                          placeholder="Repeat"
+                          className="kaps-input font-mono tracking-[0.5em]"
+                          placeholder="••••"
                           required
                         />
                       </div>
@@ -2007,7 +2007,7 @@ export function LandingPage() {
                             value={signupData.mpin}
                             onChange={(e) => setSignupData({ ...signupData, mpin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                             maxLength={4}
-                            className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
+                            className="kaps-input font-mono tracking-[0.5em]"
                             placeholder="••••"
                             required
                           />
@@ -2019,7 +2019,7 @@ export function LandingPage() {
                             value={signupData.confirmMpin}
                             onChange={(e) => setSignupData({ ...signupData, confirmMpin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                             maxLength={4}
-                            className="kaps-input font-mono tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans"
+                            className="kaps-input font-mono tracking-[0.5em]"
                             placeholder="••••"
                             required
                           />
