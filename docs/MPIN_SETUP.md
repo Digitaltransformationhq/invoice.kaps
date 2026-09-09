@@ -63,7 +63,10 @@ the password form keeps working.
 - **Signup** collects it. If signup returns a session, it is stored immediately; otherwise
   it is parked in `sessionStorage` and stored right after the first password sign-in.
 - **After a password login**, an account with no PIN is offered the "Set your MPIN" step
-  (skippable). Accounts that already have one are never asked again — on any device.
+  (skippable). Accounts that already have one are never asked again — on any device. The
+  step fires only when `mpin_status()` positively reports "no PIN"; if that check fails
+  (`known: false`) nothing is shown, so an owner who has a PIN is never asked to pick one
+  again just because the status call errored.
 - **"Not set up your MPIN yet?"** on the quick sign-in screen takes email + password + a new
   PIN and creates the first one, without needing a password sign-in first. The same screen
   opens automatically when a PIN is entered for an account that has none: `verify_user_mpin`

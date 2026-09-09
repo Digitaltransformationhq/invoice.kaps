@@ -313,12 +313,14 @@ export function LandingPage() {
               toast.error(saved.error || 'Could not save your MPIN. You can set it after signing in.');
             }
           } else {
-            // Offer a PIN when the account has none — and also when the check
-            // itself failed, since guessing "already set" would quietly leave
-            // this account without quick sign-in and no way to notice. The step
-            // is skippable either way.
+            // Offer a PIN only when we KNOW the account has none. A failed
+            // status check (`known: false`) must not trigger the step: an owner
+            // who already has an MPIN would be asked to set one again on every
+            // login, which is what the check is there to prevent. If the check
+            // is unreliable, the sign-in screen's "Not set up your MPIN yet?"
+            // link and Settings both still lead to the same form.
             const status = await hasMpin();
-            if (!status.set) {
+            if (status.known && !status.set) {
               setNewMpin('');
               setConfirmNewMpin('');
               setUserLoginMode('set-mpin');

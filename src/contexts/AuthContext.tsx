@@ -554,10 +554,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Whether the signed-in owner already has an MPIN on the account.
    *
-   * `known: false` means the check itself failed, which must NOT be read as
-   * "already set": doing that silently denies the user the chance to create a
-   * PIN, and quick sign-in then reports "not set up" forever with nothing in the
-   * UI to fix it. Callers offer the (skippable) set-MPIN step in that case.
+   * `known: false` means the check itself failed — neither "set" nor "not set".
+   * Callers must not prompt on it: an owner who already has an MPIN would be
+   * asked to choose one again after every login. Someone who genuinely has none
+   * still reaches the same form from "Not set up your MPIN yet?" on the sign-in
+   * screen, or from Settings, so nothing is lost by staying quiet here.
    */
   const hasMpin = async (): Promise<{ set: boolean; known: boolean }> => {
     try {
