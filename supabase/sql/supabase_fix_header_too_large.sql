@@ -1,3 +1,5 @@
+-- SUPERSEDED by supabase_jwt_size_guard.sql, which keeps this fix from being
+-- undone by the repair/setup scripts. Run that file instead.
 -- ============================================================================
 -- FIX: "REQUEST_HEADER_TOO_LARGE" on login
 -- ----------------------------------------------------------------------------

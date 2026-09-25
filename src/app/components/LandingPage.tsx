@@ -57,6 +57,7 @@ import {
   clearLegacyMpinVault,
 } from '../../lib/mpin';
 import { TOAST_MOBILE_OFFSET } from '../../lib/safeArea';
+import { saveSignupCompanyLogo } from '../../lib/authToken';
 
 type Theme = 'dark' | 'light';
 const THEME_KEY = 'kaps-landing-theme';
@@ -737,8 +738,10 @@ export function LandingPage() {
             address: signupData.address,
             city: signupData.city,
             state: signupData.state,
-            pin_code: signupData.pinCode,
-            company_logo: signupData.companyLogo
+            pin_code: signupData.pinCode
+            // Never put the logo here: auth metadata is copied into every
+            // access token, and a base64 image makes it too large to send
+            // (REQUEST_HEADER_TOO_LARGE). It is saved to the company below.
           }
         }
       });
@@ -755,18 +758,11 @@ export function LandingPage() {
         toast.error('Signup failed. Please try again.');
         return;
       }
-      // The access token minted by signUp still embeds the metadata we just sent
-      // — including the base64 logo — which makes it ~100 KB and too large for
-      // the ~32 KB header limit, so every request with it is rejected upstream.
-      // The signup trigger strips the logo from the metadata, so refreshing here
-      // reissues a small token. Without this the very next call fails.
-      if (data.session) {
-        try {
-          await supabase.auth.refreshSession();
-        } catch {
-          /* a slim token is a bonus, not a precondition for the account */
-        }
-      }
+      await saveSignupCompanyLogo(
+        signupData.email,
+        signupData.companyLogo,
+        data.session ? data.user.id : null,
+      );
 
       // Store the chosen MPIN on the account so it works on every device. That
       // needs a session: signUp returns one when email confirmation is off, and

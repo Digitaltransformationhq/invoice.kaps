@@ -76,7 +76,7 @@ async function isHeaderTooLarge(response: Response): Promise<boolean> {
 //    oversized JWT — signup put the base64 company logo into auth metadata, which
 //    Supabase embeds in every access token — and Supabase's own edge accepts a
 //    larger header than Vercel's. This rescues tokens in that band; a token far
-//    past both limits still needs supabase/sql/supabase_fix_header_too_large.sql,
+//    past both limits still needs supabase/sql/supabase_jwt_size_guard.sql,
 //    which strips the logo from auth metadata for good. If the direct hop fails
 //    (the very ISP blocking that the proxy exists for), the original response is
 //    returned unchanged.

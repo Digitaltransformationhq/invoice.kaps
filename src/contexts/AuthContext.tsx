@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { clearLegacyMpinVault, isValidMpin, isValidMpinEntry } from '../lib/mpin';
+import { applyPendingCompanyLogo, slimOversizedSession } from '../lib/authToken';
 
 interface User {
   id: string;
@@ -146,7 +147,7 @@ function isNetworkFailure(error: unknown): boolean {
 
 const HEADER_TOO_LARGE_MESSAGE =
   "This account's sign-in token is too large for the server to accept, so the request " +
-  'is rejected before it arrives. Run supabase/sql/supabase_fix_header_too_large.sql ' +
+  'is rejected before it arrives. Run supabase/sql/supabase_jwt_size_guard.sql ' +
   'once in the Supabase SQL Editor, then sign in again.';
 
 /**
@@ -336,6 +337,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // A token bloated by old auth metadata is refused before it reaches the
+      // server; slim it first so the profile refresh below can go through.
+      await slimOversizedSession();
       await refreshOwnerSession(session);
     } catch (error) {
       console.error('Session restore failed:', error);
@@ -395,6 +399,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * and MPIN sign-in paths, which differ only in how the session was obtained.
    */
   const finalizeOwnerSession = async (metadata: AuthMetadata = {}) => {
+    await slimOversizedSession();
+
     const { data, error: profileError } = await supabase.rpc('get_current_profile');
     if (profileError || !data?.success) {
       if (isHeaderTooLargeFailure(profileError)) {
@@ -409,6 +415,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const profile = data.profile;
     const nextUser = buildOwnerUser(profile, metadata);
+
+    // The logo picked at signup is parked when signup returned no session.
+    if (!nextUser.company_logo) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const logo = await applyPendingCompanyLogo(nextUser.email, session.user.id);
+        if (logo) {
+          nextUser.company_logo = logo;
+        }
+      }
+    }
+
     storeSession(nextUser, ownerPermissions);
 
     if (!profile.company_gstin) {
