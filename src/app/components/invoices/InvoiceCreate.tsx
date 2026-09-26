@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { ArrowLeft, Plus, Trash2, Save, Eye, Calculator, CheckCircle, ChevronDown, ChevronUp, X, Package, Mail, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Eye, Calculator, CheckCircle, ChevronDown, X, Package, Mail, MessageCircle } from 'lucide-react';
 import { InvoicePreview } from './InvoicePreview';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
@@ -393,6 +393,16 @@ export function InvoiceCreate() {
       }
     ]);
     setExpandedItemId(newId);
+
+    // Once the previous card has slid shut, glide the new one into view so the
+    // user isn't left looking at the button while the form moves under them.
+    window.setTimeout(() => {
+      const card = document.querySelector<HTMLElement>(`[data-line-item-id="${newId}"]`);
+      if (card && card.offsetParent !== null) {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      }
+    }, 320);
   };
 
   const removeLineItem = (id: string) => {
@@ -1310,13 +1320,6 @@ export function InvoiceCreate() {
               <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-[11px] font-bold flex items-center justify-center">3</div>
               <h3 className="text-[16px] font-semibold text-foreground tracking-tight">Items & Services</h3>
             </div>
-            <button
-              onClick={addLineItem}
-              className="inline-flex items-center gap-1.5 h-9 px-3 md:px-4 text-[12.5px] font-medium border border-violet-300 dark:border-violet-400/30 bg-card text-foreground rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Add Line</span>
-            </button>
           </div>
 
           {/* Desktop Table View */}
@@ -1459,7 +1462,7 @@ export function InvoiceCreate() {
             {lineItems.map((item, index) => {
               const isExpanded = expandedItemId === item.id;
               return (
-                <div key={item.id} className="p-4">
+                <div key={item.id} data-line-item-id={item.id} className="p-4 scroll-mt-4">
                   {/* Collapsed Header - Always Visible */}
                   <div
                     onClick={() => setExpandedItemId(isExpanded ? '' : item.id)}
@@ -1488,18 +1491,23 @@ export function InvoiceCreate() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
-                      <button className="p-2 hover:bg-muted rounded-lg transition-colors">
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                        )}
+                      <button type="button" className="p-2 hover:bg-muted rounded-lg transition-colors">
+                        <ChevronDown
+                          className={`w-5 h-5 text-muted-foreground transition-transform duration-300 motion-reduce:transition-none ${isExpanded ? 'rotate-180' : ''}`}
+                        />
                       </button>
                     </div>
                   </div>
 
-                  {/* Expanded Details */}
-                  {isExpanded && (
+                  {/* Expanded Details — always mounted so opening and closing can
+                      animate (grid rows 0fr <-> 1fr); `invisible` keeps a closed
+                      card's fields out of the tab order and screen readers. */}
+                  <div
+                    className={`grid transition-[grid-template-rows,visibility] duration-300 ease-in-out motion-reduce:transition-none ${
+                      isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] invisible'
+                    }`}
+                  >
+                    <div className="overflow-hidden min-h-0">
                     <div className="space-y-4 mt-4 pt-4 border-t border-border">
                       {/* Item Selection */}
                       <div>
@@ -1644,10 +1652,24 @@ export function InvoiceCreate() {
                         </div>
                       </div>
                     </div>
-                  )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
+          </div>
+
+          {/* Add Line sits below the last item so, on mobile, it is right where
+              the user finishes filling one in — no scrolling back to the top. */}
+          <div className="px-4 md:px-6 py-4 border-t border-violet-100 dark:border-violet-400/15">
+            <button
+              type="button"
+              onClick={addLineItem}
+              className="w-full inline-flex items-center justify-center gap-1.5 h-11 px-4 text-[13px] font-medium border border-dashed border-violet-300 dark:border-violet-400/30 bg-card text-violet-700 dark:text-violet-300 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Item/Service
+            </button>
           </div>
         </div>
 
