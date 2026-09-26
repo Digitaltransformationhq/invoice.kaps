@@ -12,6 +12,7 @@ import { useTaxpayerType } from '../../../lib/useTaxpayerType';
 import { useInvoiceDefaults } from '../../../lib/useInvoiceDefaults';
 import { useInvoiceTemplate } from '../../../lib/useInvoiceTemplate';
 import { storedInvoiceTemplateId } from '../../../lib/invoiceTemplates';
+import { formatRoundOff, roundInvoiceTotal } from '../../../lib/invoiceDocument';
 import { AppSelect } from '../common/AppSelect';
 
 // Today as yyyy-mm-dd in the user's own timezone. Built from the local parts
@@ -521,7 +522,9 @@ export function InvoiceCreate() {
     return sum + (afterDiscount * item.gst / 100);
   }, 0);
 
-  const totalAmount = subtotal + totalGST;
+  // The payable total is rounded down to the rupee; the difference is saved into
+  // the total and printed as a "Round Off" line on every invoice format.
+  const { rounded: totalAmount, roundOff } = roundInvoiceTotal(subtotal + totalGST);
   // Line item numeric fields are held as raw strings while editing (so the
   // field can be cleared); coerce to numbers for the preview, which calls
   // .toFixed()/formatting on them.
@@ -1789,6 +1792,10 @@ export function InvoiceCreate() {
                   Composition taxable person. Not eligible to collect tax on supplies.
                 </div>
               )}
+              <div className="flex items-center justify-between text-[14px]">
+                <span className="text-muted-foreground">Round Off</span>
+                <span className="font-medium text-foreground tabular-nums">₹{formatRoundOff(roundOff)}</span>
+              </div>
               <div className="pt-3.5 mt-2 border-t border-violet-200 dark:border-violet-400/20">
                 <div className="flex items-end justify-between gap-3">
                   <span className="text-[12px] uppercase tracking-wider font-semibold text-muted-foreground">Total</span>

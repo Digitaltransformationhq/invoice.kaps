@@ -40,6 +40,8 @@ interface InvoicePreviewProps {
    * unknown) falls back to the default format.
    */
   templateId?: string;
+  /** Round the total to the rupee (default). False keeps a pre-rounding invoice as saved. */
+  roundOff?: boolean;
   autoOpenSend?: boolean;
 }
 
@@ -64,6 +66,7 @@ export function InvoicePreview({
   remarks,
   terms,
   templateId,
+  roundOff = true,
   autoOpenSend = false,
 }: InvoicePreviewProps) {
   const { user } = useAuth();
@@ -223,6 +226,7 @@ export function InvoicePreview({
     isComposition,
     companyState,
     isInterStateSupply,
+    roundOff,
   });
 
   const Template = getInvoiceTemplate(activeTemplateId).component;

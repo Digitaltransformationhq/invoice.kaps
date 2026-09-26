@@ -1,5 +1,6 @@
 import {
   formatInvoiceCurrency as formatCurrency,
+  formatRoundOff,
   formatInvoiceDate as formatDate,
   lineAmounts,
   numberToWords,
@@ -219,6 +220,12 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
                     </>
                   )}
                 </>
+              )}
+              {totals.isRounded && (
+                <tr>
+                  <td className="py-1">Round Off</td>
+                  <td className="py-1 text-right">₹{formatRoundOff(totals.roundOff)}</td>
+                </tr>
               )}
             </tbody>
           </table>

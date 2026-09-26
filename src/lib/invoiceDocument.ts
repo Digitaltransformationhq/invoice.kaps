@@ -83,6 +83,12 @@ export interface InvoiceDocumentInput {
   companyState: string;
   /** True when place of supply differs from the seller's state → IGST. */
   isInterStateSupply: boolean;
+  /**
+   * Round the grand total down to the rupee and show the difference as a
+   * "Round Off" line. Defaults to true; pass false for invoices saved before
+   * rounding existed, so the document still matches their stored total.
+   */
+  roundOff?: boolean;
 }
 
 export interface InvoiceTaxSummaryRow {
@@ -149,7 +155,12 @@ export interface InvoiceDocument {
     cgst: number;
     sgst: number;
     igst: number;
+    /** Payable amount — rounded down to the rupee when `isRounded`. */
     grandTotal: number;
+    /** Rounded total minus the exact total — zero or negative (e.g. -0.72). */
+    roundOff: number;
+    /** Whether rounding applies, i.e. whether to print the Round Off line. */
+    isRounded: boolean;
   };
   taxSummary: {
     rows: InvoiceTaxSummaryRow[];
@@ -188,6 +199,31 @@ export function lineAmounts(
     igst: isInterState ? tax : 0,
     total: isComposition ? taxable : taxable + tax,
   };
+}
+
+/**
+ * Rounds an invoice total DOWN to the whole rupee — the paise are always given
+ * up, never charged, so `roundOff` is zero or negative (e.g. -0.72), to the paisa.
+ */
+export function roundInvoiceTotal(total: number): { rounded: number; roundOff: number } {
+  const exact = Math.round(total * 100) / 100;
+  const rounded = Math.floor(exact);
+  return { rounded, roundOff: Math.round((rounded - exact) * 100) / 100 };
+}
+
+/**
+ * True when a saved total is a whole rupee. Invoices saved before rounding was
+ * introduced usually carry paise; previewing those unrounded keeps the document
+ * in step with the stored amount (and any payments against it).
+ */
+export function isWholeRupee(amount: number): boolean {
+  return Math.abs(amount - Math.round(amount)) < 0.005;
+}
+
+/** "+0.40" / "-0.25" — the sign matters on a Round Off line. */
+export function formatRoundOff(value: number): string {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return sign + formatInvoiceCurrency(Math.abs(value));
 }
 
 export function formatInvoiceDate(value?: string): string {
@@ -291,6 +327,12 @@ export function buildInvoiceDocument(input: InvoiceDocumentInput): InvoiceDocume
   }
   const rows = Array.from(map.values());
 
+  const exactTotal = subtotal + (isComposition ? 0 : totalTax);
+  const isRounded = input.roundOff !== false;
+  const { rounded, roundOff } = isRounded
+    ? roundInvoiceTotal(exactTotal)
+    : { rounded: exactTotal, roundOff: 0 };
+
   const companyGstin = company.gstin || '-';
 
   return {
@@ -351,7 +393,9 @@ export function buildInvoiceDocument(input: InvoiceDocumentInput): InvoiceDocume
       cgst: isInterState ? 0 : totalTax / 2,
       sgst: isInterState ? 0 : totalTax / 2,
       igst: isInterState ? totalTax : 0,
-      grandTotal: subtotal + (isComposition ? 0 : totalTax),
+      grandTotal: rounded,
+      roundOff,
+      isRounded,
     },
     taxSummary: {
       rows,

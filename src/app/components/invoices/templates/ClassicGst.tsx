@@ -1,5 +1,6 @@
 import {
   formatInvoiceCurrency as formatCurrency,
+  formatRoundOff,
   formatInvoiceDate as formatDate,
   lineAmounts,
   numberToWords,
@@ -220,6 +221,12 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
                   </>
                 )}
               </>
+            )}
+            {totals.isRounded && (
+              <tr className="border-b border-foreground">
+                <td className="p-2">Round Off</td>
+                <td className="p-2 text-right">₹{formatRoundOff(totals.roundOff)}</td>
+              </tr>
             )}
             <tr className="border-b border-foreground bg-muted/20">
               <td className="p-2 font-bold">GRAND TOTAL</td>

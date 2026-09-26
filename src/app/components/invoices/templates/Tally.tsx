@@ -1,6 +1,7 @@
 import {
   amountInWordsInr,
   formatInvoiceCurrency as formatCurrency,
+  formatRoundOff,
   lineAmounts,
 } from '../../../../lib/invoiceDocument';
 import type { InvoiceDocument } from '../../../../lib/invoiceDocument';
@@ -226,6 +227,18 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
                 <td className="px-1 pt-1 text-right font-bold">{formatCurrency(line.amount)}</td>
               </tr>
             ))}
+
+            {totals.isRounded && (
+              <tr>
+                <td className={`border-r ${box} px-1`}></td>
+                <td className={`border-r ${box} px-1 pt-1 text-right font-bold`}>Round Off</td>
+                <td className={`border-r ${box} px-1`}></td>
+                <td className={`border-r ${box} px-1`}></td>
+                <td className={`border-r ${box} px-1`}></td>
+                <td className={`border-r ${box} px-1`}></td>
+                <td className="px-1 pt-1 text-right font-bold">{formatRoundOff(totals.roundOff)}</td>
+              </tr>
+            )}
 
             {/* Tally pads the particulars block to a fixed depth, so a short
               * invoice rules down to the same point as a long one. */}

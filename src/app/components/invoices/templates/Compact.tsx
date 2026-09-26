@@ -1,5 +1,6 @@
 import {
   formatInvoiceCurrency as formatCurrency,
+  formatRoundOff,
   formatInvoiceDate as formatDate,
   lineAmounts,
   numberToWords,
@@ -229,6 +230,12 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
                     </>
                   )}
                 </>
+              )}
+              {totals.isRounded && (
+                <tr className="border-b border-foreground">
+                  <td className="px-2 py-0.5">Round Off</td>
+                  <td className="px-2 py-0.5 text-right">₹{formatRoundOff(totals.roundOff)}</td>
+                </tr>
               )}
               <tr className="bg-muted/20">
                 <td className="px-2 py-1 text-[10.5px] font-bold">GRAND TOTAL</td>

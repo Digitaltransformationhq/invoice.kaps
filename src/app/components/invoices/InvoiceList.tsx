@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { InvoicePreview } from './InvoicePreview';
 import { storedInvoiceTemplateId } from '../../../lib/invoiceTemplates';
+import { isWholeRupee } from '../../../lib/invoiceDocument';
 import { RecordPaymentDialog, PaymentInvoice } from './RecordPaymentDialog';
 import { toast } from 'sonner';
 import { sendInvoiceEmail } from '../../../lib/emailInvoice';
@@ -1140,6 +1141,7 @@ export function InvoiceList() {
           remarks={selectedInvoice.remarks}
           terms={selectedInvoice.terms}
           templateId={selectedInvoice.templateId}
+          roundOff={isWholeRupee(selectedInvoice.amount)}
         />
       )}
 

@@ -1,5 +1,6 @@
 import {
   formatInvoiceCurrency as formatCurrency,
+  formatRoundOff,
   lineAmounts,
   numberToWords,
 } from '../../../../lib/invoiceDocument';
@@ -143,6 +144,7 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
           </>
         )
       )}
+      {totals.isRounded && <Row label="Round Off" value={formatRoundOff(totals.roundOff)} />}
 
       <div className="border-t border-black my-1" />
       <div className="flex justify-between text-[13px] font-bold">
