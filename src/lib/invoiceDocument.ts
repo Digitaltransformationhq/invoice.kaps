@@ -13,6 +13,9 @@
 
 import { getGstinStateCode, getStateCodeByName } from './gstin';
 
+export const COMPUTER_GENERATED_INVOICE_NOTICE =
+  'This is a computer generated invoice and does not require a signature.';
+
 export interface InvoiceLineItem {
   id: string;
   type?: 'product' | 'service';

@@ -1,4 +1,5 @@
 import {
+  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   formatInvoiceDate as formatDate,
@@ -364,6 +365,11 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
               Authorised Signatory
             </div>
           </div>
+          {!company.stamp && !company.esign && (
+            <div className="mt-1 text-center text-[8px] leading-tight">
+              {COMPUTER_GENERATED_INVOICE_NOTICE}
+            </div>
+          )}
         </div>
       </div>
     </div>

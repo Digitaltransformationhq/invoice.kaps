@@ -1,4 +1,5 @@
 import {
+  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   lineAmounts,
@@ -233,7 +234,11 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
         )}
         <div className="text-[8px]">for {company.name}</div>
         <div className="text-[10px] font-bold mt-2">THANK YOU — VISIT AGAIN!</div>
-        <div className="text-[7.5px] mt-1">This is a computer generated invoice.</div>
+        {!company.stamp && !company.esign && (
+          <div className="text-[7.5px] mt-1 leading-tight">
+            {COMPUTER_GENERATED_INVOICE_NOTICE}
+          </div>
+        )}
       </div>
     </div>
   );

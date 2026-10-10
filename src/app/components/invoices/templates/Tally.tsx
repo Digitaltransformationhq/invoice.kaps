@@ -1,4 +1,5 @@
 import {
+  COMPUTER_GENERATED_INVOICE_NOTICE,
   amountInWordsInr,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
@@ -437,12 +438,16 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
                 )}
               </div>
               <div className="text-right">Authorised Signatory</div>
+              {!company.stamp && !company.esign && (
+                <div className="mt-1 text-center text-[8px] leading-tight">
+                  {COMPUTER_GENERATED_INVOICE_NOTICE}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="py-2 text-center text-[9px]">This is a Computer Generated Invoice</div>
     </div>
   );
 }

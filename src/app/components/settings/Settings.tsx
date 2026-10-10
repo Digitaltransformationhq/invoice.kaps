@@ -88,11 +88,22 @@ const BANK_ACCOUNT_TYPES = [
 const SETTINGS_REQUEST_TIMEOUT_MS = 12000;
 const SIGNATURE_IMAGE_MAX_SIZE = 900;
 
+function normalizeDueDays(value: unknown): number {
+  if (value === null || value === undefined || value === '') {
+    return defaultSettings.default_due_days;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0
+    ? Math.floor(parsed)
+    : defaultSettings.default_due_days;
+}
+
 function mapSettings(row: any): SettingsForm {
   return {
     invoice_prefix: row?.invoice_prefix || defaultSettings.invoice_prefix,
     invoice_next_number: Number(row?.invoice_next_number || defaultSettings.invoice_next_number),
-    default_due_days: Number(row?.default_due_days || defaultSettings.default_due_days),
+    default_due_days: normalizeDueDays(row?.default_due_days),
     currency: row?.currency || defaultSettings.currency,
     terms: row?.terms || defaultSettings.terms,
     default_gst_rate: Number(row?.default_gst_rate || defaultSettings.default_gst_rate),
@@ -452,7 +463,9 @@ export function Settings() {
       company_id: user.company_id,
       invoice_prefix: settings.invoice_prefix.trim() || 'INV',
       invoice_next_number: Number(settings.invoice_next_number) || 1,
-      default_due_days: Number(settings.default_due_days) || 15,
+      // Keep the user's configured interval. Fifteen is used only when the
+      // value is absent or invalid, not as a blanket replacement.
+      default_due_days: normalizeDueDays(settings.default_due_days),
       // Round-tripped, not editable. A GST tax invoice is denominated in INR,
       // and the whole app (CGST/SGST/IGST, HSN/SAC, GSTR-1, amount-in-words in
       // Lakh/Crore) is built on that, so the currency picker was removed rather

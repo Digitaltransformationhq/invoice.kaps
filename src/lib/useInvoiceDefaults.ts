@@ -21,6 +21,17 @@ export type InvoiceDefaults = {
 
 export const INVOICE_DEFAULTS_FALLBACK: InvoiceDefaults = { dueDays: 15, terms: '' };
 
+function configuredDueDays(value: unknown): number {
+  if (value === null || value === undefined || value === '') {
+    return INVOICE_DEFAULTS_FALLBACK.dueDays;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0
+    ? Math.floor(parsed)
+    : INVOICE_DEFAULTS_FALLBACK.dueDays;
+}
+
 export function useInvoiceDefaults() {
   const { user } = useAuth();
   const [defaults, setDefaults] = useState<InvoiceDefaults>(INVOICE_DEFAULTS_FALLBACK);
@@ -42,7 +53,9 @@ export function useInvoiceDefaults() {
           if (data?.success) {
             const s = data.settings || {};
             setDefaults({
-              dueDays: Number(s.default_due_days) || INVOICE_DEFAULTS_FALLBACK.dueDays,
+              // Fifteen days is only the fallback. Preserve every valid value
+              // explicitly saved in Invoice Settings, including same-day (0).
+              dueDays: configuredDueDays(s.default_due_days),
               terms: (s.terms ?? '').toString(),
             });
           }

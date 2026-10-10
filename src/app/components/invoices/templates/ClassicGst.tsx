@@ -1,4 +1,5 @@
 import {
+  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   formatInvoiceDate as formatDate,
@@ -391,6 +392,11 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
               )}
               <div className="absolute bottom-0 right-0 z-10 border-t border-foreground inline-block min-w-[184px] px-8 pt-1 text-center">Authorised Signatory</div>
             </div>
+            {!company.stamp && !company.esign && (
+              <div className="mt-1 text-center text-[9px] leading-tight">
+                {COMPUTER_GENERATED_INVOICE_NOTICE}
+              </div>
+            )}
           </div>
         </div>
       </div>

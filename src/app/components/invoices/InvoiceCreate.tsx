@@ -125,7 +125,7 @@ export function InvoiceCreate() {
   // Once the user sets a due date by hand, stop re-deriving it from the invoice
   // date. Edit mode sets this too, so opening an old invoice never silently
   // moves the due date its customer was given.
-  const dueDateTouched = useRef(false);
+  const [dueDateIsManual, setDueDateIsManual] = useState(false);
   const [terms, setTerms] = useState('');
   const termsTouched = useRef(false);
   const [placeOfSupply, setPlaceOfSupply] = useState('Auto from customer');
@@ -319,7 +319,7 @@ export function InvoiceCreate() {
     // defaults — including empty, for invoices predating these fields. Marking
     // them touched stops the seeding effects from inventing values on top.
     setDueDate(invoice.due_date || '');
-    dueDateTouched.current = true;
+    setDueDateIsManual(true);
     setTerms(invoice.terms || '');
     termsTouched.current = true;
     // Empty means the invoice predates formats, which `storedInvoiceTemplateId`
@@ -711,9 +711,9 @@ export function InvoiceCreate() {
   // and re-derive whenever the invoice date moves — until the user sets it
   // themselves. Skipped in edit mode, where the saved due date is authoritative.
   useEffect(() => {
-    if (editId || dueDateTouched.current || !defaultsLoaded || !invoiceDate) return;
+    if (editId || dueDateIsManual || !defaultsLoaded || !invoiceDate) return;
     setDueDate(addDays(invoiceDate, dueDays));
-  }, [editId, invoiceDate, dueDays, defaultsLoaded]);
+  }, [editId, invoiceDate, dueDays, defaultsLoaded, dueDateIsManual]);
 
   // Seed the Terms & Conditions from the company default. The invoice keeps its
   // own copy from here on, so changing the company terms later never restates
@@ -928,7 +928,7 @@ export function InvoiceCreate() {
     // date equals the date already in the form, none of their dependencies
     // change, they never re-run, and the next invoice opens with no due date.
     const freshDate = todayIso();
-    dueDateTouched.current = false;
+    setDueDateIsManual(false);
     termsTouched.current = false;
     setInvoiceDate(freshDate);
     setDueDate(addDays(freshDate, dueDays));
@@ -1269,14 +1269,14 @@ export function InvoiceCreate() {
                     type="date"
                     value={dueDate}
                     onChange={(e) => {
-                      dueDateTouched.current = true;
+                      setDueDateIsManual(true);
                       setDueDate(e.target.value);
                     }}
                     className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition"
                   />
                   {!isEditMode && (
                     <p className="text-[12px] text-muted-foreground mt-1.5">
-                      {dueDateTouched.current
+                      {dueDateIsManual
                         ? 'Set by hand — it no longer follows the document date.'
                         : `${dueDays} days after the document date, from your Invoice Settings.`}
                     </p>

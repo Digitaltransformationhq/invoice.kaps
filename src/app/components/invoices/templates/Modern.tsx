@@ -1,4 +1,5 @@
 import {
+  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   formatInvoiceDate as formatDate,
@@ -371,6 +372,11 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
               Authorised Signatory
             </div>
           </div>
+          {!company.stamp && !company.esign && (
+            <div className="mt-1 text-center text-[9px] leading-tight" style={{ color: '#64748B' }}>
+              {COMPUTER_GENERATED_INVOICE_NOTICE}
+            </div>
+          )}
         </div>
       </div>
     </div>
