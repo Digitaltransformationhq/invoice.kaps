@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Lock, FileText, IndianRupee, Upload, Stamp, PenTool, Landmark, Shield, Receipt, Percent } from 'lucide-react';
+import { Building2, Lock, FileText, IndianRupee, Upload, Stamp, PenTool, Landmark, Shield, Receipt, Percent, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
@@ -22,6 +22,8 @@ interface CompanyForm {
   bank_ifsc: string;
   bank_branch: string;
   bank_account_type: string;
+  upi_id: string;
+  payment_qr_image: string;
   company_logo: string;
   esign_image: string;
   stamp_image: string;
@@ -56,6 +58,8 @@ const emptyCompany: CompanyForm = {
   bank_ifsc: '',
   bank_branch: '',
   bank_account_type: '',
+  upi_id: '',
+  payment_qr_image: '',
   company_logo: '',
   esign_image: '',
   stamp_image: '',
@@ -304,6 +308,8 @@ export function Settings() {
           state: profileResponse.data.company?.state || '',
           pin_code: profileResponse.data.company?.pin_code || '',
           company_logo: profileResponse.data.company?.company_logo || '',
+          upi_id: profileResponse.data.company?.upi_id || '',
+          payment_qr_image: profileResponse.data.company?.payment_qr_image || '',
           esign_image: profileResponse.data.company?.esign_image || '',
           stamp_image: profileResponse.data.company?.stamp_image || '',
         });
@@ -314,7 +320,7 @@ export function Settings() {
       const [companyResponse, settingsResponse] = await Promise.all([
         supabase
           .from('companies')
-          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, company_logo, esign_image, stamp_image')
+          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, upi_id, payment_qr_image, company_logo, esign_image, stamp_image')
           .eq('id', user.company_id)
           .single(),
         supabase.rpc('get_company_settings', {
@@ -342,6 +348,8 @@ export function Settings() {
         bank_ifsc: companyResponse.data?.bank_ifsc || '',
         bank_branch: companyResponse.data?.bank_branch || '',
         bank_account_type: companyResponse.data?.bank_account_type || '',
+        upi_id: companyResponse.data?.upi_id || '',
+        payment_qr_image: companyResponse.data?.payment_qr_image || '',
         company_logo: companyResponse.data?.company_logo || '',
         esign_image: companyResponse.data?.esign_image || '',
         stamp_image: companyResponse.data?.stamp_image || '',
@@ -404,6 +412,8 @@ export function Settings() {
       bank_ifsc: company.bank_ifsc.trim().toUpperCase() || null,
       bank_branch: company.bank_branch.trim() || null,
       bank_account_type: company.bank_account_type.trim() || null,
+      upi_id: company.upi_id.trim() || null,
+      payment_qr_image: company.payment_qr_image || null,
       company_logo: company.company_logo || null,
       esign_image: company.esign_image || null,
       stamp_image: company.stamp_image || null,
@@ -417,7 +427,7 @@ export function Settings() {
           .from('companies')
           .update(nextCompany)
           .eq('id', user.company_id)
-          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, company_logo, esign_image, stamp_image')
+          .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, upi_id, payment_qr_image, company_logo, esign_image, stamp_image')
           .single(),
         'Saving company settings'
       );
@@ -441,6 +451,8 @@ export function Settings() {
         bank_ifsc: data?.bank_ifsc || '',
         bank_branch: data?.bank_branch || '',
         bank_account_type: data?.bank_account_type || '',
+        upi_id: data?.upi_id || '',
+        payment_qr_image: data?.payment_qr_image || '',
         company_logo: data?.company_logo || '',
         esign_image: data?.esign_image || '',
         stamp_image: data?.stamp_image || '',
@@ -668,7 +680,7 @@ function CompanySettings({
   isSaving: boolean;
   onSave: () => void;
 }) {
-  const handleImageUpload = async (field: 'company_logo' | 'esign_image' | 'stamp_image', label: string, file?: File) => {
+  const handleImageUpload = async (field: 'company_logo' | 'esign_image' | 'stamp_image' | 'payment_qr_image', label: string, file?: File) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.error(`Please upload an image file for the ${label}`);
@@ -680,13 +692,13 @@ function CompanySettings({
     }
 
     try {
-      const imageData = field === 'company_logo'
+      const imageData = field === 'company_logo' || field === 'payment_qr_image'
         ? await readFileAsDataUrl(file)
         : await removeImageBackground(file);
 
       setCompany({ ...company, [field]: imageData });
 
-      if (field !== 'company_logo') {
+      if (field === 'esign_image' || field === 'stamp_image') {
         toast.success(`${label} background removed`);
       }
     } catch (error) {
@@ -806,6 +818,28 @@ function CompanySettings({
               className="w-full px-3.5 h-11 border border-violet-300 dark:border-violet-400/30 bg-input-background rounded-lg text-[14px] text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <p className="text-[11.5px] text-muted-foreground mt-1.5">Banks ask for this on an NEFT/RTGS transfer, so printing it saves the customer a phone call. Leave blank to keep it off the invoice.</p>
+          </div>
+          <SettingsInput
+            label="UPI ID"
+            value={company.upi_id}
+            disabled={!canEdit}
+            inputClassName="font-mono"
+            placeholder="business@bank"
+            hint="Printed in the invoice bank-details block."
+            onChange={(upi_id) => setCompany({ ...company, upi_id })}
+          />
+          <div className="md:col-span-2">
+            <ImageUploadField
+              title="Payment QR Code"
+              image={company.payment_qr_image}
+              emptyIcon={QrCode}
+              emptyLabel="QR"
+              canEdit={canEdit}
+              uploadLabel="Upload QR Code"
+              onUpload={(file) => handleImageUpload('payment_qr_image', 'payment QR code', file)}
+              onRemove={() => setCompany({ ...company, payment_qr_image: '' })}
+            />
+            <p className="text-[11px] text-muted-foreground mt-2">Upload the QR image provided by your bank or UPI app. PNG, JPG, or SVG under 1 MB.</p>
           </div>
         </div>
         {canEdit && (

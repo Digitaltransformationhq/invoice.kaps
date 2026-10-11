@@ -342,7 +342,14 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
             <div>IFSC: {company.bankIfsc || '-'}</div>
             {company.bankBranch && <div>Branch: {company.bankBranch}</div>}
             {company.bankAccountType && <div>A/c Type: {company.bankAccountType}</div>}
+            {company.upiId && <div>UPI ID: {company.upiId}</div>}
           </div>
+          {company.paymentQr && (
+            <div className="mt-2 inline-flex flex-col items-center">
+              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-16 w-16 object-contain" />
+              <div className="mt-0.5 text-[8px]" style={{ color: '#64748B' }}>Scan to pay</div>
+            </div>
+          )}
           <div className="mt-2 text-[9px] leading-relaxed" style={{ color: '#64748B' }}>
             We declare that this invoice shows the actual price of the goods/services
             described and that all particulars are true and correct.

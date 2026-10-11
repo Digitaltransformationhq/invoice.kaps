@@ -365,7 +365,14 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
             <div>IFSC: {company.bankIfsc || '-'}</div>
             {company.bankBranch && <div>Branch: {company.bankBranch}</div>}
             {company.bankAccountType && <div>A/c Type: {company.bankAccountType}</div>}
+            {company.upiId && <div>UPI ID: {company.upiId}</div>}
           </div>
+          {company.paymentQr && (
+            <div className="mt-2 inline-flex flex-col items-center">
+              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-20 w-20 object-contain" />
+              <div className="mt-0.5 text-[9px]">Scan to pay</div>
+            </div>
+          )}
         </div>
         <div className="p-4 text-xs">
           <div className="font-semibold mb-2">DECLARATION</div>

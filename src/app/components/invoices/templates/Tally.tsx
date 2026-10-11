@@ -392,8 +392,9 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
           <div className="w-1/2 flex flex-col">
             <div className="p-2 text-[9.5px]">
               <div>Company&rsquo;s Bank Details</div>
-              <table className="mt-0.5">
-                <tbody>
+              <div className="mt-0.5 flex items-start justify-between gap-2">
+                <table>
+                  <tbody>
                   <tr>
                     <td className="pr-1 align-top">Bank Name</td>
                     <td className="align-top">: <span className="font-bold">{company.bankName || '-'}</span></td>
@@ -416,8 +417,21 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
                       </span>
                     </td>
                   </tr>
-                </tbody>
-              </table>
+                  {company.upiId && (
+                    <tr>
+                      <td className="pr-1 align-top">UPI ID</td>
+                      <td className="align-top">: <span className="font-bold">{company.upiId}</span></td>
+                    </tr>
+                  )}
+                  </tbody>
+                </table>
+                {company.paymentQr && (
+                  <div className="shrink-0 text-center">
+                    <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-14 w-14 object-contain" />
+                    <div className="text-[7px]">Scan to pay</div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className={`mt-auto border-t border-l ${box} p-1.5 text-[9.5px]`}>
               <div className="text-right font-bold">for {company.name}</div>

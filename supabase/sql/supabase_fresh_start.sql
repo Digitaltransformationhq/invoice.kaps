@@ -78,6 +78,9 @@ create table public.companies (
   bank_account_number text,
   bank_ifsc text,
   bank_branch text,
+  bank_account_type text,
+  upi_id text,
+  payment_qr_image text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

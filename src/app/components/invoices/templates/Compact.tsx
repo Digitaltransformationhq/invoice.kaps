@@ -336,6 +336,13 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
           <div>IFSC: {company.bankIfsc || '-'}</div>
           {company.bankBranch && <div>Branch: {company.bankBranch}</div>}
           {company.bankAccountType && <div>A/c Type: {company.bankAccountType}</div>}
+          {company.upiId && <div>UPI: {company.upiId}</div>}
+          {company.paymentQr && (
+            <div className="mt-1 inline-flex flex-col items-center">
+              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-12 w-12 object-contain" />
+              <div className="text-[7px]">Scan to pay</div>
+            </div>
+          )}
         </div>
         <div className="p-2 border-r border-foreground leading-snug">
           <div className="font-semibold">DECLARATION</div>

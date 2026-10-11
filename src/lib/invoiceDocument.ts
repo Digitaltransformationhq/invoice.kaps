@@ -58,6 +58,8 @@ export interface InvoiceCompanyDetails {
   bankIfsc: string;
   bankBranch: string;
   bankAccountType: string;
+  upiId: string;
+  paymentQrImage: string;
   logo: string;
   esignImage: string;
   stampImage: string;
@@ -124,6 +126,8 @@ export interface InvoiceDocument {
     bankBranch: string;
     /** Savings / Current / Cash Credit / Overdraft. Blank prints no line. */
     bankAccountType: string;
+    upiId: string;
+    paymentQr: string;
   };
   buyer: {
     name: string;
@@ -362,6 +366,8 @@ export function buildInvoiceDocument(input: InvoiceDocumentInput): InvoiceDocume
       bankIfsc: company.bankIfsc || '',
       bankBranch: company.bankBranch || '',
       bankAccountType: company.bankAccountType || '',
+      upiId: company.upiId || '',
+      paymentQr: company.paymentQrImage || '',
     },
     buyer: {
       name: input.customer?.companyName || 'Customer not selected',

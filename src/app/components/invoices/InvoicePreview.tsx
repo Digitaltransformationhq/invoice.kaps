@@ -100,6 +100,8 @@ export function InvoicePreview({
     bankIfsc: '',
     bankBranch: '',
     bankAccountType: '',
+    upiId: '',
+    paymentQrImage: '',
     logo: user?.company_logo || '',
     esignImage: '',
     stampImage: '',
@@ -111,7 +113,7 @@ export function InvoicePreview({
     const loadCompanyDetails = async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, company_logo, esign_image, stamp_image')
+        .select('company_name, gstin, pan, phone, email, address, city, state, pin_code, bank_name, bank_account_number, bank_ifsc, bank_branch, bank_account_type, upi_id, payment_qr_image, company_logo, esign_image, stamp_image')
         .eq('id', user.company_id)
         .single();
 
@@ -131,6 +133,8 @@ export function InvoicePreview({
           bankIfsc: data?.bank_ifsc || '',
           bankBranch: data?.bank_branch || '',
           bankAccountType: data?.bank_account_type || '',
+          upiId: data?.upi_id || '',
+          paymentQrImage: data?.payment_qr_image || '',
           logo: data?.company_logo || user.company_logo || '',
           esignImage: data?.esign_image || '',
           stampImage: data?.stamp_image || '',

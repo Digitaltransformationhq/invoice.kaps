@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, MoreVertical, Package, X } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Trash2, Package, X, Upload, Download, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -23,7 +24,43 @@ interface Item {
 }
 
 const GST_RATES = [0, 5, 12, 18, 28];
+const IMPORT_TEMPLATE_URL = '/templates/items-services-import-template.xlsx';
+const MAX_IMPORT_ROWS = 5000;
 type StockFilter = 'all' | 'in-stock' | 'out-of-stock';
+
+type ImportColumn = 'name' | 'type' | 'description' | 'hsn' | 'unit' | 'sellingPrice' | 'purchasePrice' | 'gst' | 'stock';
+
+const IMPORT_HEADERS: Record<string, ImportColumn> = {
+  'item name': 'name',
+  name: 'name',
+  type: 'type',
+  description: 'description',
+  'hsn/sac code': 'hsn',
+  'hsn sac code': 'hsn',
+  hsn: 'hsn',
+  sac: 'hsn',
+  unit: 'unit',
+  'selling price': 'sellingPrice',
+  'purchase price': 'purchasePrice',
+  'gst rate (%)': 'gst',
+  'gst rate': 'gst',
+  'gst %': 'gst',
+  gst: 'gst',
+  'opening stock': 'stock',
+  stock: 'stock',
+};
+
+const REQUIRED_IMPORT_COLUMNS: ImportColumn[] = ['name', 'type', 'hsn', 'unit', 'sellingPrice', 'gst'];
+
+function normalizeImportHeader(value: string) {
+  return value.trim().replace(/\*/g, '').replace(/\s+/g, ' ').toLowerCase();
+}
+
+function parseImportNumber(value: string, fallback: number) {
+  if (!value.trim()) return fallback;
+  const parsed = Number(value.replace(/[₹,%\s]/g, '').replace(/,/g, ''));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
 
 export function ItemsList() {
   const { user } = useAuth();
@@ -32,6 +69,9 @@ export function ItemsList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'product' | 'service'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [gstFilter, setGstFilter] = useState<number[]>([]);
@@ -254,6 +294,175 @@ export function ItemsList() {
     setEditingItem(null);
   };
 
+  const handleImport = async (file: File) => {
+    if (!user?.company_id) {
+      setImportErrors(['Company profile is not ready. Please refresh and try again.']);
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      setImportErrors(['Upload an Excel .xlsx file. Download the template if you need the expected format.']);
+      return;
+    }
+
+    setIsImporting(true);
+    setImportErrors([]);
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const worksheet = workbook.getWorksheet('Import Template') || workbook.worksheets[0];
+
+      if (!worksheet) {
+        setImportErrors(['The workbook does not contain a worksheet to import.']);
+        return;
+      }
+
+      const columns = new Map<ImportColumn, number>();
+      worksheet.getRow(1).eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+        const column = IMPORT_HEADERS[normalizeImportHeader(cell.text)];
+        if (column && !columns.has(column)) columns.set(column, columnNumber);
+      });
+
+      const missingHeaders = REQUIRED_IMPORT_COLUMNS.filter((column) => !columns.has(column));
+      if (missingHeaders.length > 0) {
+        const labels: Record<ImportColumn, string> = {
+          name: 'Item Name',
+          type: 'Type',
+          description: 'Description',
+          hsn: 'HSN/SAC Code',
+          unit: 'Unit',
+          sellingPrice: 'Selling Price',
+          purchasePrice: 'Purchase Price',
+          gst: 'GST Rate (%)',
+          stock: 'Opening Stock',
+        };
+        setImportErrors([`Missing required column${missingHeaders.length === 1 ? '' : 's'}: ${missingHeaders.map((column) => labels[column]).join(', ')}.`]);
+        return;
+      }
+
+      const rowLimit = Math.min(worksheet.actualRowCount, MAX_IMPORT_ROWS + 1);
+      const validationErrors: string[] = [];
+      const parsedItems: Item[] = [];
+      const namesInFile = new Set<string>();
+      const existingNames = new Set(items.map((item) => item.name.trim().toLowerCase()));
+      const cellText = (rowNumber: number, column: ImportColumn) => {
+        const columnNumber = columns.get(column);
+        return columnNumber ? worksheet.getCell(rowNumber, columnNumber).text.trim() : '';
+      };
+
+      for (let rowNumber = 2; rowNumber <= rowLimit; rowNumber += 1) {
+        const raw = {
+          name: cellText(rowNumber, 'name'),
+          type: cellText(rowNumber, 'type'),
+          description: cellText(rowNumber, 'description'),
+          hsn: cellText(rowNumber, 'hsn'),
+          unit: cellText(rowNumber, 'unit'),
+          sellingPrice: cellText(rowNumber, 'sellingPrice'),
+          purchasePrice: cellText(rowNumber, 'purchasePrice'),
+          gst: cellText(rowNumber, 'gst'),
+          stock: cellText(rowNumber, 'stock'),
+        };
+
+        if (Object.values(raw).every((value) => !value)) continue;
+
+        const rowErrors: string[] = [];
+        const typeValue = raw.type.toLowerCase();
+        const type: Item['type'] | null =
+          ['product', 'products', 'goods', 'item'].includes(typeValue)
+            ? 'product'
+            : ['service', 'services'].includes(typeValue)
+              ? 'service'
+              : null;
+        const sellingPrice = parseImportNumber(raw.sellingPrice, Number.NaN);
+        const purchasePrice = parseImportNumber(raw.purchasePrice, 0);
+        const gst = parseImportNumber(raw.gst, Number.NaN);
+        const stock = parseImportNumber(raw.stock, 0);
+        const normalizedName = raw.name.toLowerCase();
+
+        if (!raw.name) rowErrors.push('Item Name is required');
+        if (!type) rowErrors.push('Type must be Product or Service');
+        if (!raw.hsn) rowErrors.push('HSN/SAC Code is required');
+        if (!raw.unit) rowErrors.push('Unit is required');
+        if (!Number.isFinite(sellingPrice) || sellingPrice < 0) rowErrors.push('Selling Price must be zero or more');
+        if (!Number.isFinite(purchasePrice) || purchasePrice < 0) rowErrors.push('Purchase Price must be zero or more');
+        if (!GST_RATES.includes(gst)) rowErrors.push('GST Rate must be 0, 5, 12, 18, or 28');
+        if (!Number.isFinite(stock) || stock < 0) rowErrors.push('Opening Stock must be zero or more');
+        if (normalizedName && namesInFile.has(normalizedName)) rowErrors.push('Item Name is duplicated in this file');
+        if (normalizedName && existingNames.has(normalizedName)) rowErrors.push('an active item with this name already exists');
+
+        if (rowErrors.length > 0) {
+          validationErrors.push(`Row ${rowNumber}: ${rowErrors.join('; ')}.`);
+          continue;
+        }
+
+        namesInFile.add(normalizedName);
+        parsedItems.push({
+          id: '',
+          name: raw.name,
+          type: type!,
+          description: raw.description,
+          hsn: raw.hsn,
+          unit: raw.unit,
+          sellingPrice,
+          purchasePrice,
+          gst,
+          stock: type === 'product' ? stock : undefined,
+        });
+      }
+
+      if (worksheet.actualRowCount > MAX_IMPORT_ROWS + 1) {
+        validationErrors.unshift(`This file has more than ${MAX_IMPORT_ROWS.toLocaleString()} data rows. Split it into smaller files and try again.`);
+      }
+      if (parsedItems.length === 0 && validationErrors.length === 0) {
+        validationErrors.push('No item or service rows were found below the header row.');
+      }
+      if (validationErrors.length > 0) {
+        setImportErrors(validationErrors);
+        return;
+      }
+
+      const records = parsedItems.map((item) => ({
+        company_id: user.company_id,
+        ...mapItemToDatabase(item),
+      }));
+
+      if (user.role === 'auditor') {
+        // The auditor RPC accepts one item record per request. Small concurrent
+        // groups keep large imports practical without changing its audit trail.
+        for (let start = 0; start < records.length; start += 10) {
+          const group = records.slice(start, start + 10);
+          const results = await Promise.all(group.map((record) =>
+            insertForUser<any>(
+              user,
+              'items',
+              'items',
+              () => Promise.resolve({ data: null, error: null }),
+              record,
+              record.name
+            )
+          ));
+          const failed = results.find((result) => result.error);
+          if (failed?.error) throw failed.error;
+        }
+      } else {
+        for (let start = 0; start < records.length; start += 500) {
+          const batch = records.slice(start, start + 500);
+          const { error } = await supabase.from('items').insert(batch);
+          if (error) throw error;
+        }
+      }
+
+      await loadItems();
+      setShowImportModal(false);
+      toast.success(`${parsedItems.length.toLocaleString()} ${parsedItems.length === 1 ? 'item' : 'items'} imported successfully`);
+    } catch (error) {
+      setImportErrors([error instanceof Error ? error.message : 'Could not import the Excel file.']);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -262,16 +471,28 @@ export function ItemsList() {
           <h1 className="text-2xl font-semibold text-foreground">Items & Services</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage your product and service catalog</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingItem(null);
-            setShowAddModal(true);
-          }}
-          className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Add Item & Service
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => {
+              setImportErrors([]);
+              setShowImportModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-full border border-violet-300 dark:border-violet-400/40 bg-card hover:bg-violet-50 dark:hover:bg-violet-500/10 text-violet-700 dark:text-violet-200 text-[14px] font-semibold transition-all"
+          >
+            <Upload className="w-4 h-4" />
+            Import Excel
+          </button>
+          <button
+            onClick={() => {
+              setEditingItem(null);
+              setShowAddModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-[14px] font-semibold shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Add Item & Service
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -594,6 +815,117 @@ export function ItemsList() {
           onSave={handleSave}
         />
       )}
+
+      {showImportModal && (
+        <ImportItemsModal
+          isImporting={isImporting}
+          errors={importErrors}
+          onImport={handleImport}
+          onClose={() => {
+            if (isImporting) return;
+            setShowImportModal(false);
+            setImportErrors([]);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ImportItemsModal({
+  isImporting,
+  errors,
+  onImport,
+  onClose,
+}: {
+  isImporting: boolean;
+  errors: string[];
+  onImport: (file: File) => void;
+  onClose: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center kaps-safe-overlay">
+      <div className="bg-card border border-violet-200 dark:border-violet-400/25 rounded-xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-violet-100 dark:border-violet-400/15">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Import Items &amp; Services</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Upload up to {MAX_IMPORT_ROWS.toLocaleString()} rows at a time.</p>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={isImporting}
+            className="p-2 hover:bg-muted rounded transition-colors disabled:opacity-50"
+            aria-label="Close import"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 kaps-modal-scroll">
+          <div className="rounded-xl border border-violet-200 dark:border-violet-400/25 bg-violet-50/60 dark:bg-violet-500/[0.06] p-4">
+            <div className="flex items-start gap-3">
+              <FileSpreadsheet className="w-8 h-8 text-violet-600 dark:text-violet-300 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground">Start with the Excel template</div>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  It contains the required columns, dropdowns, number formats, and instructions for products and services.
+                </p>
+                <a
+                  href={IMPORT_TEMPLATE_URL}
+                  download="items-services-import-template.xlsx"
+                  className="inline-flex items-center gap-2 mt-3 text-sm font-semibold text-violet-700 dark:text-violet-200 hover:text-violet-600"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Excel template
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onImport(file);
+              event.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            disabled={isImporting}
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full min-h-36 rounded-xl border-2 border-dashed border-violet-300 dark:border-violet-400/40 hover:border-violet-500 bg-background hover:bg-violet-50/50 dark:hover:bg-violet-500/[0.05] flex flex-col items-center justify-center gap-2 px-4 transition-colors disabled:opacity-60 disabled:cursor-wait"
+          >
+            <Upload className="w-7 h-7 text-violet-500" />
+            <span className="text-sm font-semibold text-foreground">
+              {isImporting ? 'Validating and importing…' : 'Choose completed Excel file'}
+            </span>
+            <span className="text-xs text-muted-foreground">Only .xlsx files are supported</span>
+          </button>
+
+          {errors.length > 0 && (
+            <div className="rounded-xl border border-red-200 dark:border-red-400/25 bg-red-50 dark:bg-red-500/[0.08] p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+                <AlertCircle className="w-4 h-4" />
+                Fix {errors.length === 1 ? 'this issue' : `${errors.length} issues`} and upload again
+              </div>
+              <ul className="mt-2 space-y-1.5 text-xs text-red-700/90 dark:text-red-200 max-h-48 overflow-y-auto kaps-modal-scroll">
+                {errors.slice(0, 100).map((error, index) => (
+                  <li key={`${error}-${index}`}>{error}</li>
+                ))}
+              </ul>
+              {errors.length > 100 && (
+                <p className="mt-2 text-xs text-red-700 dark:text-red-300">Showing the first 100 issues.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

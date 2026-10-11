@@ -194,7 +194,7 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
       )}
 
       {/* ---- Bank, remarks, terms ---- */}
-      {company.bankName && (
+      {(company.bankName || company.upiId || company.paymentQr) && (
         <>
           {rule}
           <div className="text-[8px]">
@@ -203,6 +203,13 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
             {company.bankAccountNumber && <div>A/c: {company.bankAccountNumber}</div>}
             {company.bankIfsc && <div>IFSC: {company.bankIfsc}</div>}
             {company.bankAccountType && <div>Type: {company.bankAccountType}</div>}
+            {company.upiId && <div>UPI: {company.upiId}</div>}
+            {company.paymentQr && (
+              <div className="mt-1 flex flex-col items-center">
+                <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-[28mm] w-[28mm] object-contain" />
+                <div className="text-[7px]">Scan to pay</div>
+              </div>
+            )}
           </div>
         </>
       )}
