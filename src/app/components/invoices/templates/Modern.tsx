@@ -346,7 +346,7 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
           </div>
           {company.paymentQr && (
             <div className="mt-2 inline-flex flex-col items-center">
-              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-16 w-16 object-contain" />
+              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-24 w-24 object-contain" />
               <div className="mt-0.5 text-[8px]" style={{ color: '#64748B' }}>Scan to pay</div>
             </div>
           )}

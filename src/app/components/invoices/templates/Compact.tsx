@@ -339,7 +339,7 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
           {company.upiId && <div>UPI: {company.upiId}</div>}
           {company.paymentQr && (
             <div className="mt-1 inline-flex flex-col items-center">
-              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-12 w-12 object-contain" />
+              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-20 w-20 object-contain" />
               <div className="text-[7px]">Scan to pay</div>
             </div>
           )}

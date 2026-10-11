@@ -206,7 +206,7 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
             {company.upiId && <div>UPI: {company.upiId}</div>}
             {company.paymentQr && (
               <div className="mt-1 flex flex-col items-center">
-                <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-[28mm] w-[28mm] object-contain" />
+                <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-[35mm] w-[35mm] object-contain" />
                 <div className="text-[7px]">Scan to pay</div>
               </div>
             )}
