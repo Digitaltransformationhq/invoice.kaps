@@ -369,7 +369,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
           </div>
           {company.paymentQr && (
             <div className="mt-2 inline-flex flex-col items-center">
-              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-28 w-28 object-contain" />
+              <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-40 w-40 object-contain" />
               <div className="mt-0.5 text-[9px]">Scan to pay</div>
             </div>
           )}

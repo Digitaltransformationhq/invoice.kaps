@@ -427,7 +427,7 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
                 </table>
                 {company.paymentQr && (
                   <div className="shrink-0 text-center">
-                    <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-20 w-20 object-contain" />
+                    <img src={company.paymentQr} alt={`${company.name} payment QR code`} className="h-28 w-28 object-contain" />
                     <div className="text-[7px]">Scan to pay</div>
                   </div>
                 )}
