@@ -17,9 +17,10 @@ import { useAuth } from '../contexts/AuthContext';
 export type InvoiceDefaults = {
   dueDays: number;
   terms: string;
+  defaultGstRate: number;
 };
 
-export const INVOICE_DEFAULTS_FALLBACK: InvoiceDefaults = { dueDays: 15, terms: '' };
+export const INVOICE_DEFAULTS_FALLBACK: InvoiceDefaults = { dueDays: 15, terms: '', defaultGstRate: 18 };
 
 function configuredDueDays(value: unknown): number {
   if (value === null || value === undefined || value === '') {
@@ -30,6 +31,17 @@ function configuredDueDays(value: unknown): number {
   return Number.isFinite(parsed) && parsed >= 0
     ? Math.floor(parsed)
     : INVOICE_DEFAULTS_FALLBACK.dueDays;
+}
+
+function configuredGstRate(value: unknown): number {
+  if (value === null || value === undefined || value === '') {
+    return INVOICE_DEFAULTS_FALLBACK.defaultGstRate;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
+    ? parsed
+    : INVOICE_DEFAULTS_FALLBACK.defaultGstRate;
 }
 
 export function useInvoiceDefaults() {
@@ -57,6 +69,8 @@ export function useInvoiceDefaults() {
               // explicitly saved in Invoice Settings, including same-day (0).
               dueDays: configuredDueDays(s.default_due_days),
               terms: (s.terms ?? '').toString(),
+              // Preserve zero-rated defaults as well as the standard GST slabs.
+              defaultGstRate: configuredGstRate(s.default_gst_rate),
             });
           }
           setIsLoaded(true);

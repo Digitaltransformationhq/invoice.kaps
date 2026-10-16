@@ -94,7 +94,7 @@ export function InvoiceCreate() {
   // Composition dealers issue a "Bill of Supply" with no tax.
   const { isComposition } = useTaxpayerType();
   // Company defaults that seed a new invoice: due days and Terms & Conditions.
-  const { dueDays, terms: defaultTerms, isLoaded: defaultsLoaded } = useInvoiceDefaults();
+  const { dueDays, terms: defaultTerms, defaultGstRate, isLoaded: defaultsLoaded } = useInvoiceDefaults();
   // The company's default layout, stamped onto the invoice as it is created so
   // a later change of default never restyles this one.
   const { templateId: companyTemplateId } = useInvoiceTemplate();
@@ -175,6 +175,7 @@ export function InvoiceCreate() {
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [hasLoadedEdit, setHasLoadedEdit] = useState(false);
   const [hasLoadedQuotation, setHasLoadedQuotation] = useState(false);
+  const defaultGstSeeded = useRef(false);
 
   const mapCustomerFromDatabase = (customer: any): Customer => ({
     id: customer.id,
@@ -261,6 +262,20 @@ export function InvoiceCreate() {
     loadCustomers();
     loadCatalogItems();
   }, [user?.company_id]);
+
+  // A new invoice starts with the GST rate configured in Settings. Wait for
+  // the real settings row before seeding so the temporary 18% fallback never
+  // wins. Existing invoices, imported quotations and catalog-item selections
+  // keep their own saved GST rates.
+  useEffect(() => {
+    if (!defaultsLoaded || editId || quotationId || defaultGstSeeded.current) return;
+    defaultGstSeeded.current = true;
+    setLineItems((current) => current.map((item, index) => (
+      index === 0 && !item.itemId && !item.item && item.rate === 0
+        ? { ...item, gst: isComposition ? 0 : defaultGstRate }
+        : item
+    )));
+  }, [defaultsLoaded, defaultGstRate, editId, quotationId, isComposition]);
 
   useEffect(() => {
     const loadSellerState = async () => {
@@ -436,7 +451,7 @@ export function InvoiceCreate() {
         unit: 'Nos',
         rate: 0,
         discount: 0,
-        gst: 18,
+        gst: isComposition ? 0 : defaultGstRate,
         amount: 0
       }
     ]);
@@ -999,7 +1014,7 @@ export function InvoiceCreate() {
         unit: 'JOB',
         rate: 0,
         discount: 0,
-        gst: 18,
+        gst: isComposition ? 0 : defaultGstRate,
         amount: 0,
       },
     ]);
@@ -1989,6 +2004,7 @@ export function InvoiceCreate() {
         <InvoiceItemModal
           isSaving={isSavingCatalogItem}
           initialName={newItemName}
+          defaultGstRate={isComposition ? 0 : defaultGstRate}
           onClose={() => {
             setShowAddItemModal(false);
             setLineItemIdForNewItem(null);
@@ -2213,11 +2229,13 @@ export function InvoiceCreate() {
 function InvoiceItemModal({
   isSaving,
   initialName = '',
+  defaultGstRate,
   onClose,
   onSave
 }: {
   isSaving: boolean;
   initialName?: string;
+  defaultGstRate: number;
   onClose: () => void;
   onSave: (item: CatalogItem) => void;
 }) {
@@ -2230,7 +2248,7 @@ function InvoiceItemModal({
     unit: 'Nos',
     sellingPrice: 0,
     purchasePrice: 0,
-    gst: 18,
+    gst: defaultGstRate,
     stock: 0
   });
 
