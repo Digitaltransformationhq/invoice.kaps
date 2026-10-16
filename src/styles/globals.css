@@ -251,3 +251,110 @@ html {
 .invoice-print-area {
   min-width: 0;
 }
+/* Estimates & Quotations follows the same violet card-and-field language used
+   by invoices, challans and the rest of the application. */
+.quotation-module section,
+.quotation-module aside {
+  border-color: rgb(221 214 254) !important;
+  box-shadow: 0 1px 2px rgb(139 92 246 / 0.06);
+}
+
+.quotation-module section > div.border-b {
+  border-color: rgb(237 233 254) !important;
+}
+
+.quotation-module input,
+.quotation-module select,
+.quotation-module textarea {
+  border-color: rgb(196 181 253) !important;
+  border-radius: 0.5rem;
+  background-color: var(--input-background);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.quotation-module select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 0.9rem 0.9rem;
+}
+
+.quotation-module input:focus,
+.quotation-module select:focus,
+.quotation-module textarea:focus {
+  border-color: rgb(139 92 246 / 0.7) !important;
+  box-shadow: 0 0 0 3px rgb(139 92 246 / 0.18) !important;
+}
+
+.quotation-module aside > div:last-child {
+  background-color: rgb(245 243 255) !important;
+  color: rgb(109 40 217) !important;
+}
+
+.quotation-module .detail-label {
+  margin-bottom: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.65625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* The quotation item editor must fit the available desktop content width.
+   Percentage columns plus zero minimum widths prevent native selects and
+   number inputs from forcing a horizontal scrollbar. */
+.quotation-items-table th,
+.quotation-items-table td {
+  min-width: 0;
+  padding-left: 0.45rem !important;
+  padding-right: 0.45rem !important;
+}
+
+.quotation-items-table input,
+.quotation-items-table select,
+.quotation-items-table textarea {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8125rem;
+}
+
+.quotation-items-table select {
+  padding-left: 0.6rem;
+  padding-right: 1.7rem !important;
+  background-position: right 0.5rem center;
+}
+
+.quotation-document .bg-slate-900 {
+  background-color: rgb(124 58 237) !important;
+}
+
+.quotation-document .border-slate-900 {
+  border-color: rgb(124 58 237) !important;
+}
+
+.quotation-document .text-emerald-700 {
+  color: rgb(109 40 217) !important;
+}
+
+.dark .quotation-module section,
+.dark .quotation-module aside {
+  border-color: rgb(167 139 250 / 0.3) !important;
+}
+
+.dark .quotation-module section > div.border-b {
+  border-color: rgb(167 139 250 / 0.12) !important;
+}
+
+.dark .quotation-module input,
+.dark .quotation-module select,
+.dark .quotation-module textarea {
+  border-color: rgb(167 139 250 / 0.3) !important;
+}
+
+.dark .quotation-module aside > div:last-child {
+  background-color: rgb(139 92 246 / 0.12) !important;
+  color: rgb(196 181 253) !important;
+}

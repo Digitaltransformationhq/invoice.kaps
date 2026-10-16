@@ -21,7 +21,8 @@ import {
   LogOut,
   User,
   HelpCircle,
-  UserCog
+  UserCog,
+  ClipboardList
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -127,6 +128,7 @@ export function DashboardLayout() {
     { name: 'Customers', href: '/app/customers', icon: Users, permission: 'customers' },
     { name: 'Items & Services', href: '/app/items', icon: Package, permission: 'items' },
     { name: isComposition ? 'Bills of Supply' : 'Tax Invoices', href: '/app/invoices', icon: FileText, permission: 'invoices' },
+    { name: 'Estimates & Quotations', href: '/app/quotations', icon: ClipboardList, permission: 'quotations' },
     { name: 'Delivery Challans', href: '/app/delivery-challans', icon: Truck, permission: 'delivery-challans', enabled: DELIVERY_CHALLANS_ENABLED },
     { name: 'Credit / Debit Notes', href: '/app/credit-notes', icon: FileEdit, permission: 'credit-notes' },
     { name: 'Receipts', href: '/app/receipts', icon: Receipt, permission: 'receipts' },

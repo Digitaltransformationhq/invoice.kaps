@@ -14,6 +14,7 @@ import { useInvoiceTemplate } from '../../../lib/useInvoiceTemplate';
 import { storedInvoiceTemplateId } from '../../../lib/invoiceTemplates';
 import { formatRoundOff, roundInvoiceTotal } from '../../../lib/invoiceDocument';
 import { AppSelect } from '../common/AppSelect';
+import { getQuotation } from '../../../lib/quotations';
 
 // Today as yyyy-mm-dd in the user's own timezone. Built from the local parts
 // rather than toISOString(), which is UTC and would still read as "yesterday"
@@ -168,10 +169,12 @@ export function InvoiceCreate() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('id');
+  const quotationId = searchParams.get('quotation');
   const isEditMode = Boolean(editId);
   const [editStatus, setEditStatus] = useState<string>('pending');
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [hasLoadedEdit, setHasLoadedEdit] = useState(false);
+  const [hasLoadedQuotation, setHasLoadedQuotation] = useState(false);
 
   const mapCustomerFromDatabase = (customer: any): Customer => ({
     id: customer.id,
@@ -374,6 +377,50 @@ export function InvoiceCreate() {
     loadInvoiceForEdit(editId as string);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, hasLoadedEdit, catalogLoaded, user?.company_id]);
+
+  // Start a tax invoice from a quotation without duplicating data entry. The
+  // invoice remains a brand-new document with its own number and dates.
+  useEffect(() => {
+    if (!quotationId || editId || hasLoadedQuotation || !catalogLoaded || !user?.company_id) return;
+    setHasLoadedQuotation(true);
+    getQuotation(user, quotationId)
+      .then((quotation) => {
+        setSelectedCustomer(quotation.customer_id || '');
+        setCustomerQuery(quotation.customer_name || '');
+        setRemarks(quotation.notes || '');
+        if (quotation.terms) {
+          setTerms(quotation.terms);
+          termsTouched.current = true;
+        }
+        const mapped: LineItem[] = (quotation.line_items || []).map((row, index) => {
+          const qty = Number(row.qty) || 0;
+          const rate = Number(row.rate) || 0;
+          const discount = Number(row.discount) || 0;
+          const gst = isComposition ? 0 : Number(row.gst) || 0;
+          const taxable = qty * rate * (1 - discount / 100);
+          return {
+            id: row.id || String(index + 1),
+            itemId: row.itemId || '',
+            type: catalogItems.find((item) => item.id === row.itemId)?.type,
+            item: row.item || '',
+            description: row.description || '',
+            hsn: row.hsn || '',
+            qty,
+            unit: row.unit || 'Nos',
+            rate,
+            discount,
+            gst,
+            amount: taxable + taxable * gst / 100,
+          };
+        });
+        if (mapped.length) {
+          setLineItems(mapped);
+          setExpandedItemId(mapped[0].id);
+        }
+        toast.success(`Quotation ${quotation.quotation_number} loaded into a new invoice`);
+      })
+      .catch(() => toast.error('Could not load the quotation into this invoice.'));
+  }, [quotationId, editId, hasLoadedQuotation, catalogLoaded, user?.company_id, isComposition]);
 
   const addLineItem = () => {
     const newId = Date.now().toString();

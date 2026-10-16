@@ -67,6 +67,7 @@ const OWNER_PERMISSIONS = [
   'customers',
   'items',
   'invoices',
+  'quotations',
   'delivery-challans',
   'credit-notes',
   'receipts',

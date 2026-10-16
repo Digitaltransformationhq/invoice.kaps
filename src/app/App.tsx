@@ -7,6 +7,8 @@ import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { InvoiceList } from './components/invoices/InvoiceList';
 import { InvoiceCreate } from './components/invoices/InvoiceCreate';
+import { QuotationList } from './components/quotations/QuotationList';
+import { QuotationCreate } from './components/quotations/QuotationCreate';
 import { CustomerList } from './components/customers/CustomerList';
 import { ItemsList } from './components/items/ItemsList';
 import { DeliveryChallansList } from './components/delivery-challans/DeliveryChallansList';
@@ -41,6 +43,8 @@ export default function App() {
               <Route path="dashboard" element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
               <Route path="invoices" element={<ProtectedRoute permission="invoices"><InvoiceList /></ProtectedRoute>} />
               <Route path="invoices/new" element={<ProtectedRoute permission="invoices"><InvoiceCreate /></ProtectedRoute>} />
+              <Route path="quotations" element={<ProtectedRoute permission="quotations"><QuotationList /></ProtectedRoute>} />
+              <Route path="quotations/new" element={<ProtectedRoute permission="quotations"><QuotationCreate /></ProtectedRoute>} />
               <Route path="customers" element={<ProtectedRoute permission="customers"><CustomerList /></ProtectedRoute>} />
               <Route path="items" element={<ProtectedRoute permission="items"><ItemsList /></ProtectedRoute>} />
               <Route path="delivery-challans" element={<ProtectedRoute permission="delivery-challans"><DeliveryChallansList /></ProtectedRoute>} />
