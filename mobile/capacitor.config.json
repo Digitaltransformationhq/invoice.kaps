@@ -1,0 +1,9 @@
+{
+  "appId": "in.kapsca.invoice",
+  "appName": "GSTInvoice Pro",
+  "webDir": "www",
+  "server": {
+    "url": "https://invoice.kapsca.in",
+    "cleartext": false
+  }
+}

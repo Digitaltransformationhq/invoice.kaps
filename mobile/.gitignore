@@ -1,0 +1,11 @@
+node_modules/
+.tools/
+*.jks
+*.keystore
+*.p12
+.gradle/
+android/.gradle/
+android/local.properties
+android/app/build/
+ios/App/Pods/
+ios/App/build/
