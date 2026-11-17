@@ -13,3 +13,9 @@ verify_jwt = false
 # so the gateway JWT check must be off. The function verifies the MPIN itself
 # through a service-role-only RPC that rate-limits wrong attempts.
 verify_jwt = false
+
+[functions.send-password-reset]
+# "Forgot password?" runs before there is a session, so the gateway JWT check
+# must be off. The function validates input, only redirects to our own origins,
+# and enforces a per-account cooldown through password_reset_gate().
+verify_jwt = false

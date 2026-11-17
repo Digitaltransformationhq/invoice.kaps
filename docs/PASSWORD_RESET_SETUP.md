@@ -1,5 +1,25 @@
 # Password Reset — Setup
 
+> **Update (2026-11-17): reset emails now go out through AWS SES.**
+> Supabase's built-in mailer only delivers to members of the Supabase organisation, so
+> real users' reset requests were accepted (a recovery token was created) but no email
+> was ever sent. `requestPasswordReset()` now calls the `send-password-reset` Edge
+> Function, which mints the token with the admin API and mails the same branded link
+> (`/reset-password?token_hash=…&type=recovery`) via SES. It only falls back to
+> Supabase's mailer if that function is not deployed or SES secrets are missing.
+>
+> One-time setup:
+> 1. Run `supabase/sql/supabase_password_reset_gate.sql` (account lookup + 60 s cooldown).
+> 2. `npx supabase functions deploy send-password-reset --no-verify-jwt`
+> 3. SES must be out of the **sandbox** (SES console → Account dashboard → Request
+>    production access), otherwise SES only delivers to verified addresses. Failures
+>    show in Edge Functions → send-password-reset → Logs.
+> 4. Optional secrets: `PASSWORD_RESET_FROM_EMAIL` (a verified SES sender, ideally
+>    `noreply@kapsca.in` with DKIM), `PASSWORD_RESET_FROM_NAME`, `APP_ALLOWED_ORIGINS`.
+>
+> Steps 1 and 2 of the dashboard section below (redirect URLs, 15-minute expiry) still
+> apply. The email template in step 3 is only used by the fallback path.
+
 The "Forgot password?" flow in the sign-in modal is **owner-only** (auditors authenticate
 through `verify_auditor_login` / pgcrypto and are not Supabase Auth users).
 

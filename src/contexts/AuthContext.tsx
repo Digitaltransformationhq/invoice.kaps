@@ -609,10 +609,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: 'Enter the email address you signed up with' };
     }
 
+    const redirectTo = `${window.location.origin}${PASSWORD_RESET_PATH}`;
+
+    // Primary path: the send-password-reset Edge Function mints the recovery
+    // token and mails it through AWS SES. Supabase's built-in mailer only
+    // delivers to members of the Supabase organisation (and ~2 mails/hour), so
+    // for real users it accepted the request and never sent anything.
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: `${window.location.origin}${PASSWORD_RESET_PATH}`,
-      });
+      const { data, error } = await supabase.functions.invoke<{
+        success: boolean;
+        error?: string;
+        rateLimited?: boolean;
+        notConfigured?: boolean;
+      }>('send-password-reset', { body: { email: trimmedEmail, redirectTo } });
+
+      if (!error && data) {
+        if (data.success) return { success: true };
+        if (!data.notConfigured) {
+          return { success: false, error: data.error || 'Could not send the reset link' };
+        }
+        // notConfigured → fall through to Supabase's own mailer below.
+      } else if (error && isNetworkFailure(error)) {
+        return { success: false, error: NETWORK_ERROR_MESSAGE };
+      }
+      // Any other invoke error (e.g. function not deployed yet) → fallback.
+    } catch (invokeError) {
+      console.warn('send-password-reset unavailable, falling back to Supabase mailer:', invokeError);
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, { redirectTo });
 
       if (error) {
         if (isNetworkFailure(error)) {
