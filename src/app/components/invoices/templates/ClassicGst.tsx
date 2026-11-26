@@ -3,6 +3,7 @@ import {
   formatRoundOff,
   formatInvoiceDate as formatDate,
   lineAmounts,
+  lineSerials,
   numberToWords,
 } from '../../../../lib/invoiceDocument';
 import type { InvoiceTemplateProps } from './types';
@@ -16,6 +17,9 @@ import { PAGE_CLASS } from './types';
  */
 export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
   const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
+  const serials = lineSerials(items);
+  // Columns in the line-item table, for a heading row spanning all of them.
+  const columnCount = 7 + (isComposition ? 0 : isInterState ? 2 : 3);
 
   return (
     <div
@@ -159,11 +163,21 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
         </thead>
         <tbody>
           {items.map((item, index) => {
+            if (item.isHeading) {
+              return (
+                <tr key={item.id} className="border-b border-foreground bg-muted/30">
+                  <td colSpan={columnCount} className="p-2">
+                    <div className="font-bold uppercase tracking-wide">{item.item}</div>
+                    {item.description && <div className="text-[10px] mt-0.5 whitespace-pre-line">{item.description}</div>}
+                  </td>
+                </tr>
+              );
+            }
             const amounts = lineAmounts(item, isInterState, isComposition);
 
             return (
               <tr key={item.id} className="border-b border-foreground">
-                <td className="p-2 border-r border-foreground">{index + 1}</td>
+                <td className="p-2 border-r border-foreground">{serials[index]}</td>
                 <td className="p-2 border-r border-foreground">
                   <div className="font-semibold">{item.item || '-'}</div>
                   {item.description && <div className="text-[10px] mt-1">{item.description}</div>}

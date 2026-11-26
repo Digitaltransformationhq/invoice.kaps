@@ -3,6 +3,7 @@ import {
   formatRoundOff,
   formatInvoiceDate as formatDate,
   lineAmounts,
+  lineSerials,
   numberToWords,
 } from '../../../../lib/invoiceDocument';
 import type { InvoiceTemplateProps } from './types';
@@ -24,6 +25,9 @@ const RULE = '#E4E1F2';
  */
 export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
   const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
+  const serials = lineSerials(items);
+  // Columns in the line-item table, for a heading row spanning all of them.
+  const columnCount = 7 + (isComposition ? 0 : isInterState ? 2 : 3);
 
   // Right-hand meta rows. Built as data so empty ones simply drop out rather
   // than printing "-" against a heading nobody needs.
@@ -148,10 +152,20 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
         </thead>
         <tbody>
           {items.map((item, index) => {
+            if (item.isHeading) {
+              return (
+                <tr key={item.id} style={{ borderTop: `1px solid ${RULE}`, background: SOFT }}>
+                  <td colSpan={columnCount} className="p-2">
+                    <div className="font-bold text-[11px] uppercase tracking-wide" style={{ color: ACCENT }}>{item.item}</div>
+                    {item.description && <div className="text-[9.5px] mt-0.5 whitespace-pre-line" style={{ color: '#475569' }}>{item.description}</div>}
+                  </td>
+                </tr>
+              );
+            }
             const amounts = lineAmounts(item, isInterState, isComposition);
             return (
               <tr key={item.id} style={{ borderTop: `1px solid ${RULE}` }}>
-                <td className="p-2" style={{ color: '#64748B' }}>{index + 1}</td>
+                <td className="p-2" style={{ color: '#64748B' }}>{serials[index]}</td>
                 <td className="p-2">
                   <div className="font-semibold">{item.item || '-'}</div>
                   {item.description && <div className="text-[9px] mt-0.5" style={{ color: '#64748B' }}>{item.description}</div>}

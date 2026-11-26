@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeft, ChevronDown, Eye, Plus, Save, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Eye, Heading, Plus, Save, Send, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { selectForUser } from '../../../lib/auditorData';
-import { getQuotation, listQuotations, nextQuotationNumber, quotationAmounts, saveQuotation, type QuotationLineItem, type QuotationRecord } from '../../../lib/quotations';
+import { getQuotation, isHeadingLine, listQuotations, nextQuotationNumber, quotationAmounts, saveQuotation, type QuotationLineItem, type QuotationRecord } from '../../../lib/quotations';
 import { QuotationPreview } from './QuotationPreview';
 import { INVOICE_TEMPLATES } from '../../../lib/invoiceTemplates';
 import { useInvoiceTemplate } from '../../../lib/useInvoiceTemplate';
@@ -20,6 +20,8 @@ const addDays = (value: string, days: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 const blankItem = (): QuotationLineItem => ({ id: crypto.randomUUID(), itemId: '', item: '', description: '', hsn: '', qty: 1, unit: 'Nos', rate: 0, discount: 0, gst: 18 });
+// A section heading: title in `item`, details in `description`, no amounts.
+const blankHeading = (): QuotationLineItem => ({ id: crypto.randomUUID(), kind: 'heading', itemId: '', item: '', description: '', hsn: '', qty: 0, unit: '', rate: 0, discount: 0, gst: 0 });
 const field = 'w-full h-11 rounded-lg border border-violet-300 dark:border-violet-400/30 bg-input-background px-3.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500/60 transition';
 const money = (value: number) => `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -51,6 +53,8 @@ export function QuotationCreate() {
   const [expandedItemId, setExpandedItemId] = useState(initialItem.id);
   const selectedCustomer = customers.find(customer => customer.id === customerId);
   const totals = useMemo(() => quotationAmounts(items), [items]);
+  // Item numbers skip headings, so the items under each heading keep counting 1, 2, 3...
+  const serials = useMemo(() => { let n = 0; return items.map(item => isHeadingLine(item) ? 0 : ++n); }, [items]);
 
   useEffect(() => {
     if (!user?.company_id) return;
@@ -86,13 +90,21 @@ export function QuotationCreate() {
     setItems(current => [...current, item]);
     setExpandedItemId(item.id);
   };
+  const addHeading = () => {
+    const heading = blankHeading();
+    setItems(current => [...current, heading]);
+    setExpandedItemId(heading.id);
+  };
+  const removeLine = (id: string) => setItems(current => current.filter(entry => entry.id !== id));
   const customerDetails = selectedCustomer ? { name: selectedCustomer.name, gstin: selectedCustomer.gstin, email: selectedCustomer.email, phone: selectedCustomer.phone, address: selectedCustomer.address, city: selectedCustomer.city, state: selectedCustomer.state } : {};
 
   const submit = async (nextStatus: QuotationRecord['status']) => {
     if (!user?.company_id) return toast.error('Company profile is not ready');
     if (!number.trim()) return toast.error('Enter a quotation number');
     if (!selectedCustomer) return toast.error('Select a customer');
-    if (items.some(item => !item.item.trim() || Number(item.qty) <= 0)) return toast.error('Complete every line item');
+    if (!items.some(item => !isHeadingLine(item))) return toast.error('Add at least one item');
+    if (items.some(item => isHeadingLine(item) && !item.item.trim())) return toast.error('Give every heading a title');
+    if (items.some(item => !isHeadingLine(item) && (!item.item.trim() || Number(item.qty) <= 0))) return toast.error('Complete every line item');
     setSaving(true);
     try {
       await saveQuotation(user, {
@@ -144,9 +156,9 @@ export function QuotationCreate() {
 
       <section className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(139,92,246,0.06)]">
         <div className="px-5 md:px-6 py-5 border-b border-violet-100 dark:border-violet-400/15"><SectionTitle number="3" title="Items & Services" compact /></div>
-        <div className="hidden lg:block overflow-hidden"><table className="quotation-items-table w-full table-fixed"><colgroup><col className="w-[4%]" /><col className="w-[28%]" /><col className="w-[10%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[13%]" /><col className="w-[4%]" /></colgroup><thead className="bg-violet-100 dark:bg-violet-500/15"><tr><th className="py-3 text-center text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">#</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Item & Description</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">HSN/SAC</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Qty</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Unit</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Rate</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Disc. %</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">GST %</th><th className="py-3 text-right text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Line Total</th><th></th></tr></thead><tbody>{items.map((item, index) => <DesktopItemRow key={item.id} item={item} index={index} itemsCount={items.length} catalog={catalog} updateItem={updateItem} chooseCatalogItem={chooseCatalogItem} remove={() => setItems(current => current.filter(entry => entry.id !== item.id))} />)}</tbody></table></div>
-        <div className="lg:hidden divide-y divide-violet-100 dark:divide-violet-400/10">{items.map((item, index) => <MobileItemCard key={item.id} item={item} index={index} expanded={expandedItemId === item.id} itemsCount={items.length} catalog={catalog} toggle={() => setExpandedItemId(expandedItemId === item.id ? '' : item.id)} updateItem={updateItem} chooseCatalogItem={chooseCatalogItem} remove={() => setItems(current => current.filter(entry => entry.id !== item.id))} />)}</div>
-        <div className="px-4 md:px-6 py-4 border-t border-violet-100 dark:border-violet-400/15"><button type="button" onClick={addLine} className="w-full inline-flex items-center justify-center gap-1.5 h-11 px-4 text-[13px] font-medium border border-dashed border-violet-300 dark:border-violet-400/30 bg-card text-violet-700 dark:text-violet-300 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"><Plus className="w-4 h-4" /> Add Another Item</button></div>
+        <div className="hidden lg:block overflow-hidden"><table className="quotation-items-table w-full table-fixed"><colgroup><col className="w-[4%]" /><col className="w-[28%]" /><col className="w-[10%]" /><col className="w-[7%]" /><col className="w-[8%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[13%]" /><col className="w-[4%]" /></colgroup><thead className="bg-violet-100 dark:bg-violet-500/15"><tr><th className="py-3 text-center text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">#</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Item & Description</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">HSN/SAC</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Qty</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Unit</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Rate</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Disc. %</th><th className="py-3 text-left text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">GST %</th><th className="py-3 text-right text-[10px] font-semibold tracking-wider uppercase text-violet-600 dark:text-violet-300">Line Total</th><th></th></tr></thead><tbody>{items.map((item, index) => isHeadingLine(item) ? <DesktopHeadingRow key={item.id} item={item} updateItem={updateItem} remove={() => removeLine(item.id)} /> : <DesktopItemRow key={item.id} item={item} index={serials[index] - 1} itemsCount={items.length} catalog={catalog} updateItem={updateItem} chooseCatalogItem={chooseCatalogItem} remove={() => removeLine(item.id)} />)}</tbody></table></div>
+        <div className="lg:hidden divide-y divide-violet-100 dark:divide-violet-400/10">{items.map((item, index) => isHeadingLine(item) ? <MobileHeadingCard key={item.id} item={item} updateItem={updateItem} remove={() => removeLine(item.id)} /> : <MobileItemCard key={item.id} item={item} index={serials[index] - 1} expanded={expandedItemId === item.id} itemsCount={items.length} catalog={catalog} toggle={() => setExpandedItemId(expandedItemId === item.id ? '' : item.id)} updateItem={updateItem} chooseCatalogItem={chooseCatalogItem} remove={() => removeLine(item.id)} />)}</div>
+        <div className="px-4 md:px-6 py-4 border-t border-violet-100 dark:border-violet-400/15 flex flex-col sm:flex-row gap-3"><button type="button" onClick={addHeading} className="sm:w-56 inline-flex items-center justify-center gap-1.5 h-11 px-4 text-[13px] font-medium border border-dashed border-violet-300 dark:border-violet-400/30 bg-card text-violet-700 dark:text-violet-300 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"><Heading className="w-4 h-4" /> Add Heading</button><button type="button" onClick={addLine} className="flex-1 inline-flex items-center justify-center gap-1.5 h-11 px-4 text-[13px] font-medium border border-dashed border-violet-300 dark:border-violet-400/30 bg-card text-violet-700 dark:text-violet-300 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"><Plus className="w-4 h-4" /> Add Another Item</button></div>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -197,4 +209,17 @@ function DesktopItemRow({ item, index, itemsCount, catalog, updateItem, chooseCa
 function MobileItemCard({ item, index, expanded, itemsCount, catalog, toggle, updateItem, chooseCatalogItem, remove }: ItemEditorProps & { expanded: boolean; toggle: () => void }) {
   const total = item.qty * item.rate * (1 - item.discount / 100) * (1 + item.gst / 100);
   return <div className="p-4"><div onClick={toggle} className="flex items-center justify-between cursor-pointer"><div><p className="text-sm font-semibold text-muted-foreground">Item #{index + 1}{item.item ? ` · ${item.item}` : ''}</p><p className="text-sm font-semibold text-violet-600 dark:text-violet-300 mt-1">{money(total)}</p></div><div className="flex items-center gap-1">{itemsCount > 1 && <button onClick={e => { e.stopPropagation(); remove(); }} className="p-2 text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 className="w-4 h-4" /></button>}<ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} /></div></div>{expanded && <div className="space-y-4 mt-4 pt-4 border-t border-violet-100 dark:border-violet-400/10"><FormField label="Catalog item"><CatalogSelect item={item} catalog={catalog} chooseCatalogItem={chooseCatalogItem} /></FormField><FormField label="Item name"><input className={field} value={item.item} onChange={e => updateItem(item.id, { item: e.target.value })} /></FormField><FormField label="Description"><textarea rows={2} className={`${field} h-auto py-3`} value={item.description} onChange={e => updateItem(item.id, { description: e.target.value })} /></FormField><FormField label="HSN/SAC"><input className={field} value={item.hsn} onChange={e => updateItem(item.id, { hsn: e.target.value })} /></FormField><div className="grid grid-cols-2 gap-3"><FormField label="Quantity"><input type="number" className={field} value={item.qty} onChange={e => updateItem(item.id, { qty: Number(e.target.value) })} /></FormField><FormField label="Unit"><UnitSelect item={item} updateItem={updateItem} /></FormField><FormField label="Rate"><input type="number" className={field} value={item.rate} onChange={e => updateItem(item.id, { rate: Number(e.target.value) })} /></FormField><FormField label="Discount %"><input type="number" className={field} value={item.discount} onChange={e => updateItem(item.id, { discount: Number(e.target.value) })} /></FormField></div><FormField label="GST %"><GstSelect item={item} updateItem={updateItem} /></FormField></div>}</div>;
+}
+
+interface HeadingEditorProps { item: QuotationLineItem; updateItem: (id: string, patch: Partial<QuotationLineItem>) => void; remove: () => void }
+/** A section heading: a title and free-form details, spanning the whole table. Not numbered. */
+function DesktopHeadingRow({ item, updateItem, remove }: HeadingEditorProps) {
+  return <tr className="border-t border-violet-100 dark:border-violet-400/10 align-top bg-violet-50/70 dark:bg-violet-500/[0.06]">
+    <td className="px-3 py-4 text-center"><span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-violet-500 text-white" title="Heading"><Heading className="w-3.5 h-3.5" /></span></td>
+    <td colSpan={8} className="px-3 py-4"><div className="space-y-2"><input className={`${field} h-10 font-semibold`} value={item.item} onChange={e => updateItem(item.id, { item: e.target.value })} placeholder="Heading, e.g. Civil Work" /><textarea rows={2} className={`${field} min-h-[64px] h-auto py-2.5 resize-y leading-5`} value={item.description} onChange={e => updateItem(item.id, { description: e.target.value })} placeholder="Details for this section (optional)" /></div></td>
+    <td className="px-2 py-4"><button onClick={remove} className="p-2 text-destructive hover:bg-destructive/10 rounded-lg opacity-60 hover:opacity-100 transition-opacity" title="Remove heading"><Trash2 className="w-4 h-4" /></button></td>
+  </tr>;
+}
+function MobileHeadingCard({ item, updateItem, remove }: HeadingEditorProps) {
+  return <div className="p-4 bg-violet-50/70 dark:bg-violet-500/[0.06]"><div className="flex items-center justify-between mb-3"><p className="text-sm font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-1.5"><Heading className="w-4 h-4" /> Heading</p><button onClick={remove} className="p-2 text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 className="w-4 h-4" /></button></div><div className="space-y-3"><FormField label="Title"><input className={field} value={item.item} onChange={e => updateItem(item.id, { item: e.target.value })} placeholder="Heading, e.g. Civil Work" /></FormField><FormField label="Details"><textarea rows={3} className={`${field} h-auto py-3`} value={item.description} onChange={e => updateItem(item.id, { description: e.target.value })} placeholder="Details for this section (optional)" /></FormField></div></div>;
 }

@@ -2,6 +2,7 @@ import {
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   lineAmounts,
+  lineSerials,
   numberToWords,
 } from '../../../../lib/invoiceDocument';
 import type { InvoiceTemplateProps } from './types';
@@ -27,6 +28,8 @@ import { PAGE_CLASS_ROLL } from './types';
  */
 export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
   const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
+  const serials = lineSerials(items);
+  const itemCount = items.filter((item) => !item.isHeading).length;
 
   const rule = <div className="border-t border-dashed border-black my-1" />;
   const hasBuyer = buyer.name !== 'Customer not selected';
@@ -99,11 +102,19 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
       <div className="border-t border-black mt-0.5 mb-1" />
 
       {items.map((item, index) => {
+        if (item.isHeading) {
+          return (
+            <div key={item.id} className="mt-1.5 mb-1">
+              <div className="font-bold uppercase underline">{item.item}</div>
+              {item.description && <div className="text-[8px] whitespace-pre-line">{item.description}</div>}
+            </div>
+          );
+        }
         const amounts = lineAmounts(item, isInterState, isComposition);
         return (
           <div key={item.id} className="mb-1">
             <div className="font-bold">
-              {index + 1}. {item.item || '-'}
+              {serials[index]}. {item.item || '-'}
             </div>
             {item.description && <div className="pl-3 text-[8px]">{item.description}</div>}
             <div className="flex justify-between pl-3">
@@ -133,7 +144,7 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
       <div className="border-t border-black my-1" />
 
       {/* ---- Money ---- */}
-      <Row label={`Sub-total (${items.length} item${items.length === 1 ? '' : 's'})`} value={formatCurrency(totals.subtotal)} />
+      <Row label={`Sub-total (${itemCount} item${itemCount === 1 ? '' : 's'})`} value={formatCurrency(totals.subtotal)} />
       {!isComposition && (
         isInterState ? (
           <Row label="IGST" value={formatCurrency(totals.igst)} />

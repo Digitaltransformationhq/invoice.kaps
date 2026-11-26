@@ -77,6 +77,21 @@ export interface InvoiceLineItem {
   discount: number;
   gst: number;
   amount: number;
+  /**
+   * A section heading (quotations): `item` is the title, `description` the
+   * details. Carries no money, takes no serial number, and every format draws
+   * it as one full-width row.
+   */
+  isHeading?: boolean;
+}
+
+/**
+ * Serial numbers for the printed "#" column: headings are skipped, so the
+ * items under them keep counting 1, 2, 3… Null for a heading.
+ */
+export function lineSerials(items: InvoiceLineItem[]): Array<number | null> {
+  let n = 0;
+  return items.map((item) => (item.isHeading ? null : ++n));
 }
 
 export interface InvoiceCustomer {
@@ -378,6 +393,7 @@ export function buildInvoiceDocument(input: InvoiceDocumentInput): InvoiceDocume
   // HSN/SAC-wise bifurcation, grouped by HSN code + GST rate.
   const map = new Map<string, InvoiceTaxSummaryRow>();
   for (const item of lineItems) {
+    if (item.isHeading) continue;
     const { taxable, tax } = lineAmounts(item, isInterState, isComposition);
     const key = `${item.hsn || '-'}|${item.gst}`;
     const existing = map.get(key);

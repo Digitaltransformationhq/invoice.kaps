@@ -3,6 +3,7 @@ import {
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   lineAmounts,
+  lineSerials,
 } from '../../../../lib/invoiceDocument';
 import type { InvoiceDocument } from '../../../../lib/invoiceDocument';
 import type { InvoiceTemplateProps } from './types';
@@ -31,6 +32,7 @@ import { PAGE_CLASS } from './types';
  */
 export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
   const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
+  const serials = lineSerials(items);
 
   const box = 'border-black';
   const label = 'text-[8.5px] leading-tight';
@@ -187,10 +189,26 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
           </thead>
           <tbody>
             {items.map((item, index) => {
+              if (item.isHeading) {
+                return (
+                  <tr key={item.id}>
+                    <td className={`border-r ${box} px-1`}></td>
+                    <td className={`border-r ${box} px-1 pt-1.5 align-top`}>
+                      <div className="font-bold text-[10px] underline">{item.item}</div>
+                      {item.description && <div className="italic text-[9px] whitespace-pre-line">{item.description}</div>}
+                    </td>
+                    <td className={`border-r ${box} px-1`}></td>
+                    <td className={`border-r ${box} px-1`}></td>
+                    <td className={`border-r ${box} px-1`}></td>
+                    <td className={`border-r ${box} px-1`}></td>
+                    <td className="px-1"></td>
+                  </tr>
+                );
+              }
               const amounts = lineAmounts(item, isInterState, isComposition);
               return (
                 <tr key={item.id}>
-                  <td className={`border-r ${box} px-1 pt-1 align-top`}>{index + 1}</td>
+                  <td className={`border-r ${box} px-1 pt-1 align-top`}>{serials[index]}</td>
                   <td className={`border-r ${box} px-1 pt-1 align-top`}>
                     <div className="font-bold text-[10px]">{item.item || '-'}</div>
                     {item.description && <div className="italic text-[9px]">{item.description}</div>}

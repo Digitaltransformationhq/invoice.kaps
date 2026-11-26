@@ -10,7 +10,7 @@ import type { InvoiceCompanyDetails, InvoiceLineItem } from '../../../lib/invoic
 import { INVOICE_TEMPLATES, getInvoiceTemplate } from '../../../lib/invoiceTemplates';
 import { useInvoiceTemplate } from '../../../lib/useInvoiceTemplate';
 import { usePreviewFit } from '../../../lib/usePreviewFit';
-import type { QuotationLineItem } from '../../../lib/quotations';
+import { isHeadingLine, type QuotationLineItem } from '../../../lib/quotations';
 
 interface CustomerDetails { name?: string; gstin?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; contactName?: string }
 
@@ -101,6 +101,12 @@ export function QuotationPreview({ open, onClose, number, date, validUntil, cust
   );
 
   const lineItems: InvoiceLineItem[] = items.map((item) => {
+    if (isHeadingLine(item)) {
+      return {
+        id: item.id, isHeading: true, item: item.item, description: item.description || '',
+        hsn: '', qty: 0, unit: '', rate: 0, discount: 0, gst: 0, amount: 0,
+      };
+    }
     const base = Number(item.qty || 0) * Number(item.rate || 0);
     return {
       id: item.id,

@@ -407,7 +407,8 @@ export function InvoiceCreate() {
           setTerms(quotation.terms);
           termsTouched.current = true;
         }
-        const mapped: LineItem[] = (quotation.line_items || []).map((row, index) => {
+        // Headings only structure the quotation; an invoice has no place for them.
+        const mapped: LineItem[] = (quotation.line_items || []).filter((row) => row.kind !== 'heading').map((row, index) => {
           const qty = Number(row.qty) || 0;
           const rate = Number(row.rate) || 0;
           const discount = Number(row.discount) || 0;

@@ -3,6 +3,7 @@ import {
   formatRoundOff,
   formatInvoiceDate as formatDate,
   lineAmounts,
+  lineSerials,
   numberToWords,
 } from '../../../../lib/invoiceDocument';
 import type { InvoiceTemplateProps } from './types';
@@ -20,6 +21,9 @@ import { PAGE_CLASS } from './types';
  */
 export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
   const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
+  const serials = lineSerials(items);
+  // Columns in the line-item table, for a heading row spanning all of them.
+  const columnCount = 7 + (isComposition ? 0 : isInterState ? 2 : 3);
 
   const cell = 'px-1.5 py-1 border-r border-foreground';
   const lastCell = 'px-1.5 py-1';
@@ -155,10 +159,20 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
         </thead>
         <tbody>
           {items.map((item, index) => {
+            if (item.isHeading) {
+              return (
+                <tr key={item.id} className="border-b border-foreground bg-muted/30">
+                  <td colSpan={columnCount} className={lastCell}>
+                    <span className="font-bold uppercase">{item.item}</span>
+                    {item.description && <span> — {item.description}</span>}
+                  </td>
+                </tr>
+              );
+            }
             const amounts = lineAmounts(item, isInterState, isComposition);
             return (
               <tr key={item.id} className="border-b border-foreground">
-                <td className={cell}>{index + 1}</td>
+                <td className={cell}>{serials[index]}</td>
                 <td className={cell}>
                   <span className="font-semibold">{item.item || '-'}</span>
                   {item.description && <span> — {item.description}</span>}

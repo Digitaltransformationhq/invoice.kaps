@@ -2,6 +2,12 @@ import { supabase } from './supabase';
 
 export interface QuotationLineItem {
   id: string;
+  /**
+   * 'heading' rows group the items below them: `item` is the heading title and
+   * `description` its details. They carry no amounts and are not numbered.
+   * Absent on rows saved before headings existed, which are all items.
+   */
+  kind?: 'item' | 'heading';
   itemId?: string;
   item: string;
   description: string;
@@ -124,12 +130,15 @@ export async function deleteQuotation(user: AppUser, id: string) {
 
 export function quotationAmounts(items: QuotationLineItem[]) {
   return items.reduce((sum, item) => {
+    if (isHeadingLine(item)) return sum;
     const base = Number(item.qty || 0) * Number(item.rate || 0);
     const taxable = base - (base * Number(item.discount || 0)) / 100;
     const tax = taxable * Number(item.gst || 0) / 100;
     return { subtotal: sum.subtotal + taxable, tax: sum.tax + tax, total: sum.total + taxable + tax };
   }, { subtotal: 0, tax: 0, total: 0 });
 }
+
+export const isHeadingLine = (item: Pick<QuotationLineItem, 'kind'>) => item.kind === 'heading';
 
 export function nextQuotationNumber(rows: Pick<QuotationRecord, 'quotation_number'>[]) {
   const highest = rows.reduce((max, row) => {
