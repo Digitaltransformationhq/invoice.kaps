@@ -23,6 +23,10 @@ create table if not exists public.quotations (
   unique(company_id, quotation_number)
 );
 
+-- The format (invoice layout) this quotation prints in. NULL = the company's
+-- default invoice format; see src/lib/invoiceTemplates.ts for the ids.
+alter table public.quotations add column if not exists quotation_template text;
+
 create index if not exists quotations_company_date_idx on public.quotations(company_id, quotation_date desc);
 create index if not exists quotations_customer_idx on public.quotations(customer_id);
 
@@ -102,14 +106,15 @@ begin
     insert into public.quotations (
       company_id, quotation_number, quotation_date, valid_until, customer_id,
       customer_name, customer_details, line_items, subtotal, total_tax,
-      total_amount, status, notes, terms, created_by
+      total_amount, status, notes, terms, quotation_template, created_by
     ) values (
       v_company_id, v_record->>'quotation_number', (v_record->>'quotation_date')::date,
       nullif(v_record->>'valid_until','')::date, nullif(v_record->>'customer_id','')::uuid,
       coalesce(v_record->>'customer_name',''), coalesce(v_record->'customer_details','{}'::jsonb),
       coalesce(v_record->'line_items','[]'::jsonb), coalesce((v_record->>'subtotal')::numeric,0),
       coalesce((v_record->>'total_tax')::numeric,0), coalesce((v_record->>'total_amount')::numeric,0),
-      coalesce(v_record->>'status','draft'), nullif(v_record->>'notes',''), nullif(v_record->>'terms',''), p_auditor_id
+      coalesce(v_record->>'status','draft'), nullif(v_record->>'notes',''), nullif(v_record->>'terms',''),
+      nullif(v_record->>'quotation_template',''), p_auditor_id
     ) returning * into v_row;
     return jsonb_build_object('success', true, 'data', to_jsonb(v_row));
 
@@ -120,7 +125,8 @@ begin
       customer_name = coalesce(v_record->>'customer_name',''), customer_details = coalesce(v_record->'customer_details','{}'::jsonb),
       line_items = coalesce(v_record->'line_items','[]'::jsonb), subtotal = coalesce((v_record->>'subtotal')::numeric,0),
       total_tax = coalesce((v_record->>'total_tax')::numeric,0), total_amount = coalesce((v_record->>'total_amount')::numeric,0),
-      status = coalesce(v_record->>'status','draft'), notes = nullif(v_record->>'notes',''), terms = nullif(v_record->>'terms','')
+      status = coalesce(v_record->>'status','draft'), notes = nullif(v_record->>'notes',''), terms = nullif(v_record->>'terms',''),
+      quotation_template = nullif(v_record->>'quotation_template','')
     where id = (p_payload->>'id')::uuid and company_id = v_company_id returning * into v_row;
     if v_row.id is null then return jsonb_build_object('success', false, 'error', 'Quotation not found'); end if;
     return jsonb_build_object('success', true, 'data', to_jsonb(v_row));

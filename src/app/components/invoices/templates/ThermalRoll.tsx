@@ -1,5 +1,4 @@
 import {
-  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   lineAmounts,
@@ -27,7 +26,7 @@ import { PAGE_CLASS_ROLL } from './types';
  * invoice — being small does not exempt it.
  */
 export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
-  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState } = doc;
+  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
 
   const rule = <div className="border-t border-dashed border-black my-1" />;
   const hasBuyer = buyer.name !== 'Customer not selected';
@@ -64,16 +63,16 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
       {rule}
 
       <div className="text-center text-[11px] font-bold tracking-wide">
-        {isComposition ? 'BILL OF SUPPLY' : 'TAX INVOICE'}
+        {doc.title}
       </div>
-      <div className="text-center text-[8px]">{copyLabel}</div>
+      {copyLabel && <div className="text-center text-[8px]">{copyLabel}</div>}
 
       {rule}
 
       {/* ---- Bill reference ---- */}
-      <Row label="Bill No" value={meta.number} />
+      <Row label={labels.numberShort} value={meta.number} />
       <Row label="Date" value={formatReceiptDate(meta.date)} />
-      {meta.dueDate && <Row label="Due" value={formatReceiptDate(meta.dueDate)} />}
+      {meta.dueDate && <Row label={labels.dueDateShort} value={formatReceiptDate(meta.dueDate)} />}
       <Row label="Supply" value={meta.placeOfSupply} />
       {meta.reverseCharge && <Row label="Rev. Charge" value="YES" />}
 
@@ -243,7 +242,7 @@ export function ThermalRoll({ doc, copyLabel, className = '' }: InvoiceTemplateP
         <div className="text-[10px] font-bold mt-2">THANK YOU — VISIT AGAIN!</div>
         {!company.stamp && !company.esign && (
           <div className="text-[7.5px] mt-1 leading-tight">
-            {COMPUTER_GENERATED_INVOICE_NOTICE}
+            {labels.computerGeneratedNotice}
           </div>
         )}
       </div>

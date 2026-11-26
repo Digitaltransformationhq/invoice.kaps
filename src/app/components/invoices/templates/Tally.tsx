@@ -1,5 +1,4 @@
 import {
-  COMPUTER_GENERATED_INVOICE_NOTICE,
   amountInWordsInr,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
@@ -31,7 +30,7 @@ import { PAGE_CLASS } from './types';
  * the empty grid IS the format, so the cells are always drawn.
  */
 export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
-  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState } = doc;
+  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
 
   const box = 'border-black';
   const label = 'text-[8.5px] leading-tight';
@@ -48,8 +47,8 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
     <div className={`${PAGE_CLASS} text-black ${className}`} style={{ fontFamily: 'Arial, sans-serif' }}>
       {/* Title sits outside the box, as Tally prints it */}
       <div className="pt-3 pb-1.5 text-center">
-        <h1 className="text-[13px] font-bold">{isComposition ? 'Bill of Supply' : 'Tax Invoice'}</h1>
-        <div className="text-[8px] mt-0.5">({copyLabel})</div>
+        <h1 className="text-[13px] font-bold">{doc.titleCase}</h1>
+        {copyLabel && <div className="text-[8px] mt-0.5">({copyLabel})</div>}
       </div>
 
       <div className={`mx-3 border ${box}`}>
@@ -125,7 +124,7 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
           <div className="w-[45%] flex flex-col">
             <div className={`flex border-b ${box}`}>
               <div className={`w-1/2 p-1.5 border-r ${box}`}>
-                <div className={label}>Invoice No.</div>
+                <div className={label}>{labels.number}</div>
                 <div className={value}>{meta.number}</div>
               </div>
               <div className="w-1/2 flex flex-col">
@@ -135,7 +134,7 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
                 </div>
                 <div className="p-1.5 flex-1 min-h-[9mm]">
                   <div className={label}>Mode/Terms of Payment</div>
-                  <div className={value}>{meta.dueDate ? `Due ${formatTallyDate(meta.dueDate)}` : ''}</div>
+                  <div className={value}>{meta.dueDate ? `${labels.dueDateShort} ${formatTallyDate(meta.dueDate)}` : ''}</div>
                 </div>
               </div>
             </div>
@@ -378,7 +377,7 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
           <div className="w-1/2 p-2 text-[9.5px]">
             {meta.remarks && (
               <>
-                <div className="italic">Remarks:</div>
+                <div className="italic">{labels.remarks}:</div>
                 <div>{meta.remarks}</div>
               </>
             )}
@@ -454,7 +453,7 @@ export function Tally({ doc, copyLabel, className = '' }: InvoiceTemplateProps) 
               <div className="text-right">Authorised Signatory</div>
               {!company.stamp && !company.esign && (
                 <div className="mt-1 text-center text-[8px] leading-tight">
-                  {COMPUTER_GENERATED_INVOICE_NOTICE}
+                  {labels.computerGeneratedNotice}
                 </div>
               )}
             </div>

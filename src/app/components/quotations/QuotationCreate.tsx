@@ -7,6 +7,8 @@ import { supabase } from '../../../lib/supabase';
 import { selectForUser } from '../../../lib/auditorData';
 import { getQuotation, listQuotations, nextQuotationNumber, quotationAmounts, saveQuotation, type QuotationLineItem, type QuotationRecord } from '../../../lib/quotations';
 import { QuotationPreview } from './QuotationPreview';
+import { INVOICE_TEMPLATES } from '../../../lib/invoiceTemplates';
+import { useInvoiceTemplate } from '../../../lib/useInvoiceTemplate';
 
 const localDate = () => {
   const d = new Date();
@@ -41,6 +43,10 @@ export function QuotationCreate() {
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState('Prices are valid until the date shown above. Work will commence after written approval. Payment terms: 50% advance, balance on completion.');
   const [saving, setSaving] = useState(false);
+  // '' until chosen: new quotations start in the company's default format.
+  const [templateId, setTemplateId] = useState('');
+  const { templateId: defaultTemplateId } = useInvoiceTemplate();
+  const effectiveTemplateId = templateId || defaultTemplateId;
   const [preview, setPreview] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState(initialItem.id);
   const selectedCustomer = customers.find(customer => customer.id === customerId);
@@ -63,7 +69,7 @@ export function QuotationCreate() {
       getQuotation(user, editId).then(q => {
         setCustomerId(q.customer_id || ''); setNumber(q.quotation_number); setDate(q.quotation_date); setValidUntil(q.valid_until || '');
         setItems(q.line_items?.length ? q.line_items : [blankItem()]); setExpandedItemId(q.line_items?.[0]?.id || '');
-        setStatus(q.status); setNotes(q.notes || ''); setTerms(q.terms || '');
+        setStatus(q.status); setNotes(q.notes || ''); setTerms(q.terms || ''); setTemplateId(q.quotation_template || '');
       }).catch(() => { toast.error('Could not load quotation'); navigate('/app/quotations'); });
     } else {
       listQuotations(user).then(rows => setNumber(nextQuotationNumber(rows))).catch(() => setNumber('QT-0001'));
@@ -94,6 +100,7 @@ export function QuotationCreate() {
         customer_id: customerId, customer_name: selectedCustomer.name, customer_details: customerDetails, line_items: items,
         subtotal: totals.subtotal, total_tax: totals.tax, total_amount: totals.total, status: nextStatus,
         notes: notes.trim() || null, terms: terms.trim() || null,
+        quotation_template: effectiveTemplateId,
       }, editId);
       toast.success(editId ? 'Quotation updated' : nextStatus === 'draft' ? 'Draft saved' : 'Quotation created');
       navigate('/app/quotations');
@@ -129,6 +136,7 @@ export function QuotationCreate() {
             <FormField label="Status"><div className={`${field} flex items-center capitalize text-violet-700 dark:text-violet-300 font-medium`}>{status}</div></FormField>
             <FormField label="Quotation date"><input type="date" className={field} value={date} onChange={e => setDate(e.target.value)} /></FormField>
             <FormField label="Valid until"><input type="date" className={field} min={date} value={validUntil} onChange={e => setValidUntil(e.target.value)} /></FormField>
+            <div className="sm:col-span-2"><FormField label="Print format"><select className={field} value={effectiveTemplateId} onChange={e => setTemplateId(e.target.value)}>{INVOICE_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></FormField></div>
           </div>
           <div className="mt-5 rounded-lg border border-violet-200 dark:border-violet-400/20 bg-violet-50/50 dark:bg-violet-500/[0.05] p-4"><p className="detail-label">Validity</p><p className="text-sm text-foreground mt-1">This quotation remains valid through the selected date. It is clearly marked as an estimate and not a tax invoice.</p></div>
         </section>
@@ -148,7 +156,7 @@ export function QuotationCreate() {
 
       <div className="bg-card border border-violet-200 dark:border-violet-400/20 rounded-xl p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 shadow-[0_1px_2px_rgba(139,92,246,0.06)]"><button onClick={() => setPreview(true)} className="h-11 px-5 rounded-full border border-violet-300 dark:border-violet-400/30 bg-card text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"><Eye className="w-4 h-4" /> Preview</button><button disabled={saving} onClick={() => submit('draft')} className="h-11 px-5 rounded-full border border-violet-300 dark:border-violet-400/30 bg-card text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-violet-50 dark:hover:bg-violet-500/10 disabled:opacity-50"><Save className="w-4 h-4" /> Save Draft</button><button disabled={saving} onClick={() => submit(status === 'accepted' ? 'accepted' : 'sent')} className="h-11 px-6 rounded-full bg-violet-500 hover:bg-violet-400 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-[0_4px_18px_-4px_rgba(139,92,246,0.6)] disabled:opacity-50"><Send className="w-4 h-4" /> {saving ? 'Saving…' : editId ? 'Update Quotation' : 'Save & Mark Sent'}</button></div>
     </div>
-    <QuotationPreview open={preview} onClose={() => setPreview(false)} number={number || 'DRAFT'} date={date} validUntil={validUntil} customer={customerDetails} items={items} notes={notes} terms={terms} />
+    <QuotationPreview open={preview} onClose={() => setPreview(false)} number={number || 'DRAFT'} date={date} validUntil={validUntil} customer={customerDetails} items={items} notes={notes} terms={terms} templateId={effectiveTemplateId} onTemplateChange={setTemplateId} />
   </div>;
 }
 

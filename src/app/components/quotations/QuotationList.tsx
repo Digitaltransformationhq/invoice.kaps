@@ -3,7 +3,7 @@ import { CalendarClock, CheckCircle2, Clock3, Eye, FileText, MoreHorizontal, Pen
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
-import { deleteQuotation, listQuotations, updateQuotationStatus, type QuotationRecord } from '../../../lib/quotations';
+import { deleteQuotation, listQuotations, updateQuotationStatus, updateQuotationTemplate, type QuotationRecord } from '../../../lib/quotations';
 import { QuotationPreview } from './QuotationPreview';
 
 const money = (value: number) => `₹${new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2 }).format(Number(value || 0))}`;
@@ -33,6 +33,15 @@ export function QuotationList() {
     try { const next = await updateQuotationStatus(user, row.id, status); setRows(current => current.map(item => item.id === row.id ? next : item)); toast.success(`Quotation marked ${status}`); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not update status'); }
     setMenu(null);
   };
+  // Picking a format in the preview stores it on the quotation.
+  const saveTemplate = async (row: QuotationRecord, templateId: string) => {
+    if (!hasPermission('quotations', 'edit')) return;
+    try {
+      const next = await updateQuotationTemplate(user, row, templateId);
+      setRows(current => current.map(item => item.id === row.id ? next : item));
+      setPreview(current => current?.id === row.id ? next : current);
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not save the quotation format'); }
+  };
   const remove = async (row: QuotationRecord) => {
     if (!window.confirm(`Delete quotation ${row.quotation_number}?`)) return;
     try { await deleteQuotation(user, row.id); setRows(current => current.filter(item => item.id !== row.id)); toast.success('Quotation deleted'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not delete quotation'); }
@@ -58,7 +67,7 @@ export function QuotationList() {
         <div className="md:hidden divide-y">{filtered.map(row => <div key={row.id} className="p-4"><div className="flex justify-between gap-3"><div onClick={() => setPreview(row)}><p className="font-semibold text-primary">{row.quotation_number}</p><p className="font-medium mt-1">{row.customer_name || 'Walk-in customer'}</p><p className="text-xs text-muted-foreground mt-1">{dateText(row.quotation_date)} · valid {dateText(row.valid_until)}</p></div><div className="text-right"><p className="font-semibold">{money(row.total_amount)}</p><span className={`inline-flex mt-2 px-2 py-1 rounded-full text-xs capitalize ${statusClasses[row.status]}`}>{row.status}</span></div></div><div className="flex gap-2 mt-4"><button onClick={() => setPreview(row)} className="flex-1 h-9 rounded border text-sm inline-flex items-center justify-center gap-2"><Eye className="w-4 h-4" /> Preview</button><button onClick={() => navigate(`/app/quotations/new?id=${row.id}`)} className="h-9 px-3 rounded border"><Pencil className="w-4 h-4" /></button><button onClick={() => remove(row)} className="h-9 px-3 rounded border text-destructive"><Trash2 className="w-4 h-4" /></button></div></div>)}</div>
       </>}
     </div>
-    {preview && <QuotationPreview open onClose={() => setPreview(null)} number={preview.quotation_number} date={preview.quotation_date} validUntil={preview.valid_until || ''} customer={{ name: preview.customer_name, ...preview.customer_details }} items={preview.line_items || []} notes={preview.notes || ''} terms={preview.terms || ''} />}
+    {preview && <QuotationPreview open onClose={() => setPreview(null)} number={preview.quotation_number} date={preview.quotation_date} validUntil={preview.valid_until || ''} customer={{ name: preview.customer_name, ...preview.customer_details }} items={preview.line_items || []} notes={preview.notes || ''} terms={preview.terms || ''} templateId={preview.quotation_template} onTemplateChange={templateId => saveTemplate(preview, templateId)} />}
   </div>;
 }
 

@@ -16,6 +16,55 @@ import { getGstinStateCode, getStateCodeByName } from './gstin';
 export const COMPUTER_GENERATED_INVOICE_NOTICE =
   'This is a computer generated invoice and does not require a signature.';
 
+/**
+ * What is being printed. Quotations reuse every invoice format — same layout,
+ * same tax breakup — but must never read as a tax invoice, so the wording that
+ * names the document comes from here instead of being written into a format.
+ */
+export type InvoiceDocumentKind = 'invoice' | 'quotation';
+
+export interface InvoiceDocumentLabels {
+  /** "Invoice No." / "Quotation No." */
+  number: string;
+  /** Short form for the receipt roll: "Bill No" / "Quote No". */
+  numberShort: string;
+  /** "Due Date" / "Valid Until". */
+  dueDate: string;
+  /** Short form, printed before the date: "Due" / "Valid till". */
+  dueDateShort: string;
+  /** "Invoice Amount in Words" / "Quotation Amount in Words". */
+  amountInWords: string;
+  /** "Remarks" / "Notes". */
+  remarks: string;
+  declaration: string;
+  computerGeneratedNotice: string;
+}
+
+const INVOICE_LABELS: InvoiceDocumentLabels = {
+  number: 'Invoice No.',
+  numberShort: 'Bill No',
+  dueDate: 'Due Date',
+  dueDateShort: 'Due',
+  amountInWords: 'Invoice Amount in Words',
+  remarks: 'Remarks',
+  declaration:
+    'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
+  computerGeneratedNotice: COMPUTER_GENERATED_INVOICE_NOTICE,
+};
+
+const QUOTATION_LABELS: InvoiceDocumentLabels = {
+  number: 'Quotation No.',
+  numberShort: 'Quote No',
+  dueDate: 'Valid Until',
+  dueDateShort: 'Valid till',
+  amountInWords: 'Quotation Amount in Words',
+  remarks: 'Notes',
+  declaration:
+    'This is a quotation, not a tax invoice. Prices and availability are subject to the terms stated above and to the validity date.',
+  computerGeneratedNotice:
+    'This is a computer generated quotation and does not require a signature.',
+};
+
 export interface InvoiceLineItem {
   id: string;
   type?: 'product' | 'service';
@@ -94,6 +143,8 @@ export interface InvoiceDocumentInput {
    * rounding existed, so the document still matches their stored total.
    */
   roundOff?: boolean;
+  /** Defaults to 'invoice'. A quotation prints one unlabelled copy titled QUOTATION. */
+  kind?: InvoiceDocumentKind;
 }
 
 export interface InvoiceTaxSummaryRow {
@@ -104,7 +155,12 @@ export interface InvoiceTaxSummaryRow {
 }
 
 export interface InvoiceDocument {
+  kind: InvoiceDocumentKind;
   title: string;
+  /** Tally prints the title in title case ("Tax Invoice"). */
+  titleCase: string;
+  labels: InvoiceDocumentLabels;
+  /** One entry per printed copy. A quotation has a single, empty label. */
   copies: string[];
   company: {
     name: string;
@@ -342,9 +398,15 @@ export function buildInvoiceDocument(input: InvoiceDocumentInput): InvoiceDocume
 
   const companyGstin = company.gstin || '-';
 
+  const kind: InvoiceDocumentKind = input.kind ?? 'invoice';
+  const isQuotation = kind === 'quotation';
+
   return {
-    title: isComposition ? 'BILL OF SUPPLY' : 'TAX INVOICE',
-    copies: invoiceCopies(lineItems, input.billType || ''),
+    kind,
+    title: isQuotation ? 'QUOTATION' : isComposition ? 'BILL OF SUPPLY' : 'TAX INVOICE',
+    titleCase: isQuotation ? 'Quotation' : isComposition ? 'Bill of Supply' : 'Tax Invoice',
+    labels: isQuotation ? QUOTATION_LABELS : INVOICE_LABELS,
+    copies: isQuotation ? [''] : invoiceCopies(lineItems, input.billType || ''),
     company: {
       name: company.name || 'Your Company',
       gstin: companyGstin,

@@ -1,5 +1,4 @@
 import {
-  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   formatInvoiceDate as formatDate,
@@ -16,7 +15,7 @@ import { PAGE_CLASS } from './types';
  * formats became switchable.
  */
 export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
-  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState } = doc;
+  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
 
   return (
     <div
@@ -25,7 +24,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
     >
       {/* Header */}
       <div className="text-right px-4 pt-2 text-xs">
-        <div className="font-semibold">{copyLabel}</div>
+        {copyLabel && <div className="font-semibold">{copyLabel}</div>}
       </div>
 
       <div className="text-center py-2 border-b border-foreground">
@@ -64,7 +63,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
           <table className="w-full text-xs">
             <tbody>
               <tr>
-                <td className="py-1 font-semibold">INVOICE NO.</td>
+                <td className="py-1 font-semibold">{labels.number.toUpperCase()}</td>
                 <td className="py-1">{meta.number}</td>
               </tr>
               <tr>
@@ -73,7 +72,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
               </tr>
               {meta.dueDate && (
                 <tr>
-                  <td className="py-1 font-semibold">DUE DATE</td>
+                  <td className="py-1 font-semibold">{labels.dueDate.toUpperCase()}</td>
                   <td className="py-1">{formatDate(meta.dueDate)}</td>
                 </tr>
               )}
@@ -249,7 +248,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
 
       {/* Amount in Words */}
       <div className="border-b border-foreground p-3 text-xs">
-        <span className="font-semibold">Invoice Amount in Words:</span> {numberToWords(totals.grandTotal)}
+        <span className="font-semibold">{labels.amountInWords}:</span> {numberToWords(totals.grandTotal)}
         <div className="text-right mt-2">E. &amp; O.E.</div>
       </div>
 
@@ -340,7 +339,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
 
       {meta.remarks && (
         <div className="border-b border-foreground p-3 text-xs">
-          <span className="font-semibold">Remarks / Narration:</span> {meta.remarks}
+          <span className="font-semibold">{doc.kind === 'quotation' ? labels.remarks : 'Remarks / Narration'}:</span> {meta.remarks}
         </div>
       )}
 
@@ -377,8 +376,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
         <div className="p-4 text-xs">
           <div className="font-semibold mb-2">DECLARATION</div>
           <p className="leading-relaxed mb-8">
-            We declare that this invoice shows the actual price of the goods/services described
-            and that all particulars are true and correct.
+            {labels.declaration}
           </p>
           <div className="mt-6 text-right">
             <div className="relative ml-auto h-24 w-full max-w-[300px] overflow-hidden">
@@ -401,7 +399,7 @@ export function ClassicGst({ doc, copyLabel, className = '' }: InvoiceTemplatePr
             </div>
             {!company.stamp && !company.esign && (
               <div className="mt-1 text-center text-[9px] leading-tight">
-                {COMPUTER_GENERATED_INVOICE_NOTICE}
+                {labels.computerGeneratedNotice}
               </div>
             )}
           </div>

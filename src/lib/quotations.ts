@@ -29,6 +29,8 @@ export interface QuotationRecord {
   status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
   notes: string | null;
   terms: string | null;
+  /** Invoice format id this quotation prints in; null = company default. */
+  quotation_template?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,12 +79,28 @@ export async function saveQuotation(
   if (user?.role === 'auditor') {
     return auditorRequest<QuotationRecord>(user, id ? 'update' : 'insert', { id, record });
   }
-  const query = id
-    ? supabase.from('quotations').update(record).eq('id', id).eq('company_id', user?.company_id)
-    : supabase.from('quotations').insert(record);
-  const { data, error } = await query.select('*').single();
+  const write = (row: typeof record) => {
+    const query = id
+      ? supabase.from('quotations').update(row).eq('id', id).eq('company_id', user?.company_id)
+      : supabase.from('quotations').insert(row);
+    return query.select('*').single();
+  };
+  let { data, error } = await write(record);
+  // Until supabase_quotations.sql has been re-run the column does not exist;
+  // save everything else rather than failing the whole quotation.
+  if (error && /quotation_template/.test(error.message || '')) {
+    const { quotation_template: _skipped, ...rest } = record;
+    ({ data, error } = await write(rest));
+  }
   if (error) throw error;
   return data as QuotationRecord;
+}
+
+/** Store the format a saved quotation prints in. */
+export async function updateQuotationTemplate(user: AppUser, row: QuotationRecord, templateId: string) {
+  const { id, created_at: _c, updated_at: _u, ...rest } = row;
+  delete (rest as Record<string, unknown>).created_by;
+  return saveQuotation(user, { ...rest, quotation_template: templateId }, id);
 }
 
 export async function updateQuotationStatus(user: AppUser, id: string, status: QuotationRecord['status']) {

@@ -1,5 +1,4 @@
 import {
-  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   formatInvoiceDate as formatDate,
@@ -20,7 +19,7 @@ import { PAGE_CLASS } from './types';
  * dense means the fitter has less to take away.
  */
 export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
-  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState } = doc;
+  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
 
   const cell = 'px-1.5 py-1 border-r border-foreground';
   const lastCell = 'px-1.5 py-1';
@@ -69,13 +68,13 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
           <table className="w-full">
             <tbody>
               <tr>
-                <td className="py-0.5 font-semibold">Invoice No.</td>
+                <td className="py-0.5 font-semibold">{labels.number}</td>
                 <td className="py-0.5">{meta.number}</td>
                 <td className="py-0.5 font-semibold pl-2">Dated</td>
                 <td className="py-0.5">{formatDate(meta.date)}</td>
               </tr>
               <tr>
-                <td className="py-0.5 font-semibold">Due Date</td>
+                <td className="py-0.5 font-semibold">{labels.dueDate}</td>
                 <td className="py-0.5">{meta.dueDate ? formatDate(meta.dueDate) : '-'}</td>
                 <td className="py-0.5 font-semibold pl-2">Rev. Charge</td>
                 <td className="py-0.5">{meta.reverseCharge ? 'YES' : 'NO'}</td>
@@ -200,7 +199,7 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
           )}
           {meta.remarks && (
             <div className="mt-1">
-              <span className="font-semibold">Remarks:</span> {meta.remarks}
+              <span className="font-semibold">{labels.remarks}:</span> {meta.remarks}
             </div>
           )}
         </div>
@@ -347,8 +346,7 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
         <div className="p-2 border-r border-foreground leading-snug">
           <div className="font-semibold">DECLARATION</div>
           <p>
-            We declare that this invoice shows the actual price of the goods/services
-            described and that all particulars are true and correct.
+            {labels.declaration}
           </p>
         </div>
         <div className="p-2">
@@ -374,7 +372,7 @@ export function Compact({ doc, copyLabel, className = '' }: InvoiceTemplateProps
           </div>
           {!company.stamp && !company.esign && (
             <div className="mt-1 text-center text-[8px] leading-tight">
-              {COMPUTER_GENERATED_INVOICE_NOTICE}
+              {labels.computerGeneratedNotice}
             </div>
           )}
         </div>

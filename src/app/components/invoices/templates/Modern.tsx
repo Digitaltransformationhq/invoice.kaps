@@ -1,5 +1,4 @@
 import {
-  COMPUTER_GENERATED_INVOICE_NOTICE,
   formatInvoiceCurrency as formatCurrency,
   formatRoundOff,
   formatInvoiceDate as formatDate,
@@ -24,14 +23,14 @@ const RULE = '#E4E1F2';
  * anyone sending invoices as PDFs rather than printing triplicate sets.
  */
 export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps) {
-  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState } = doc;
+  const { company, buyer, meta, items, totals, taxSummary, isComposition, isInterState, labels } = doc;
 
   // Right-hand meta rows. Built as data so empty ones simply drop out rather
   // than printing "-" against a heading nobody needs.
   const metaRows: Array<[string, string]> = [
-    ['Invoice No.', meta.number],
+    [labels.number, meta.number],
     ['Date', formatDate(meta.date)],
-    ...(meta.dueDate ? ([['Due Date', formatDate(meta.dueDate)]] as Array<[string, string]>) : []),
+    ...(meta.dueDate ? ([[labels.dueDate, formatDate(meta.dueDate)]] as Array<[string, string]>) : []),
     ['Place of Supply', meta.placeOfSupply],
     ['Reverse Charge', meta.reverseCharge ? 'YES' : 'NO'],
     ...(meta.customerType ? ([['Customer Type', meta.customerType]] as Array<[string, string]>) : []),
@@ -70,7 +69,7 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
         </div>
         <div className="text-right shrink-0" style={{ color: '#FFFFFF' }}>
           <div className="text-[17px] font-bold tracking-wide">{doc.title}</div>
-          <div className="text-[9px] tracking-[0.14em] mt-1" style={{ color: '#DDD6FE' }}>{copyLabel}</div>
+          {copyLabel && <div className="text-[9px] tracking-[0.14em] mt-1" style={{ color: '#DDD6FE' }}>{copyLabel}</div>}
         </div>
       </div>
 
@@ -320,7 +319,7 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
         <div className="p-3 text-[10px] leading-relaxed" style={{ borderBottom: `1px solid ${RULE}` }}>
           {meta.remarks && (
             <div className={meta.terms.trim() ? 'mb-2' : ''}>
-              <span className="font-semibold">Remarks:</span> {meta.remarks}
+              <span className="font-semibold">{labels.remarks}:</span> {meta.remarks}
             </div>
           )}
           {meta.terms.trim() && (
@@ -351,8 +350,7 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
             </div>
           )}
           <div className="mt-2 text-[9px] leading-relaxed" style={{ color: '#64748B' }}>
-            We declare that this invoice shows the actual price of the goods/services
-            described and that all particulars are true and correct.
+            {labels.declaration}
           </div>
         </div>
         <div className="p-3 text-[10px]">
@@ -381,7 +379,7 @@ export function Modern({ doc, copyLabel, className = '' }: InvoiceTemplateProps)
           </div>
           {!company.stamp && !company.esign && (
             <div className="mt-1 text-center text-[9px] leading-tight" style={{ color: '#64748B' }}>
-              {COMPUTER_GENERATED_INVOICE_NOTICE}
+              {labels.computerGeneratedNotice}
             </div>
           )}
         </div>
